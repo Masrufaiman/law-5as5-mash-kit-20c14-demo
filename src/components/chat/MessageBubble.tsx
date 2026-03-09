@@ -5,7 +5,7 @@ import { ResponseActions } from "./ResponseActions";
 import { CitationPopover } from "./CitationPopover";
 import { ChoiceCards, parseChoices } from "./ChoiceCards";
 import { MultiStepQuestionnaire, parseMultiStepQuestions } from "./MultiStepQuestionnaire";
-import { StepTracker, type Step } from "./StepTracker";
+import { StepTracker } from "./StepTracker";
 import { Card } from "@/components/ui/card";
 import { FileText, Bot } from "lucide-react";
 import type { ChatMessage, Citation } from "@/hooks/useStreamChat";
