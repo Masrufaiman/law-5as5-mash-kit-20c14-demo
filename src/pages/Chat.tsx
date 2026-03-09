@@ -22,8 +22,6 @@ import {
   StopCircle,
 } from "lucide-react";
 
-const INTERNAL_PROVIDERS = ["cloudflare_r2", "agent_config", "knowledge_document"];
-
 export default function Chat() {
   const { profile } = useAuth();
   const { toast } = useToast();
@@ -47,7 +45,7 @@ export default function Chat() {
   const [showSources, setShowSources] = useState(false);
   const [vaultId, setVaultId] = useState<string | undefined>();
   const [deepResearch, setDeepResearch] = useState(false);
-  const [integrations, setIntegrations] = useState<{ name: string; provider: string }[]>([]);
+  const [activeSources, setActiveSources] = useState<string[]>([]);
 
   // Handle initial message from Home page
   useEffect(() => {
@@ -56,26 +54,11 @@ export default function Chat() {
       const msg = state.initialMessage;
       setVaultId(state.selectedVault?.id);
       setDeepResearch(state.deepResearch || false);
+      setActiveSources(state.activeSources || []);
       navigate("/chat", { replace: true, state: {} });
-      createConversationAndSend(msg, state.selectedVault?.id, state.deepResearch);
+      createConversationAndSend(msg, state.selectedVault?.id, state.deepResearch, state.activeSources);
     }
   }, [location.state, profile?.organization_id]);
-
-  // Load integrations (filter out internal ones)
-  useEffect(() => {
-    if (!profile?.organization_id) return;
-    supabase
-      .from("api_integrations")
-      .select("name, provider")
-      .eq("organization_id", profile.organization_id!)
-      .eq("is_active", true)
-      .then(({ data }) => {
-        const filtered = (data || []).filter(
-          (i) => !INTERNAL_PROVIDERS.includes(i.provider)
-        );
-        setIntegrations(filtered);
-      });
-  }, [profile?.organization_id]);
 
   // Auto-scroll
   useEffect(() => {
@@ -92,7 +75,8 @@ export default function Chat() {
   const createConversationAndSend = async (
     msg: string,
     vault?: string,
-    deep?: boolean
+    deep?: boolean,
+    srcs?: string[]
   ) => {
     if (!profile?.organization_id) return;
 
@@ -120,6 +104,7 @@ export default function Chat() {
       organizationId: profile.organization_id!,
       vaultId: vault,
       deepResearch: deep,
+      sources: srcs,
     });
   };
 
@@ -129,13 +114,14 @@ export default function Chat() {
     setInput("");
 
     if (!conversationId) {
-      await createConversationAndSend(msg, vaultId, deepResearch);
+      await createConversationAndSend(msg, vaultId, deepResearch, activeSources);
     } else {
       sendMessage(msg, {
         conversationId,
         organizationId: profile.organization_id!,
         vaultId,
         deepResearch,
+        sources: activeSources,
       });
     }
   };
@@ -225,7 +211,6 @@ export default function Chat() {
                         i === messages.length - 1
                       }
                     />
-                    {/* Show step tracker after user message, before assistant response */}
                     {msg.role === "user" &&
                       i === messages.length - 1 &&
                       steps.length > 0 && (
@@ -245,7 +230,6 @@ export default function Chat() {
                   </div>
                 ))}
 
-                {/* Step tracker when no assistant message yet */}
                 {steps.length > 0 &&
                   messages.length > 0 &&
                   messages[messages.length - 1].role === "user" &&
@@ -275,7 +259,7 @@ export default function Chat() {
             </div>
           )}
 
-          {/* Input — clean floating style */}
+          {/* Input */}
           <div className="px-6 py-4">
             <div className="mx-auto max-w-3xl">
               <ChatInput
@@ -283,7 +267,8 @@ export default function Chat() {
                 onChange={setInput}
                 onSend={handleSend}
                 disabled={isStreaming}
-                integrations={integrations}
+                deepResearch={deepResearch}
+                onDeepResearchChange={setDeepResearch}
               />
             </div>
           </div>

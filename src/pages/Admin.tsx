@@ -4,10 +4,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LlmTab } from "@/components/admin/LlmTab";
 import { SearchTab } from "@/components/admin/SearchTab";
 import { StorageTab } from "@/components/admin/StorageTab";
-import { IntegrationsTab } from "@/components/admin/IntegrationsTab";
 import { KnowledgeTab } from "@/components/admin/KnowledgeTab";
 import { AgentTab } from "@/components/admin/AgentTab";
-import { Shield, Brain, Search, HardDrive, Plug, BookOpen, Bot } from "lucide-react";
+import { Shield, Brain, Search, HardDrive, BookOpen, Bot } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 export default function Admin() {
@@ -27,7 +26,7 @@ export default function Admin() {
             <Shield className="h-5 w-5 text-primary" />
             <h1 className="font-heading text-xl font-semibold">Admin Panel</h1>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">Configure AI providers, integrations, and agent behavior.</p>
+          <p className="text-xs text-muted-foreground mt-1">Configure AI providers, search, and agent behavior.</p>
         </div>
 
         <div className="p-6">
@@ -42,9 +41,6 @@ export default function Admin() {
               <TabsTrigger value="storage" className="text-xs gap-1.5 data-[state=active]:bg-background">
                 <HardDrive className="h-3.5 w-3.5" /> Storage (R2)
               </TabsTrigger>
-              <TabsTrigger value="integrations" className="text-xs gap-1.5 data-[state=active]:bg-background">
-                <Plug className="h-3.5 w-3.5" /> Integrations
-              </TabsTrigger>
               <TabsTrigger value="knowledge" className="text-xs gap-1.5 data-[state=active]:bg-background">
                 <BookOpen className="h-3.5 w-3.5" /> Knowledge Base
               </TabsTrigger>
@@ -56,7 +52,6 @@ export default function Admin() {
             <TabsContent value="llm"><LlmTab orgId={orgId} /></TabsContent>
             <TabsContent value="search"><SearchTab orgId={orgId} /></TabsContent>
             <TabsContent value="storage"><StorageTab orgId={orgId} /></TabsContent>
-            <TabsContent value="integrations"><IntegrationsTab orgId={orgId} /></TabsContent>
             <TabsContent value="knowledge"><KnowledgeTab orgId={orgId} /></TabsContent>
             <TabsContent value="agent"><AgentTab orgId={orgId} /></TabsContent>
           </Tabs>

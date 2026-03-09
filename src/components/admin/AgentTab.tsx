@@ -9,20 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Bot, Wrench, FileText, Gauge, Search, Brain, Scale, AlertTriangle, PenTool, BookOpen } from "lucide-react";
+import { Bot, Wrench, FileText, Gauge, Brain, AlertTriangle, PenTool } from "lucide-react";
 
 const JURISDICTIONS = ["United States", "United Kingdom", "European Union", "Australia", "Canada", "India", "Singapore", "Hong Kong"];
 const CITATION_STYLES = ["Bluebook", "OSCOLA", "AGLC", "McGill", "APA Legal", "Chicago"];
-const SEARCH_PROVIDERS = ["tavily", "perplexity"];
-const DEEP_RESEARCH_MODELS = ["sonar-reasoning", "sonar-pro", "gpt-4o", "claude-sonnet-4"];
 const EMBEDDING_MODELS = ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"];
 
 const PROMPT_USE_CASES = [
   { id: "chat", label: "Chat / Research", icon: Brain },
   { id: "red_flags", label: "Red Flag Detection", icon: AlertTriangle },
-  { id: "tables", label: "Review Tables", icon: Scale },
   { id: "drafting", label: "Document Drafting", icon: PenTool },
 ];
 
@@ -41,42 +37,25 @@ export function AgentTab({ orgId }: AgentTabProps) {
   const [citationStyle, setCitationStyle] = useState("Bluebook");
   const [maxDepth, setMaxDepth] = useState("3");
 
-  // Tool configs
-  const [webSearchProvider, setWebSearchProvider] = useState("tavily");
-  const [webSearchApiKey, setWebSearchApiKey] = useState("");
-  const [webSearchCacheTtl, setWebSearchCacheTtl] = useState("3600");
-  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
-
-  const [deepResearchEnabled, setDeepResearchEnabled] = useState(true);
-  const [deepResearchModel, setDeepResearchModel] = useState("sonar-reasoning");
-  const [deepResearchMaxIterations, setDeepResearchMaxIterations] = useState("5");
-
+  // Document Analysis
   const [docChunkSize, setDocChunkSize] = useState("1000");
   const [docChunkOverlap, setDocChunkOverlap] = useState("200");
   const [embeddingModel, setEmbeddingModel] = useState("text-embedding-3-small");
 
+  // Red Flag Detection
   const [redFlagThreshold, setRedFlagThreshold] = useState("medium");
   const [redFlagCategories, setRedFlagCategories] = useState<string[]>([
     "liability", "indemnity", "termination", "ip_assignment", "non_compete", "data_privacy",
   ]);
 
-  const [draftingJurisdiction, setDraftingJurisdiction] = useState("United States");
-  const [citationDatabases, setCitationDatabases] = useState<string[]>(["westlaw", "lexis"]);
-
   // Prompt templates
   const [chatPrompt, setChatPrompt] = useState("");
   const [redFlagPrompt, setRedFlagPrompt] = useState("");
-  const [tablePrompt, setTablePrompt] = useState("");
   const [draftingPrompt, setDraftingPrompt] = useState("");
 
   // Rate limits
   const [orgDailyLimit, setOrgDailyLimit] = useState("1000");
   const [userDailyLimit, setUserDailyLimit] = useState("100");
-
-  // Tavily
-  const [tavilyApiKey, setTavilyApiKey] = useState("");
-  const [tavilySearchDepth, setTavilySearchDepth] = useState("advanced");
-  const [tavilyMaxResults, setTavilyMaxResults] = useState("5");
 
   useEffect(() => {
     supabase
@@ -93,33 +72,16 @@ export function AgentTab({ orgId }: AgentTabProps) {
           setAutoResearch(c.auto_research ?? true);
           setCitationStyle(c.citation_style || "Bluebook");
           setMaxDepth(String(c.max_research_depth || 3));
-          // Tools
-          setWebSearchProvider(c.web_search?.provider || "tavily");
-          setWebSearchApiKey(c.web_search?.api_key || "");
-          setWebSearchCacheTtl(String(c.web_search?.cache_ttl || 3600));
-          setWebSearchEnabled(c.web_search?.enabled ?? true);
-          setDeepResearchEnabled(c.deep_research?.enabled ?? true);
-          setDeepResearchModel(c.deep_research?.model || "sonar-reasoning");
-          setDeepResearchMaxIterations(String(c.deep_research?.max_iterations || 5));
           setDocChunkSize(String(c.document_analysis?.chunk_size || 1000));
           setDocChunkOverlap(String(c.document_analysis?.chunk_overlap || 200));
           setEmbeddingModel(c.document_analysis?.embedding_model || "text-embedding-3-small");
           setRedFlagThreshold(c.red_flag?.severity_threshold || "medium");
           setRedFlagCategories(c.red_flag?.categories || redFlagCategories);
-          setDraftingJurisdiction(c.drafting?.jurisdiction || "United States");
-          setCitationDatabases(c.citation?.databases || ["westlaw", "lexis"]);
-          // Prompts
           setChatPrompt(c.prompts?.chat || "");
           setRedFlagPrompt(c.prompts?.red_flags || "");
-          setTablePrompt(c.prompts?.tables || "");
           setDraftingPrompt(c.prompts?.drafting || "");
-          // Limits
           setOrgDailyLimit(String(c.rate_limits?.org_daily || 1000));
           setUserDailyLimit(String(c.rate_limits?.user_daily || 100));
-          // Tavily
-          setTavilyApiKey(c.tavily?.api_key || "");
-          setTavilySearchDepth(c.tavily?.search_depth || "advanced");
-          setTavilyMaxResults(String(c.tavily?.max_results || 5));
         }
       });
   }, [orgId]);
@@ -132,17 +94,6 @@ export function AgentTab({ orgId }: AgentTabProps) {
         auto_research: autoResearch,
         citation_style: citationStyle,
         max_research_depth: parseInt(maxDepth),
-        web_search: {
-          provider: webSearchProvider,
-          api_key: webSearchApiKey,
-          cache_ttl: parseInt(webSearchCacheTtl),
-          enabled: webSearchEnabled,
-        },
-        deep_research: {
-          enabled: deepResearchEnabled,
-          model: deepResearchModel,
-          max_iterations: parseInt(deepResearchMaxIterations),
-        },
         document_analysis: {
           chunk_size: parseInt(docChunkSize),
           chunk_overlap: parseInt(docChunkOverlap),
@@ -152,27 +103,14 @@ export function AgentTab({ orgId }: AgentTabProps) {
           severity_threshold: redFlagThreshold,
           categories: redFlagCategories,
         },
-        drafting: {
-          jurisdiction: draftingJurisdiction,
-        },
-        citation: {
-          databases: citationDatabases,
-          format_style: citationStyle,
-        },
         prompts: {
           chat: chatPrompt,
           red_flags: redFlagPrompt,
-          tables: tablePrompt,
           drafting: draftingPrompt,
         },
         rate_limits: {
           org_daily: parseInt(orgDailyLimit),
           user_daily: parseInt(userDailyLimit),
-        },
-        tavily: {
-          api_key: tavilyApiKey,
-          search_depth: tavilySearchDepth,
-          max_results: parseInt(tavilyMaxResults),
         },
       };
 
@@ -205,18 +143,11 @@ export function AgentTab({ orgId }: AgentTabProps) {
     "data_privacy", "governing_law", "limitation_of_liability", "confidentiality", "warranty",
   ];
 
-  const CITATION_DB_OPTIONS = [
-    { id: "westlaw", label: "Westlaw" },
-    { id: "lexis", label: "LexisNexis" },
-    { id: "google_scholar", label: "Google Scholar" },
-    { id: "courtlistener", label: "CourtListener" },
-  ];
-
   return (
     <div className="space-y-4">
       <div>
         <h3 className="font-heading text-base font-semibold">Agentic AI Settings</h3>
-        <p className="text-xs text-muted-foreground">Configure AI agent behavior, tools, prompt templates, and rate limits.</p>
+        <p className="text-xs text-muted-foreground">Configure AI agent behavior, document analysis, prompts, and rate limits.</p>
       </div>
 
       <Tabs defaultValue="behavior" className="space-y-4">
@@ -281,72 +212,6 @@ export function AgentTab({ orgId }: AgentTabProps) {
 
         {/* Tools */}
         <TabsContent value="tools" className="space-y-4">
-          {/* Web Search */}
-          <Card className="border border-border">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Search className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-sm">Web Search</CardTitle>
-                </div>
-                <Switch checked={webSearchEnabled} onCheckedChange={setWebSearchEnabled} />
-              </div>
-              <CardDescription className="text-xs">Real-time web search for legal research and fact-finding.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Provider</Label>
-                  <Select value={webSearchProvider} onValueChange={setWebSearchProvider}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {SEARCH_PROVIDERS.map(p => <SelectItem key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">API Key</Label>
-                  <Input value={webSearchApiKey} onChange={e => setWebSearchApiKey(e.target.value)} type="password" className="h-8 text-sm font-mono" placeholder="sk-..." />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Cache TTL (seconds)</Label>
-                  <Input type="number" value={webSearchCacheTtl} onChange={e => setWebSearchCacheTtl(e.target.value)} className="h-8 text-sm w-full" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Deep Research */}
-          <Card className="border border-border">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-sm">Deep Research</CardTitle>
-                </div>
-                <Switch checked={deepResearchEnabled} onCheckedChange={setDeepResearchEnabled} />
-              </div>
-              <CardDescription className="text-xs">Multi-step research with iterative reasoning for complex queries.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Model</Label>
-                  <Select value={deepResearchModel} onValueChange={setDeepResearchModel}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {DEEP_RESEARCH_MODELS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Max Iterations</Label>
-                  <Input type="number" min="1" max="20" value={deepResearchMaxIterations} onChange={e => setDeepResearchMaxIterations(e.target.value)} className="h-8 text-sm" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Document Analysis */}
           <Card className="border border-border">
             <CardHeader className="pb-3">
@@ -423,49 +288,14 @@ export function AgentTab({ orgId }: AgentTabProps) {
               </div>
             </CardContent>
           </Card>
-
-          {/* Citation Lookup removed — citations come from user docs, KB, and legal APIs */}
-
-          {/* Tavily */}
-          <Card className="border border-border">
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-primary" />
-                <CardTitle className="text-sm">Tavily API</CardTitle>
-              </div>
-              <CardDescription className="text-xs">Dedicated search API configuration for Tavily.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">API Key</Label>
-                  <Input value={tavilyApiKey} onChange={e => setTavilyApiKey(e.target.value)} type="password" className="h-8 text-sm font-mono" placeholder="tvly-..." />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Search Depth</Label>
-                  <Select value={tavilySearchDepth} onValueChange={setTavilySearchDepth}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="basic">Basic</SelectItem>
-                      <SelectItem value="advanced">Advanced</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Max Results</Label>
-                  <Input type="number" min="1" max="20" value={tavilyMaxResults} onChange={e => setTavilyMaxResults(e.target.value)} className="h-8 text-sm" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* Prompts */}
         <TabsContent value="prompts" className="space-y-4">
           <p className="text-xs text-muted-foreground">Customize system prompts per use case. Leave empty to use defaults.</p>
           {PROMPT_USE_CASES.map((uc) => {
-            const promptValue = uc.id === "chat" ? chatPrompt : uc.id === "red_flags" ? redFlagPrompt : uc.id === "tables" ? tablePrompt : draftingPrompt;
-            const setPrompt = uc.id === "chat" ? setChatPrompt : uc.id === "red_flags" ? setRedFlagPrompt : uc.id === "tables" ? setTablePrompt : setDraftingPrompt;
+            const promptValue = uc.id === "chat" ? chatPrompt : uc.id === "red_flags" ? redFlagPrompt : draftingPrompt;
+            const setPrompt = uc.id === "chat" ? setChatPrompt : uc.id === "red_flags" ? setRedFlagPrompt : setDraftingPrompt;
             return (
               <Card key={uc.id} className="border border-border">
                 <CardHeader className="pb-3">

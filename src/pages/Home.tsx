@@ -8,11 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
   Sparkles,
-  Wand2,
   Globe,
   Send,
   X,
@@ -26,9 +26,8 @@ import {
   ChevronRight,
   BookOpen,
   Loader2,
+  Zap,
 } from "lucide-react";
-
-const INTERNAL_PROVIDERS = ["cloudflare_r2", "agent_config", "knowledge_document"];
 
 interface VaultItem {
   id: string;
@@ -40,6 +39,76 @@ interface KBSource {
   title: string;
   category: string | null;
 }
+
+interface PromptTemplate {
+  id: string;
+  label: string;
+  prompt: string;
+}
+
+// Jurisdiction sources — these are passed to Perplexity as domain filters
+const JURISDICTION_SOURCES = [
+  { name: "Web Search", icon: Globe },
+  { name: "EDGAR (SEC)", icon: Scale },
+  { name: "CourtListener", icon: Scale },
+  { name: "EUR-Lex", icon: Scale },
+  { name: "WorldLII", icon: Scale },
+  { name: "US Law", icon: Scale },
+  { name: "UK Law", icon: Scale },
+  { name: "Indian Law", icon: Scale },
+  { name: "Canadian Law", icon: Scale },
+  { name: "Australian Law", icon: Scale },
+  { name: "French Law", icon: Scale },
+  { name: "German Law", icon: Scale },
+  { name: "Brazilian Law", icon: Scale },
+  { name: "Singapore Law", icon: Scale },
+  { name: "UAE Law", icon: Scale },
+  { name: "Italian Law", icon: Scale },
+  { name: "Mexican Law", icon: Scale },
+  { name: "Swedish Law", icon: Scale },
+  { name: "Arabic Law", icon: Scale },
+  { name: "Belgian Law", icon: Scale },
+  { name: "Danish Law", icon: Scale },
+  { name: "Chilean Law", icon: Scale },
+  { name: "Finnish Law", icon: Scale },
+  { name: "Dutch Law", icon: Scale },
+  { name: "Portuguese Law", icon: Scale },
+  { name: "Polish Law", icon: Scale },
+  { name: "Swiss Law", icon: Scale },
+  { name: "Hungarian Law", icon: Scale },
+  { name: "Austrian Law", icon: Scale },
+  { name: "Czech Law", icon: Scale },
+  { name: "Dominican Republic Law", icon: Scale },
+  { name: "Ecuadorian Law", icon: Scale },
+  { name: "Luxembourgish Law", icon: Scale },
+  { name: "Paraguayan Law", icon: Scale },
+  { name: "Peruvian Law", icon: Scale },
+  { name: "Spanish Law", icon: Scale },
+  { name: "Japanese Law", icon: Scale },
+  { name: "South Korean Law", icon: Scale },
+  { name: "Chinese Law", icon: Scale },
+  { name: "Russian Law", icon: Scale },
+  { name: "Turkish Law", icon: Scale },
+  { name: "South African Law", icon: Scale },
+  { name: "Nigerian Law", icon: Scale },
+  { name: "Kenyan Law", icon: Scale },
+  { name: "Israeli Law", icon: Scale },
+  { name: "Thai Law", icon: Scale },
+  { name: "Malaysian Law", icon: Scale },
+  { name: "Indonesian Law", icon: Scale },
+  { name: "Philippine Law", icon: Scale },
+  { name: "Colombian Law", icon: Scale },
+  { name: "Argentine Law", icon: Scale },
+  { name: "Greek Law", icon: Scale },
+  { name: "Romanian Law", icon: Scale },
+  { name: "Croatian Law", icon: Scale },
+  { name: "Norwegian Law", icon: Scale },
+  { name: "Irish Law", icon: Scale },
+  { name: "New Zealand Law", icon: Scale },
+  { name: "Hong Kong Law", icon: Scale },
+  { name: "Casablanca Agreement", icon: Scale },
+  { name: "Whitford Lane", icon: Scale },
+];
 
 interface WorkflowCard {
   title: string;
@@ -93,8 +162,9 @@ export default function Home() {
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [activeSources, setActiveSources] = useState<string[]>([]);
   const [kbSources, setKbSources] = useState<KBSource[]>([]);
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [improving, setImproving] = useState(false);
+  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
+  const [searchFilter, setSearchFilter] = useState("");
 
   useEffect(() => {
     if (!profile?.organization_id) return;
@@ -114,6 +184,24 @@ export default function Home() {
       .or(`organization_id.eq.${profile.organization_id},is_global.eq.true`)
       .order("title")
       .then(({ data }) => setKbSources(data || []));
+
+    // Load prompt templates from agent_config
+    supabase
+      .from("api_integrations")
+      .select("config")
+      .eq("organization_id", profile.organization_id)
+      .eq("provider", "agent_config")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const c = (data.config as any) || {};
+          const templates: PromptTemplate[] = [];
+          if (c.prompts?.chat) templates.push({ id: "chat", label: "Chat / Research", prompt: c.prompts.chat });
+          if (c.prompts?.red_flags) templates.push({ id: "red_flags", label: "Red Flag Detection", prompt: c.prompts.red_flags });
+          if (c.prompts?.drafting) templates.push({ id: "drafting", label: "Document Drafting", prompt: c.prompts.drafting });
+          setPromptTemplates(templates);
+        }
+      });
   }, [profile?.organization_id]);
 
   const handleSend = () => {
@@ -125,7 +213,6 @@ export default function Home() {
         selectedVault,
         attachedFiles,
         activeSources,
-        webSearch: webSearchEnabled,
       },
     });
   };
@@ -210,7 +297,6 @@ export default function Home() {
       }
 
       if (improved.trim()) {
-        // Remove surrounding quotes if present
         let clean = improved.trim();
         if (clean.startsWith('"') && clean.endsWith('"')) clean = clean.slice(1, -1);
         setMessage(clean);
@@ -223,8 +309,12 @@ export default function Home() {
     }
   };
 
+  const filteredJurisdictions = searchFilter
+    ? JURISDICTION_SOURCES.filter(j => j.name.toLowerCase().includes(searchFilter.toLowerCase()))
+    : JURISDICTION_SOURCES;
+
   // Chips that go inside the prompt box
-  const hasChips = selectedVault || webSearchEnabled || deepResearch || activeSources.length > 0 || attachedFiles.length > 0;
+  const hasChips = selectedVault || deepResearch || activeSources.length > 0 || attachedFiles.length > 0;
 
   return (
     <AppLayout>
@@ -241,10 +331,10 @@ export default function Home() {
           </div>
 
           {/* Main prompt box */}
-          <div className="border border-border rounded-lg bg-card overflow-hidden">
+          <div className="border border-border rounded-lg overflow-hidden">
             {/* Tags inside prompt box */}
             {hasChips && (
-              <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+              <div className="flex flex-wrap gap-1.5 px-3 pt-3 bg-muted/30">
                 {selectedVault && (
                   <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
                     <FolderOpen className="h-2.5 w-2.5" />
@@ -254,18 +344,9 @@ export default function Home() {
                     </button>
                   </Badge>
                 )}
-                {webSearchEnabled && (
-                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <Globe className="h-2.5 w-2.5" />
-                    Web Search
-                    <button onClick={() => setWebSearchEnabled(false)} className="ml-0.5">
-                      <X className="h-2 w-2" />
-                    </button>
-                  </Badge>
-                )}
                 {deepResearch && (
                   <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <Search className="h-2.5 w-2.5" />
+                    <Zap className="h-2.5 w-2.5" />
                     Deep Research
                     <button onClick={() => setDeepResearch(false)} className="ml-0.5">
                       <X className="h-2 w-2" />
@@ -274,7 +355,7 @@ export default function Home() {
                 )}
                 {activeSources.map((source) => (
                   <Badge key={source} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <BookOpen className="h-2.5 w-2.5" />
+                    <Scale className="h-2.5 w-2.5" />
                     {source}
                     <button onClick={() => toggleSource(source)} className="ml-0.5">
                       <X className="h-2 w-2" />
@@ -299,7 +380,7 @@ export default function Home() {
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask LawKit anything..."
-              className="border-0 focus-visible:ring-0 resize-none min-h-[100px] text-sm bg-transparent px-4 pt-4"
+              className="border-0 focus-visible:ring-0 resize-none min-h-[100px] text-sm bg-muted/30 px-4 pt-4"
               rows={4}
             />
 
@@ -310,97 +391,137 @@ export default function Home() {
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
                     <Plus className="h-3.5 w-3.5" />
-                    Files & sources
+                    Sources
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-64 p-2" align="start">
-                  <button
-                    onClick={handleFileSelect}
-                    className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
-                  >
-                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                    Upload files
-                  </button>
+                <PopoverContent className="w-72 p-0" align="start">
+                  <ScrollArea className="max-h-[400px]">
+                    <div className="p-2">
+                      {/* Upload */}
+                      <button
+                        onClick={handleFileSelect}
+                        className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                        Upload files
+                      </button>
 
-                  <div className="my-1 h-px bg-border" />
-                  <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
-                    Vaults
-                  </p>
-                  {vaults.slice(0, 5).map((v) => (
-                    <button
-                      key={v.id}
-                      onClick={() => setSelectedVault(v)}
-                      className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                        {v.name}
-                      </span>
-                      {selectedVault?.id === v.id && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                      {/* Vaults */}
+                      {vaults.length > 0 && (
+                        <>
+                          <div className="my-1 h-px bg-border" />
+                          <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
+                            Vaults
+                          </p>
+                          {vaults.slice(0, 5).map((v) => (
+                            <button
+                              key={v.id}
+                              onClick={() => setSelectedVault(v)}
+                              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                            >
+                              <span className="flex items-center gap-2.5">
+                                <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                                {v.name}
+                              </span>
+                              {selectedVault?.id === v.id && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                              )}
+                            </button>
+                          ))}
+                        </>
                       )}
-                    </button>
-                  ))}
-                  {vaults.length === 0 && (
-                    <p className="text-xs text-muted-foreground px-2.5 py-1.5">No vaults yet</p>
-                  )}
 
-                  <div className="my-1 h-px bg-border" />
-                  <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
-                    Search
-                  </p>
-                  <button
-                    onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-                    className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-                      Web Search
-                    </span>
-                    {webSearchEnabled && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
-                  </button>
-                  <button
-                    onClick={() => setDeepResearch(!deepResearch)}
-                    className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                      Deep Research
-                    </span>
-                    {deepResearch && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
-                  </button>
+                      {/* Knowledge Base */}
+                      {kbSources.length > 0 && (
+                        <>
+                          <div className="my-1 h-px bg-border" />
+                          <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
+                            Knowledge Base
+                          </p>
+                          {kbSources.map((kb) => (
+                            <button
+                              key={kb.id}
+                              onClick={() => toggleSource(kb.title)}
+                              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                            >
+                              <span className="flex items-center gap-2.5">
+                                <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                                {kb.title}
+                              </span>
+                              {activeSources.includes(kb.title) && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                              )}
+                            </button>
+                          ))}
+                        </>
+                      )}
 
-                  {kbSources.length > 0 && (
-                    <>
+                      {/* Jurisdictions & Databases */}
                       <div className="my-1 h-px bg-border" />
                       <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
-                        Knowledge Base
+                        Jurisdictions & Databases
                       </p>
-                      {kbSources.map((kb) => (
+                      <div className="px-2.5 py-1">
+                        <input
+                          type="text"
+                          value={searchFilter}
+                          onChange={(e) => setSearchFilter(e.target.value)}
+                          placeholder="Filter jurisdictions..."
+                          className="w-full h-7 px-2 text-xs rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                      </div>
+                      {filteredJurisdictions.map((j) => (
                         <button
-                          key={kb.id}
-                          onClick={() => toggleSource(kb.title)}
+                          key={j.name}
+                          onClick={() => toggleSource(j.name)}
                           className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
                         >
                           <span className="flex items-center gap-2.5">
-                            <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                            {kb.title}
+                            <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                            {j.name}
                           </span>
-                          {activeSources.includes(kb.title) && (
+                          {activeSources.includes(j.name) && (
                             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                           )}
                         </button>
                       ))}
-                    </>
+                    </div>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
+
+              {/* Prompts */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
+                    <BookOpen className="h-3.5 w-3.5" />
+                    Prompts
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-2" align="start">
+                  {promptTemplates.length === 0 ? (
+                    <p className="text-xs text-muted-foreground px-2 py-3 text-center">
+                      No prompt templates configured. Add them in Admin → Agentic AI → Prompts.
+                    </p>
+                  ) : (
+                    promptTemplates.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => { setMessage(t.prompt); }}
+                        className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="text-left">
+                          <p className="font-medium">{t.label}</p>
+                          <p className="text-muted-foreground line-clamp-2 mt-0.5">{t.prompt.substring(0, 80)}...</p>
+                        </div>
+                      </button>
+                    ))
                   )}
                 </PopoverContent>
               </Popover>
 
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
-                <BookOpen className="h-3.5 w-3.5" />
-                Prompts
-              </Button>
-
+              {/* Improve */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -415,6 +536,16 @@ export default function Home() {
                 )}
                 Improve
               </Button>
+
+              {/* Deep Research toggle */}
+              <div className="flex items-center gap-1.5 ml-1">
+                <Switch
+                  checked={deepResearch}
+                  onCheckedChange={setDeepResearch}
+                  className="scale-75"
+                />
+                <span className="text-[10px] text-muted-foreground">Deep</span>
+              </div>
 
               <div className="flex-1" />
 
