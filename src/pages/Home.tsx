@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -165,6 +166,7 @@ export default function Home() {
   const [improving, setImproving] = useState(false);
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [searchFilter, setSearchFilter] = useState("");
+  const [promptMode, setPromptMode] = useState<string | undefined>();
 
   useEffect(() => {
     if (!profile?.organization_id) return;
@@ -213,6 +215,7 @@ export default function Home() {
         selectedVault,
         attachedFiles,
         activeSources,
+        promptMode,
       },
     });
   };
@@ -314,7 +317,7 @@ export default function Home() {
     : JURISDICTION_SOURCES;
 
   // Chips that go inside the prompt box
-  const hasChips = selectedVault || deepResearch || activeSources.length > 0 || attachedFiles.length > 0;
+  const hasChips = selectedVault || deepResearch || activeSources.length > 0 || attachedFiles.length > 0 || promptMode;
 
   return (
     <AppLayout>
@@ -371,6 +374,15 @@ export default function Home() {
                     </button>
                   </Badge>
                 ))}
+                {promptMode && (
+                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
+                    <Sparkles className="h-2.5 w-2.5" />
+                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Document Drafting" : "Chat Mode"}
+                    <button onClick={() => setPromptMode(undefined)} className="ml-0.5">
+                      <X className="h-2 w-2" />
+                    </button>
+                  </Badge>
+                )}
               </div>
             )}
 
@@ -507,23 +519,23 @@ export default function Home() {
                     promptTemplates.map((t) => (
                       <button
                         key={t.id}
-                       onClick={() => {
-                          navigate("/chat", {
-                            state: {
-                              initialMessage: `Use ${t.label} mode for my next question.`,
-                              promptMode: t.id,
-                              deepResearch,
-                              activeSources,
-                            },
-                          });
+                        onClick={() => {
+                          setPromptMode(t.id);
+                          toast({ title: `Mode: ${t.label}`, description: "This mode will be used for your next message" });
                         }}
-                        className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                        className={cn(
+                          "flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors",
+                          promptMode === t.id && "bg-muted ring-1 ring-primary/30"
+                        )}
                       >
                         <FileText className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
                         <div className="text-left">
                           <p className="font-medium">{t.label}</p>
                           <p className="text-muted-foreground line-clamp-2 mt-0.5">{t.prompt.substring(0, 80)}...</p>
                         </div>
+                        {promptMode === t.id && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary mt-1 shrink-0" />
+                        )}
                       </button>
                     ))
                   )}
