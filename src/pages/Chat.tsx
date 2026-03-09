@@ -469,7 +469,7 @@ export default function Chat() {
 
                   return (
                     <div key={msg.id}>
-                      <MessageBubble
+                    <MessageBubble
                         message={msg}
                         nextMessage={nextMsg}
                         isStreaming={
@@ -483,6 +483,7 @@ export default function Chat() {
                         isLastAssistant={isLastAssistant}
                         steps={showSteps ? steps : undefined}
                         isStreamingSteps={isStreaming}
+                        onFollowUp={handleChoiceSelect}
                       />
 
                       {/* Skeleton loading when waiting for first token */}

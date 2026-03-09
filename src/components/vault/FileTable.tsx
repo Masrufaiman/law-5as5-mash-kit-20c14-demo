@@ -86,9 +86,22 @@ export function FileTable({ files }: FileTableProps) {
               <span className="text-xs text-muted-foreground font-mono">{getTypeLabel(file.mime_type)}</span>
             </TableCell>
             <TableCell>
-              <Badge variant="secondary" className={`text-[10px] ${statusColors[file.status] || ""}`}>
-                {file.status}
-              </Badge>
+              <div className="flex items-center gap-1.5">
+                <Badge variant="secondary" className={`text-[10px] ${statusColors[file.status] || ""}`}>
+                  {file.status}
+                </Badge>
+                {(file.status === "processing" || file.status === "error") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 w-5 p-0"
+                    onClick={(e) => handleRetry(file.id, e)}
+                    title="Retry processing"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
             </TableCell>
             <TableCell>
               <span className="text-xs text-muted-foreground">
