@@ -17,7 +17,7 @@ interface MessageBubbleProps {
   onChoiceSelect?: (text: string) => void;
   onDocumentOpen?: (title: string, content: string) => void;
   isLastAssistant?: boolean;
-  steps?: Step[];
+  steps?: AgentStep[];
   isStreamingSteps?: boolean;
 }
 
