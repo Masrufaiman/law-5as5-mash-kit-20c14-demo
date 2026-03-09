@@ -238,10 +238,11 @@ serve(async (req) => {
     let vaultContext = "";
     if (!ragContext && (vaultId || attachedFileIds?.length)) {
       steps.push({ name: "Searching vault documents", status: "working" });
-      const fileQuery = adminClient.from("files").select("id, name, extracted_text").eq("organization_id", orgId);
+      const fileQuery = adminClient.from("files").select("id, name, extracted_text, extracted_text_r2_key, status").eq("organization_id", orgId);
       if (vaultId) fileQuery.eq("vault_id", vaultId);
       if (attachedFileIds?.length) fileQuery.in("id", attachedFileIds);
-      const { data: files } = await fileQuery.eq("status", "ready").limit(10);
+      // Don't filter by status - include any file that has extracted text
+      const { data: files } = await fileQuery.not("extracted_text", "is", null).limit(10);
 
       if (files?.length) {
         vaultContext = "\n\n## Relevant Documents\n" +
