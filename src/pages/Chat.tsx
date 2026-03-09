@@ -384,9 +384,9 @@ export default function Chat() {
   const lastAssistantIdx = messages.reduce((acc, m, i) => m.role === "assistant" ? i : acc, -1);
   const lastUserIdx = messages.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
 
-  // Check if assistant has started content (for skeleton)
+  // Show streaming indicator when waiting for assistant response
   const lastMsg = messages[messages.length - 1];
-  const showSkeleton = isStreaming && lastMsg?.role === "user" && steps.length === 0;
+  const showStreamingIndicator = isStreaming && lastMsg?.role === "user";
 
   const rightPanel = editorDoc ? (
     <DocumentEditor
