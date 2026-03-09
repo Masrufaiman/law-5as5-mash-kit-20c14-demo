@@ -117,7 +117,9 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          is_public: boolean | null
           organization_id: string
+          share_token: string | null
           title: string
           updated_at: string
           vault_id: string | null
@@ -126,7 +128,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          is_public?: boolean | null
           organization_id: string
+          share_token?: string | null
           title?: string
           updated_at?: string
           vault_id?: string | null
@@ -135,7 +139,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          is_public?: boolean | null
           organization_id?: string
+          share_token?: string | null
           title?: string
           updated_at?: string
           vault_id?: string | null
