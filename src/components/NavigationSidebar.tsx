@@ -35,6 +35,12 @@ interface VaultItem {
   name: string;
 }
 
+interface RecentChat {
+  id: string;
+  title: string;
+  created_at: string;
+}
+
 export function NavigationSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -43,6 +49,7 @@ export function NavigationSidebar() {
 
   const [vaultsOpen, setVaultsOpen] = useState(true);
   const [vaults, setVaults] = useState<VaultItem[]>([]);
+  const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
@@ -53,6 +60,15 @@ export function NavigationSidebar() {
       .eq("organization_id", profile.organization_id)
       .order("created_at")
       .then(({ data }) => setVaults(data || []));
+
+    // Load recent conversations
+    supabase
+      .from("conversations")
+      .select("id, title, created_at")
+      .eq("organization_id", profile.organization_id)
+      .order("updated_at", { ascending: false })
+      .limit(10)
+      .then(({ data }) => setRecentChats(data || []));
   }, [profile?.organization_id]);
 
   // Keyboard shortcut for search
@@ -174,6 +190,33 @@ export function NavigationSidebar() {
             )}
           </div>
 
+          {/* Recent Chats */}
+          {recentChats.length > 0 && (
+            <>
+              <div className="my-2 h-px bg-sidebar-border" />
+              <p className="text-[10px] font-medium text-sidebar-foreground/40 px-2.5 py-1 uppercase tracking-wider">
+                Recent
+              </p>
+              <div className="space-y-0.5">
+                {recentChats.map((chat) => (
+                  <button
+                    key={chat.id}
+                    onClick={() => navigate(`/chat?id=${chat.id}`)}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors truncate",
+                      location.search.includes(chat.id)
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                    )}
+                  >
+                    <MessageSquare className="h-3 w-3 shrink-0 opacity-50" />
+                    <span className="truncate">{chat.title}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
           {/* Separator */}
           <div className="my-2 h-px bg-sidebar-border" />
 
@@ -236,6 +279,22 @@ export function NavigationSidebar() {
               Open vault
             </CommandItem>
           </CommandGroup>
+          {recentChats.length > 0 && (
+            <CommandGroup heading="Recent Chats">
+              {recentChats.slice(0, 5).map((c) => (
+                <CommandItem
+                  key={c.id}
+                  onSelect={() => {
+                    setSearchOpen(false);
+                    navigate(`/chat?id=${c.id}`);
+                  }}
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  {c.title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
           {vaults.length > 0 && (
             <CommandGroup heading="Vaults">
               {vaults.map((v) => (

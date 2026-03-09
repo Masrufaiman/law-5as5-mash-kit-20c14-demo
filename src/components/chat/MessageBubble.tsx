@@ -59,6 +59,15 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
                     <table className="w-full text-xs">{children}</table>
                   </div>
                 ),
+                thead: ({ children }) => (
+                  <thead className="bg-muted/50">{children}</thead>
+                ),
+                tbody: ({ children }) => (
+                  <tbody>{children}</tbody>
+                ),
+                tr: ({ children }) => (
+                  <tr className="border-b border-border last:border-b-0">{children}</tr>
+                ),
                 th: ({ children }) => (
                   <th className="bg-muted/50 px-3 py-2 text-left font-medium text-foreground border-b border-border text-xs">
                     {children}
@@ -78,6 +87,18 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
                 h3: ({ children }) => (
                   <h3 className="text-sm font-semibold text-foreground mt-2 mb-1">{children}</h3>
                 ),
+                h4: ({ children }) => (
+                  <h4 className="text-sm font-medium text-foreground mt-2 mb-1">{children}</h4>
+                ),
+                h5: ({ children }) => (
+                  <h5 className="text-xs font-medium text-foreground mt-1.5 mb-0.5">{children}</h5>
+                ),
+                h6: ({ children }) => (
+                  <h6 className="text-xs font-medium text-muted-foreground mt-1.5 mb-0.5">{children}</h6>
+                ),
+                p: ({ children }) => (
+                  <p className="text-sm text-foreground/90 my-1.5 leading-relaxed">{children}</p>
+                ),
                 ul: ({ children }) => (
                   <ul className="list-disc pl-4 space-y-0.5 my-2">{children}</ul>
                 ),
@@ -88,6 +109,29 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
                   <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-muted-foreground italic">
                     {children}
                   </blockquote>
+                ),
+                hr: () => (
+                  <hr className="my-4 border-border" />
+                ),
+                code: ({ children, className }) => {
+                  const isInline = !className;
+                  if (isInline) {
+                    return (
+                      <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-foreground">
+                        {children}
+                      </code>
+                    );
+                  }
+                  return (
+                    <code className={cn("text-xs font-mono", className)}>
+                      {children}
+                    </code>
+                  );
+                },
+                pre: ({ children }) => (
+                  <pre className="bg-muted border border-border rounded-md p-3 overflow-x-auto my-3 text-xs">
+                    {children}
+                  </pre>
                 ),
               }}
             >

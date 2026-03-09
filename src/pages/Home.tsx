@@ -507,7 +507,16 @@ export default function Home() {
                     promptTemplates.map((t) => (
                       <button
                         key={t.id}
-                        onClick={() => { setMessage(t.prompt); }}
+                       onClick={() => {
+                          navigate("/chat", {
+                            state: {
+                              initialMessage: `Use ${t.label} mode for my next question.`,
+                              promptMode: t.id,
+                              deepResearch,
+                              activeSources,
+                            },
+                          });
+                        }}
                         className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
                       >
                         <FileText className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
@@ -571,6 +580,15 @@ export default function Home() {
                 <button
                   key={wf.title}
                   className="flex items-start gap-3 rounded-lg border border-border p-3.5 text-left hover:bg-muted/50 transition-colors group"
+                  onClick={() => {
+                    navigate("/chat", {
+                      state: {
+                        initialMessage: wf.description,
+                        deepResearch,
+                        activeSources,
+                      },
+                    });
+                  }}
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-secondary text-primary shrink-0">
                     <wf.icon className="h-4 w-4" />
