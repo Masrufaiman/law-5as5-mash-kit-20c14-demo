@@ -179,20 +179,35 @@ export function NavigationSidebar() {
 
   return (
     <>
-      <div className="flex h-full w-56 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+      <div className={cn(
+        "flex h-full flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-200",
+        collapsed ? "w-12" : "w-56"
+      )}>
         {/* Org header */}
-        <div className="flex items-center gap-2.5 px-4 py-4 border-b border-sidebar-border">
+        <div className={cn("flex items-center border-b border-sidebar-border", collapsed ? "justify-center px-1 py-4" : "gap-2.5 px-4 py-4")}>
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground font-heading text-xs font-bold shrink-0">
             LK
           </div>
-          <span className="font-heading text-sm font-semibold truncate flex-1">{orgName}</span>
+          {!collapsed && <span className="font-heading text-sm font-semibold truncate flex-1">{orgName}</span>}
           <button
-            onClick={() => setSearchOpen(true)}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
-            title="Search (⌘K)"
+            onClick={() => collapsed ? setCollapsed(false) : setSearchOpen(true)}
+            className={cn(
+              "flex items-center justify-center rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors",
+              collapsed ? "h-8 w-8 mt-2" : "h-6 w-6"
+            )}
+            title={collapsed ? "Expand sidebar" : "Search (⌘K)"}
           >
-            <Search className="h-3.5 w-3.5" />
+            {collapsed ? <PanelLeft className="h-3.5 w-3.5" /> : <Search className="h-3.5 w-3.5" />}
           </button>
+          {!collapsed && (
+            <button
+              onClick={() => setCollapsed(true)}
+              className="flex h-6 w-6 items-center justify-center rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Create button */}
