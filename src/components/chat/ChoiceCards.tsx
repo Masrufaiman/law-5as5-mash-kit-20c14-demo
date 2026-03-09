@@ -120,9 +120,24 @@ export function parseChoices(content: string): { preamble: string; choices: Choi
   const avgTitleLen = choices.reduce((acc, c) => acc + c.title.length, 0) / choices.length;
   if (choices.length > 6 || avgTitleLen > 80) return null;
 
+  // --- False positive guards ---
+  // Don't render as choices if items contain monetary values, file names, or data
+  const hasMonetaryValues = choices.some(c =>
+    /[\$₹€£¥৳]|USD|BDT|INR|EUR|GBP|AED|SGD|\b\d{1,3}(,\d{3})*\.\d{2}\b|\b\d+\s*(BDT|USD|INR|EUR|taka|dollar|rupee)/i.test(c.title + " " + c.description)
+  );
+  const hasFileExtensions = choices.some(c => /\.\w{2,4}\b/.test(c.title));
+  const hasDataPatterns = choices.some(c =>
+    /\b(total|amount|sum|balance|invoice|receipt|order|quantity|price|cost|payment|transaction)\b/i.test(c.title + " " + c.description)
+  );
+
   if (choiceStartIdx > 0) {
     preamble = lines.slice(0, choiceStartIdx).join("\n").trim();
   }
+
+  // Only show as interactive choices if the context is asking a question
+  const hasQuestion = /\?\s*$|choose|select|pick|which.*would|which.*prefer|would you like/im.test(preamble);
+
+  if ((hasMonetaryValues || hasFileExtensions || hasDataPatterns) && !hasQuestion) return null;
 
   return { preamble, choices };
 }
