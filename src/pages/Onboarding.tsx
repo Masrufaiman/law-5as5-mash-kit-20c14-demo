@@ -49,38 +49,20 @@ export default function Onboarding() {
         throw orgError;
       }
 
-      // Check if profile exists
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", user.id)
-        .maybeSingle();
-
       const isSuperadmin = user.email === "mashcatg@gmail.com";
       const role = isSuperadmin ? "superadmin" as const : "admin" as const;
 
-      if (existingProfile) {
-        const { error: updateError } = await supabase
-          .from("profiles")
-          .update({
-            organization_id: orgId,
-            role,
-            full_name: user.user_metadata?.full_name || user.email?.split("@")[0],
-          })
-          .eq("id", user.id);
-        if (updateError) throw updateError;
-      } else {
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .insert({
-            id: user.id,
-            email: user.email!,
-            organization_id: orgId,
-            role,
-            full_name: user.user_metadata?.full_name || user.email?.split("@")[0],
-          });
-        if (profileError) throw profileError;
-      }
+      // Upsert profile — handles both new and existing profiles atomically
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: user.id,
+          email: user.email!,
+          organization_id: orgId,
+          role,
+          full_name: user.user_metadata?.full_name || user.email?.split("@")[0],
+        }, { onConflict: "id" });
+      if (profileError) throw profileError;
 
       // Create default vault
       await supabase.from("vaults").insert({
