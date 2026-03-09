@@ -4,18 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Sparkles } from "lucide-react";
+import { Search, Zap, Brain, BookOpen, FlaskConical } from "lucide-react";
 
-const PERPLEXITY_MODELS = [
-  { id: "sonar", label: "Sonar — fast search" },
-  { id: "sonar-pro", label: "Sonar Pro — 2x citations" },
-  { id: "sonar-reasoning", label: "Sonar Reasoning — chain-of-thought" },
-  { id: "sonar-reasoning-pro", label: "Sonar Reasoning Pro — DeepSeek R1" },
-  { id: "sonar-deep-research", label: "Sonar Deep Research — multi-query" },
+const MODEL_USE_CASES = [
+  { model: "sonar", label: "Sonar", icon: Zap, useCase: "Chat & Research", description: "Fast search, good citations. Used for every regular chat query.", badge: "Default" },
+  { model: "sonar-reasoning", label: "Sonar Reasoning", icon: Brain, useCase: "Red Flag Detection", description: "Chain-of-thought reasoning for contract risk analysis and compliance checks.", badge: "Auto" },
+  { model: "sonar-pro", label: "Sonar Pro", icon: BookOpen, useCase: "Review Tables", description: "2× more citations for extraction, comparisons, and structured data.", badge: "Auto" },
+  { model: "sonar-deep-research", label: "Sonar Deep Research", icon: FlaskConical, useCase: "Deep Research", description: "Multi-query expert research. Triggered by user toggle only.", badge: "Manual" },
 ];
 
 interface SearchTabProps {
@@ -25,7 +23,6 @@ interface SearchTabProps {
 export function SearchTab({ orgId }: SearchTabProps) {
   const { toast } = useToast();
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("sonar");
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
   const [existingId, setExistingId] = useState<string | null>(null);
@@ -43,7 +40,6 @@ export function SearchTab({ orgId }: SearchTabProps) {
           setExistingId(data.id);
           setApiKey(data.api_key_encrypted ? "••••••••" : "");
           const config = (data.config as any) || {};
-          setModel(config.model || "sonar");
           setWebSearchEnabled(config.web_search_enabled ?? false);
           setDeepResearchEnabled(config.deep_research_enabled ?? false);
         }
@@ -54,7 +50,6 @@ export function SearchTab({ orgId }: SearchTabProps) {
     setSaving(true);
     try {
       const config = {
-        model,
         web_search_enabled: webSearchEnabled,
         deep_research_enabled: deepResearchEnabled,
       };
@@ -94,7 +89,7 @@ export function SearchTab({ orgId }: SearchTabProps) {
     <div className="space-y-4">
       <div>
         <h3 className="font-heading text-base font-semibold">Search & Research APIs</h3>
-        <p className="text-xs text-muted-foreground">Configure web search and deep research for AI-powered legal research.</p>
+        <p className="text-xs text-muted-foreground">Perplexity powers all search and research. Models are selected automatically based on task type.</p>
       </div>
 
       <Card className="border border-border">
@@ -103,7 +98,7 @@ export function SearchTab({ orgId }: SearchTabProps) {
             <Search className="h-4 w-4 text-primary" />
             <CardTitle className="text-sm">Perplexity AI</CardTitle>
           </div>
-          <CardDescription className="text-xs">Web search with grounded citations for legal research.</CardDescription>
+          <CardDescription className="text-xs">Single API key — 4 models used automatically per task.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
@@ -117,16 +112,23 @@ export function SearchTab({ orgId }: SearchTabProps) {
             />
           </div>
 
+          {/* Model Use-Case Mapping (read-only info) */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Default Model</Label>
-            <Select value={model} onValueChange={setModel}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {PERPLEXITY_MODELS.map(m => (
-                  <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label className="text-xs">Model Routing</Label>
+            <div className="space-y-2">
+              {MODEL_USE_CASES.map((m) => (
+                <div key={m.model} className="flex items-start gap-2.5 rounded-md border border-border px-3 py-2">
+                  <m.icon className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-foreground">{m.label}</span>
+                      <Badge variant="secondary" className="text-[10px]">{m.badge}</Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{m.useCase} — {m.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center justify-between py-1">

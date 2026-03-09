@@ -27,6 +27,7 @@ interface StreamChatOptions {
   deepResearch?: boolean;
   attachedFileIds?: string[];
   sources?: string[];
+  useCase?: string; // "red_flag" | "review" | "chat" — hints Perplexity model selection
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`;
@@ -78,6 +79,7 @@ export function useStreamChat() {
             deepResearch: options.deepResearch,
             attachedFileIds: options.attachedFileIds,
             sources: options.sources,
+            useCase: options.useCase,
             history,
           }),
           signal: controller.signal,

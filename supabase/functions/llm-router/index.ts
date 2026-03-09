@@ -15,6 +15,47 @@ interface ChatRequest {
   attachedFileIds?: string[];
   sources?: string[];
   history?: { role: string; content: string }[];
+  useCase?: string; // optional frontend hint: "red_flag" | "review" | "chat"
+}
+
+// ---------- Multi-model Perplexity selection ----------
+const MODEL_CONFIG: Record<string, { maxTokens: number; systemPrompt: string }> = {
+  sonar: {
+    maxTokens: 2048,
+    systemPrompt: "You are a legal research assistant. Provide concise, accurate legal information with proper citations from authoritative sources.",
+  },
+  "sonar-reasoning": {
+    maxTokens: 4096,
+    systemPrompt: "You are a legal risk analysis expert. Analyze contracts and documents for risks, red flags, and problematic clauses. Reason step-by-step through each issue, citing specific clauses and legal precedents.",
+  },
+  "sonar-pro": {
+    maxTokens: 4096,
+    systemPrompt: "You are a legal data extraction specialist. Extract structured data with maximum citations. Be thorough and cite every claim. Provide comprehensive coverage with source URLs.",
+  },
+  "sonar-deep-research": {
+    maxTokens: 8192,
+    systemPrompt: "You are a senior legal researcher conducting comprehensive multi-source legal research. Analyze multiple jurisdictions, compare legal frameworks, and provide exhaustive citations.",
+  },
+};
+
+function selectPerplexityModel(message: string, deepResearch: boolean, useCase?: string): string {
+  if (deepResearch) return "sonar-deep-research";
+
+  // Explicit frontend hint takes priority
+  if (useCase === "red_flag") return "sonar-reasoning";
+  if (useCase === "review") return "sonar-pro";
+
+  const lower = message.toLowerCase();
+  // Red flag / risk analysis → reasoning model
+  if (/red.?flag|risk.?analy|clause.?review|compliance.?check|due.?diligence|problematic|risky|liability/i.test(lower)) {
+    return "sonar-reasoning";
+  }
+  // Review table / comparison / extraction → pro model (2x citations)
+  if (/review.?table|compar|extract.?terms|obligation|provision|summar.*clause|side.?by.?side|benchmark/i.test(lower)) {
+    return "sonar-pro";
+  }
+  // Default: fast sonar
+  return "sonar";
 }
 
 // Map source names to Perplexity search domain filters
@@ -86,7 +127,7 @@ serve(async (req) => {
 
     const orgId = profile.organization_id;
     const body: ChatRequest = await req.json();
-    const { conversationId, message, vaultId, deepResearch, attachedFileIds, sources, history } = body;
+    const { conversationId, message, vaultId, deepResearch, attachedFileIds, sources, history, useCase } = body;
 
     const steps: { name: string; status: "done" | "working" }[] = [];
 
@@ -155,8 +196,10 @@ serve(async (req) => {
     const needsSearch = (sources && sources.length > 0) || deepResearch;
 
     if (needsSearch) {
-      const searchType = deepResearch ? "deep research" : "web search";
-      steps.push({ name: `Running ${searchType} via Perplexity`, status: "working" });
+      const pplxModel = selectPerplexityModel(message, !!deepResearch, useCase);
+      const pplxConfig = MODEL_CONFIG[pplxModel] || MODEL_CONFIG.sonar;
+      const searchType = deepResearch ? "deep research" : pplxModel === "sonar-reasoning" ? "risk analysis" : pplxModel === "sonar-pro" ? "detailed search" : "web search";
+      steps.push({ name: `Running ${searchType} (${pplxModel})`, status: "working" });
 
       // Get Perplexity API key from api_integrations
       const { data: perplexityConfig } = await adminClient
@@ -170,7 +213,6 @@ serve(async (req) => {
       if (perplexityConfig?.api_key_encrypted) {
         try {
           const perplexityKey = atob(perplexityConfig.api_key_encrypted);
-          const pplxModel = deepResearch ? "sonar-deep-research" : "sonar-pro";
 
           // Build domain filter from sources
           const domainFilter: string[] = [];
@@ -195,9 +237,10 @@ serve(async (req) => {
           const pplxBody: any = {
             model: pplxModel,
             messages: [
-              { role: "system", content: "You are a legal research assistant. Provide detailed, accurate legal information with proper citations. Focus on authoritative legal sources." },
+              { role: "system", content: pplxConfig.systemPrompt },
               { role: "user", content: searchQuery },
             ],
+            max_tokens: pplxConfig.maxTokens,
           };
 
           if (domainFilter.length > 0) {
