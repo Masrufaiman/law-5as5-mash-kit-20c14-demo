@@ -1,6 +1,9 @@
-import { FileText, FileSpreadsheet, File as FileIcon } from "lucide-react";
+import { FileText, FileSpreadsheet, File as FileIcon, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 import { format } from "date-fns";
 
