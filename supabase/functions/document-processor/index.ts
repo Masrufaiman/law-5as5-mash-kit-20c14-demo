@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     const chunkOverlap = docConf.chunk_overlap || 200;
     const embeddingModel = docConf.embedding_model || "text-embedding-3-small";
 
-    console.log(`[document-processor] Config loaded. OCR: ${!!ocrConf.aws_access_key}, OpenAI: ${!!openaiConf.api_key}, Qdrant: ${!!qdrantConf.url}`);
+    console.log(`[document-processor] Config loaded. OCR(Mistral): ${!!ocrConf.mistral_api_key}, OpenAI: ${!!openaiConf.api_key}, Qdrant: ${!!qdrantConf.url}`);
 
     // Load R2 config
     const { data: r2Config } = await supabase
