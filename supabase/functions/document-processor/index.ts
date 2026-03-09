@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     const chunkOverlap = docConf.chunk_overlap || 200;
     const embeddingModel = docConf.embedding_model || "text-embedding-3-small";
 
-    console.log(`[document-processor] Config loaded. OCR: ${!!ocrConf.aws_access_key}, OpenAI: ${!!openaiConf.api_key}, Qdrant: ${!!qdrantConf.url}`);
+    console.log(`[document-processor] Config loaded. OCR(Mistral): ${!!ocrConf.mistral_api_key}, OpenAI: ${!!openaiConf.api_key}, Qdrant: ${!!qdrantConf.url}`);
 
     // Load R2 config
     const { data: r2Config } = await supabase
@@ -125,27 +125,22 @@ Deno.serve(async (req) => {
     if (file.mime_type === "text/plain" || file.mime_type === "text/markdown") {
       extractedText = new TextDecoder().decode(fileBuffer);
     } else if (file.mime_type === "application/pdf") {
-      const textContent = new TextDecoder("utf-8", { fatal: false }).decode(fileBuffer);
-      const textMatches = textContent.match(/\(([^)]{2,})\)/g);
-      const roughText = textMatches ? textMatches.map(m => m.slice(1, -1)).join(" ") : "";
-
-      if (roughText.length > 100) {
-        extractedText = roughText;
-        console.log(`[document-processor] Native PDF text extracted: ${extractedText.length} chars`);
-      } else if (ocrConf.aws_access_key && ocrConf.aws_secret_key) {
+      // Always use Mistral OCR for PDFs — native regex extraction is unreliable
+      if (ocrConf.mistral_api_key) {
         try {
-          console.log(`[document-processor] Using AWS Textract for OCR`);
-          const textractResult = await callTextract(fileBuffer, ocrConf);
-          extractedText = textractResult;
+          console.log(`[document-processor] Using Mistral OCR for PDF`);
+          const ocrResult = await callMistralOCR(fileBuffer, file.mime_type, ocrConf.mistral_api_key);
+          extractedText = ocrResult.text;
+          pageCount = ocrResult.pageCount;
           ocrUsed = true;
-          console.log(`[document-processor] OCR complete: ${extractedText.length} chars`);
+          console.log(`[document-processor] Mistral OCR complete: ${extractedText.length} chars, ${pageCount} pages`);
         } catch (ocrErr: any) {
-          console.error("[document-processor] Textract error:", ocrErr.message);
+          console.error("[document-processor] Mistral OCR error:", ocrErr.message);
           extractedText = `[PDF document: ${file.original_name}] — OCR failed: ${ocrErr.message}`;
         }
       } else {
-        console.warn(`[document-processor] No OCR configured for scanned PDF`);
-        extractedText = `[PDF document: ${file.original_name}] — No OCR configured. Configure AWS Textract in Admin → Infrastructure.`;
+        console.warn(`[document-processor] No Mistral API key configured for PDF OCR`);
+        extractedText = `[PDF document: ${file.original_name}] — No OCR configured. Add Mistral API key in Admin → Infrastructure.`;
       }
     } else if (
       file.mime_type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
@@ -162,15 +157,17 @@ Deno.serve(async (req) => {
     ) {
       extractedText = `[Spreadsheet: ${file.original_name}] — Text extraction pending.`;
     } else if (file.mime_type?.startsWith("image/")) {
-      if (ocrConf.aws_access_key && ocrConf.aws_secret_key) {
+      if (ocrConf.mistral_api_key) {
         try {
-          extractedText = await callTextract(fileBuffer, ocrConf);
+          console.log(`[document-processor] Using Mistral OCR for image`);
+          const ocrResult = await callMistralOCR(fileBuffer, file.mime_type, ocrConf.mistral_api_key);
+          extractedText = ocrResult.text;
           ocrUsed = true;
         } catch (ocrErr: any) {
           extractedText = `[Image: ${file.original_name}] — OCR failed: ${ocrErr.message}`;
         }
       } else {
-        extractedText = `[Image: ${file.original_name}] — No OCR configured.`;
+        extractedText = `[Image: ${file.original_name}] — No OCR configured. Add Mistral API key in Admin → Infrastructure.`;
       }
     } else {
       extractedText = `[Unsupported format: ${file.mime_type}]`;
@@ -341,77 +338,45 @@ Deno.serve(async (req) => {
   }
 });
 
-// --- AWS Textract ---
-async function callTextract(fileBytes: Uint8Array, ocrConf: any): Promise<string> {
-  const region = ocrConf.aws_region || "eu-central-1";
-  const service = "textract";
-  const host = `textract.${region}.amazonaws.com`;
-  const url = `https://${host}`;
+// --- Mistral OCR ---
+async function callMistralOCR(fileBytes: Uint8Array, mimeType: string, apiKey: string): Promise<{ text: string; pageCount: number }> {
+  // Convert Uint8Array to base64
+  let binary = "";
+  const chunkSize = 32768;
+  for (let i = 0; i < fileBytes.length; i += chunkSize) {
+    const slice = fileBytes.subarray(i, Math.min(i + chunkSize, fileBytes.length));
+    binary += String.fromCharCode(...slice);
+  }
+  const base64 = btoa(binary);
+  const dataUrl = `data:${mimeType};base64,${base64}`;
 
-  const body = JSON.stringify({
-    Document: {
-      Bytes: btoa(String.fromCharCode(...fileBytes.slice(0, 5 * 1024 * 1024))),
-    },
-  });
-
-  const now = new Date();
-  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
-  const dateStamp = amzDate.slice(0, 8);
-
-  const bodyBytes = new TextEncoder().encode(body);
-  const payloadHash = await sha256Hex(bodyBytes);
-
-  const headers: Record<string, string> = {
-    host,
-    "x-amz-date": amzDate,
-    "x-amz-content-sha256": payloadHash,
-    "content-type": "application/x-amz-json-1.1",
-    "x-amz-target": "Textract.DetectDocumentText",
-  };
-
-  const signedHeaderKeys = Object.keys(headers).sort();
-  const signedHeaders = signedHeaderKeys.join(";");
-  const canonicalHeaders = signedHeaderKeys.map(k => `${k}:${headers[k]}\n`).join("");
-
-  const canonicalRequest = [
-    "POST",
-    "/",
-    "",
-    canonicalHeaders,
-    signedHeaders,
-    payloadHash,
-  ].join("\n");
-
-  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
-  const stringToSign = [
-    "AWS4-HMAC-SHA256",
-    amzDate,
-    credentialScope,
-    await sha256Hex(new TextEncoder().encode(canonicalRequest)),
-  ].join("\n");
-
-  const signingKey = await getSignatureKey(ocrConf.aws_secret_key, dateStamp, region, service);
-  const signature = await hmacHex(signingKey, stringToSign);
-
-  const authorization = `AWS4-HMAC-SHA256 Credential=${ocrConf.aws_access_key}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
-  const resp = await fetch(url, {
+  const response = await fetch("https://api.mistral.ai/v1/ocr", {
     method: "POST",
-    headers: { ...headers, Authorization: authorization },
-    body,
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "mistral-ocr-latest",
+      document: {
+        type: "document_url",
+        document_url: dataUrl,
+      },
+      include_image_base64: false,
+    }),
   });
 
-  if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error(`Textract error ${resp.status}: ${errText.slice(0, 300)}`);
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Mistral OCR error ${response.status}: ${errText.slice(0, 300)}`);
   }
 
-  const result = await resp.json();
-  const lines = (result.Blocks || [])
-    .filter((b: any) => b.BlockType === "LINE")
-    .map((b: any) => b.Text);
+  const data = await response.json();
+  const pageTexts = data.pages?.map((page: any) => page.markdown || "") ?? [];
+  const text = pageTexts.join("\n\n");
+  const pageCount = data.pages?.length ?? 1;
 
-  return lines.join("\n");
+  return { text, pageCount };
 }
 
 // --- OpenAI Embeddings ---

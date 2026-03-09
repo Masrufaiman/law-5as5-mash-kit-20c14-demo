@@ -72,10 +72,8 @@ export function AgentTab({ orgId }: AgentTabProps) {
   // Workflows
   const [workflows, setWorkflows] = useState<WorkflowConfig[]>([]);
 
-  // OCR (AWS Textract)
-  const [awsAccessKey, setAwsAccessKey] = useState("");
-  const [awsSecretKey, setAwsSecretKey] = useState("");
-  const [awsRegion, setAwsRegion] = useState("eu-central-1");
+  // OCR (Mistral)
+  const [mistralApiKey, setMistralApiKey] = useState("");
 
   // Qdrant
   const [qdrantUrl, setQdrantUrl] = useState("");
@@ -113,9 +111,7 @@ export function AgentTab({ orgId }: AgentTabProps) {
           setUserDailyLimit(String(c.rate_limits?.user_daily || 100));
           setWorkflows(c.workflows || []);
           // OCR
-          setAwsAccessKey(c.ocr?.aws_access_key || "");
-          setAwsSecretKey(c.ocr?.aws_secret_key || "");
-          setAwsRegion(c.ocr?.aws_region || "eu-central-1");
+          setMistralApiKey(c.ocr?.mistral_api_key || "");
           // Qdrant
           setQdrantUrl(c.qdrant?.url || "");
           setQdrantApiKey(c.qdrant?.api_key || "");
@@ -154,9 +150,7 @@ export function AgentTab({ orgId }: AgentTabProps) {
         },
         workflows,
         ocr: {
-          aws_access_key: awsAccessKey,
-          aws_secret_key: awsSecretKey,
-          aws_region: awsRegion,
+          mistral_api_key: mistralApiKey,
         },
         qdrant: {
           url: qdrantUrl,
@@ -467,38 +461,20 @@ export function AgentTab({ orgId }: AgentTabProps) {
 
         {/* Infrastructure */}
         <TabsContent value="infrastructure" className="space-y-4">
-          {/* OCR - AWS Textract */}
+          {/* OCR - Mistral */}
           <Card className="border border-border">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <Eye className="h-4 w-4 text-primary" />
-                <CardTitle className="text-sm">OCR — AWS Textract</CardTitle>
+                <CardTitle className="text-sm">OCR — Mistral</CardTitle>
               </div>
-              <CardDescription className="text-xs">Optical Character Recognition for scanned PDFs and images.</CardDescription>
+              <CardDescription className="text-xs">Optical Character Recognition for PDFs and images using Mistral OCR. Returns markdown with preserved structure.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">AWS Access Key ID</Label>
-                  <Input type="password" value={awsAccessKey} onChange={e => setAwsAccessKey(e.target.value)} className="h-8 text-sm font-mono" placeholder="AKIA..." />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">AWS Secret Access Key</Label>
-                  <Input type="password" value={awsSecretKey} onChange={e => setAwsSecretKey(e.target.value)} className="h-8 text-sm font-mono" placeholder="••••••••" />
-                </div>
-              </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">AWS Region</Label>
-                <Select value={awsRegion} onValueChange={setAwsRegion}>
-                  <SelectTrigger className="h-8 text-sm w-48"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="eu-central-1">eu-central-1 (Frankfurt)</SelectItem>
-                    <SelectItem value="us-east-1">us-east-1 (N. Virginia)</SelectItem>
-                    <SelectItem value="us-west-2">us-west-2 (Oregon)</SelectItem>
-                    <SelectItem value="ap-southeast-1">ap-southeast-1 (Singapore)</SelectItem>
-                    <SelectItem value="eu-west-1">eu-west-1 (Ireland)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs">Mistral API Key</Label>
+                <Input type="password" value={mistralApiKey} onChange={e => setMistralApiKey(e.target.value)} className="h-8 text-sm font-mono" placeholder="••••••••" />
+                <p className="text-[10px] text-muted-foreground">Get your API key from <a href="https://console.mistral.ai/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">console.mistral.ai</a></p>
               </div>
             </CardContent>
           </Card>

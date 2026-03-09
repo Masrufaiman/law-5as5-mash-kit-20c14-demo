@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import type { Citation } from "@/hooks/useStreamChat";
+import { StepTracker } from "@/components/chat/StepTracker";
 import {
   Plus,
   Share,
@@ -27,6 +28,7 @@ import {
   Check,
   X,
   Pencil,
+  Reply,
 } from "lucide-react";
 
 export default function Chat() {
@@ -64,6 +66,8 @@ export default function Chat() {
   const [editorDoc, setEditorDoc] = useState<{ title: string; content: string } | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState("");
+  const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Load conversation from URL ?id=
   useEffect(() => {
@@ -143,6 +147,69 @@ export default function Chat() {
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, steps]);
+
+  // Text selection → Reply tooltip
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleMouseUp = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+        setSelectionTooltip(null);
+        return;
+      }
+
+      const selectedText = selection.toString().trim();
+      if (selectedText.length < 3) {
+        setSelectionTooltip(null);
+        return;
+      }
+
+      // Check if selection is within an assistant message
+      const anchorNode = selection.anchorNode;
+      const focusNode = selection.focusNode;
+      if (!anchorNode || !focusNode) return;
+
+      const isInContainer = container.contains(anchorNode) && container.contains(focusNode);
+      if (!isInContainer) {
+        setSelectionTooltip(null);
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+
+      setSelectionTooltip({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+        text: selectedText,
+      });
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      // Hide tooltip if clicking outside of it
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-reply-tooltip]")) {
+        setSelectionTooltip(null);
+      }
+    };
+
+    container.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => {
+      container.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
+  }, []);
+
+  const handleReplyWithSelection = () => {
+    if (!selectionTooltip) return;
+    const quoted = `> ${selectionTooltip.text.replace(/\n/g, "\n> ")}\n\n`;
+    setInput(quoted + input);
+    setSelectionTooltip(null);
+    window.getSelection()?.removeAllRanges();
+  };
 
   // Show error toast
   useEffect(() => {
@@ -317,9 +384,9 @@ export default function Chat() {
   const lastAssistantIdx = messages.reduce((acc, m, i) => m.role === "assistant" ? i : acc, -1);
   const lastUserIdx = messages.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
 
-  // Check if assistant has started content (for skeleton)
+  // Show streaming indicator when waiting for assistant response
   const lastMsg = messages[messages.length - 1];
-  const showSkeleton = isStreaming && lastMsg?.role === "user" && steps.length === 0;
+  const showStreamingIndicator = isStreaming && lastMsg?.role === "user";
 
   const rightPanel = editorDoc ? (
     <DocumentEditor
@@ -468,15 +535,37 @@ export default function Chat() {
             </div>
           ) : (
             <ScrollArea className="flex-1" ref={scrollContainerRef as any}>
-              <div className="mx-auto max-w-3xl px-6 py-6 space-y-6">
+              <div className="mx-auto max-w-3xl px-6 py-6 space-y-6 relative" ref={messagesContainerRef}>
+                {/* Reply tooltip for text selection */}
+                {selectionTooltip && (
+                  <div
+                    data-reply-tooltip
+                    className="fixed z-50 animate-in fade-in-0 zoom-in-95"
+                    style={{
+                      left: selectionTooltip.x,
+                      top: selectionTooltip.y,
+                      transform: "translate(-50%, -100%)",
+                    }}
+                  >
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 shadow-md border border-border"
+                      onClick={handleReplyWithSelection}
+                    >
+                      <Reply className="h-3 w-3" />
+                      Reply
+                    </Button>
+                  </div>
+                )}
+
                 {messages.map((msg, i) => {
                   const isLastAssistant = msg.role === "assistant" && i === lastAssistantIdx;
                   const isLastUser = msg.role === "user" && i === lastUserIdx;
                   const nextMsg = messages[i + 1] || undefined;
 
-                  // Only pass steps to the LAST message in the list (either last assistant, or last user if no assistant after it)
-                  const isLastMessage = i === messages.length - 1;
-                  const showSteps = isLastMessage || (isLastUser && !messages.some((m, j) => j > i && m.role === "assistant"));
+                  // Only pass steps to the last assistant message
+                  const showSteps = msg.role === "assistant" && i === messages.length - 1;
 
                   return (
                     <div key={msg.id}>
@@ -497,18 +586,26 @@ export default function Chat() {
                         onFollowUp={handleChoiceSelect}
                       />
 
-                      {/* Skeleton loading when waiting for first token */}
-                      {isLastUser && showSkeleton && (
-                        <div className="pl-8 mt-4 space-y-3">
+                      {/* Streaming indicator: skeleton or steps, always shows LawKit AI branding */}
+                      {isLastUser && showStreamingIndicator && (
+                        <div className="mt-4">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
                               <Bot className="h-3.5 w-3.5 text-muted-foreground" />
                             </div>
                             <span className="text-xs font-semibold text-foreground">LawKit AI</span>
                           </div>
-                          <Skeleton className="h-4 w-3/4" />
-                          <Skeleton className="h-4 w-full" />
-                          <Skeleton className="h-4 w-2/3" />
+                          <div className="pl-8">
+                            {steps.length > 0 ? (
+                              <StepTracker steps={steps} isStreaming={true} />
+                            ) : (
+                              <div className="space-y-3">
+                                <Skeleton className="h-4 w-3/4" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-2/3" />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
