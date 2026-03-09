@@ -29,10 +29,11 @@ export default function Onboarding() {
     // Ensure the Supabase client is primed with the latest auth tokens
     // (prevents DB requests being sent without the JWT in some environments)
     if (session?.access_token && session?.refresh_token) {
-      await supabase.auth.setSession({
+      const { error: setSessionError } = await supabase.auth.setSession({
         access_token: session.access_token,
         refresh_token: session.refresh_token,
       });
+      if (setSessionError) console.warn("[onboarding] setSession error", setSessionError);
     }
 
     try {
