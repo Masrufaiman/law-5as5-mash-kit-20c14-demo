@@ -72,10 +72,8 @@ export function AgentTab({ orgId }: AgentTabProps) {
   // Workflows
   const [workflows, setWorkflows] = useState<WorkflowConfig[]>([]);
 
-  // OCR (AWS Textract)
-  const [awsAccessKey, setAwsAccessKey] = useState("");
-  const [awsSecretKey, setAwsSecretKey] = useState("");
-  const [awsRegion, setAwsRegion] = useState("eu-central-1");
+  // OCR (Mistral)
+  const [mistralApiKey, setMistralApiKey] = useState("");
 
   // Qdrant
   const [qdrantUrl, setQdrantUrl] = useState("");
