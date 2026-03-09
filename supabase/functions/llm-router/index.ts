@@ -13,9 +13,11 @@ interface ChatRequest {
   vaultId?: string;
   deepResearch?: boolean;
   attachedFileIds?: string[];
+  attachedFileNames?: string[];
   sources?: string[];
   history?: { role: string; content: string }[];
   useCase?: string;
+  vaultName?: string;
 }
 
 // ---------- Multi-model Perplexity selection ----------
@@ -120,7 +122,7 @@ serve(async (req) => {
 
     const orgId = profile.organization_id;
     const body: ChatRequest = await req.json();
-    const { conversationId, message, vaultId, deepResearch, attachedFileIds, sources, history, useCase } = body;
+    const { conversationId, message, vaultId, deepResearch, attachedFileIds, attachedFileNames, sources, history, useCase, vaultName: clientVaultName } = body;
 
     // Load org info for personalization
     const { data: orgData } = await adminClient
@@ -234,14 +236,22 @@ serve(async (req) => {
       }
     }
 
+    // Load vault name for context
+    let vaultName = "";
+    if (vaultId) {
+      const { data: vaultData } = await adminClient.from("vaults").select("name").eq("id", vaultId).single();
+      vaultName = vaultData?.name || "";
+    }
+
     // Fallback: direct file text if no Qdrant results
     let vaultContext = "";
     if (!ragContext && (vaultId || attachedFileIds?.length)) {
       steps.push({ name: "Searching vault documents", status: "working" });
-      const fileQuery = adminClient.from("files").select("id, name, extracted_text").eq("organization_id", orgId);
+      const fileQuery = adminClient.from("files").select("id, name, extracted_text, extracted_text_r2_key, status").eq("organization_id", orgId);
       if (vaultId) fileQuery.eq("vault_id", vaultId);
       if (attachedFileIds?.length) fileQuery.in("id", attachedFileIds);
-      const { data: files } = await fileQuery.eq("status", "ready").limit(10);
+      // Don't filter by status - include any file that has extracted text
+      const { data: files } = await fileQuery.not("extracted_text", "is", null).limit(10);
 
       if (files?.length) {
         vaultContext = "\n\n## Relevant Documents\n" +

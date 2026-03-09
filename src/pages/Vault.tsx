@@ -117,7 +117,8 @@ export default function Vault() {
     setUploading(true);
     for (const file of fileList) {
       const fileId = crypto.randomUUID();
-      const r2Key = `${profile.organization_id}/${selectedVaultId}/${fileId}-${file.name}`;
+      const sanitizedName = file.name.replace(/\s+/g, "_").replace(/[()]/g, "");
+      const r2Key = `${profile.organization_id}/${selectedVaultId}/${fileId}-${sanitizedName}`;
       try {
         // Upload to R2 via edge function
         const formData = new FormData();

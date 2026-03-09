@@ -57,6 +57,7 @@ export default function Chat() {
   const [showSources, setShowSources] = useState(false);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [vaultId, setVaultId] = useState<string | undefined>();
+  const [vaultName, setVaultName] = useState<string | undefined>();
   const [deepResearch, setDeepResearch] = useState(false);
   const [activeSources, setActiveSources] = useState<string[]>([]);
   const [promptMode, setPromptMode] = useState<string | undefined>();
@@ -85,7 +86,12 @@ export default function Chat() {
 
       setConversationId(conv.id);
       setConversationTitle(conv.title);
-      if (conv.vault_id) setVaultId(conv.vault_id);
+      if (conv.vault_id) {
+        setVaultId(conv.vault_id);
+        // Load vault name
+        const { data: vaultData } = await supabase.from("vaults").select("name").eq("id", conv.vault_id).single();
+        if (vaultData) setVaultName(vaultData.name);
+      }
 
       const { data: msgs } = await supabase
         .from("messages")
@@ -117,17 +123,19 @@ export default function Chat() {
       initialMessageSentRef.current = true;
       const msg = state.initialMessage;
       const vault = state.selectedVault?.id;
+      const vName = state.selectedVault?.name;
       const deep = state.deepResearch || false;
       const srcs = state.activeSources || [];
       const pMode = state.promptMode;
 
       setVaultId(vault);
+      setVaultName(vName);
       setDeepResearch(deep);
       setActiveSources(srcs);
       setPromptMode(pMode);
 
       navigate("/chat", { replace: true, state: {} });
-      createConversationAndSend(msg, vault, deep, srcs, pMode);
+      createConversationAndSend(msg, vault, deep, srcs, pMode, vName);
     }
   }, [location.state, profile?.organization_id]);
 
@@ -150,7 +158,8 @@ export default function Chat() {
     vault?: string,
     deep?: boolean,
     srcs?: string[],
-    pMode?: string
+    pMode?: string,
+    vName?: string
   ) => {
     if (!profile?.organization_id) return;
 
@@ -177,6 +186,7 @@ export default function Chat() {
       conversationId: data.id,
       organizationId: profile.organization_id!,
       vaultId: vault,
+      vaultName: vName || vaultName,
       deepResearch: deep,
       sources: srcs,
       useCase: pMode,
@@ -197,6 +207,7 @@ export default function Chat() {
         conversationId,
         organizationId: profile.organization_id!,
         vaultId,
+        vaultName,
         deepResearch,
         sources: activeSources,
         useCase: promptMode,

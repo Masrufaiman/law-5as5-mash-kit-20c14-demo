@@ -1,5 +1,11 @@
 import { useState, useRef, useCallback } from "react";
 
+export interface MessageAttachments {
+  vaultName?: string;
+  vaultId?: string;
+  fileNames?: string[];
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -8,6 +14,7 @@ export interface ChatMessage {
   citations?: Citation[];
   model?: string;
   followUps?: string[];
+  attachments?: MessageAttachments;
   createdAt: Date;
 }
 
@@ -27,8 +34,10 @@ interface StreamChatOptions {
   conversationId: string;
   organizationId: string;
   vaultId?: string;
+  vaultName?: string;
   deepResearch?: boolean;
   attachedFileIds?: string[];
+  attachedFileNames?: string[];
   sources?: string[];
   useCase?: string;
   promptMode?: string;
@@ -55,10 +64,16 @@ export function useStreamChat() {
       setIsStreaming(true);
       lastUserMsgRef.current = content;
 
+      const attachments: MessageAttachments = {};
+      if (options.vaultName) attachments.vaultName = options.vaultName;
+      if (options.vaultId) attachments.vaultId = options.vaultId;
+      if (options.attachedFileNames?.length) attachments.fileNames = options.attachedFileNames;
+
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "user",
         content,
+        attachments: Object.keys(attachments).length > 0 ? attachments : undefined,
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, userMsg]);
@@ -82,8 +97,10 @@ export function useStreamChat() {
             conversationId: options.conversationId,
             message: content,
             vaultId: options.vaultId,
+            vaultName: options.vaultName,
             deepResearch: options.deepResearch,
             attachedFileIds: options.attachedFileIds,
+            attachedFileNames: options.attachedFileNames,
             sources: options.sources,
             useCase: options.useCase,
             promptMode: options.promptMode,
