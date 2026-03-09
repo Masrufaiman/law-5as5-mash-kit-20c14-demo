@@ -1,0 +1,175 @@
+import { useState } from "react";
+import { FolderOpen, BookOpen, Search, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import type { Tables } from "@/integrations/supabase/types";
+
+type VaultRow = Tables<"vaults">;
+
+const VAULT_COLORS = [
+  "bg-primary",
+  "bg-accent",
+  "bg-secondary",
+  "bg-muted",
+];
+
+interface VaultGridProps {
+  vaults: VaultRow[];
+  fileCounts: Record<string, number>;
+  onSelectVault: (id: string) => void;
+  onCreateVault: (name: string, description: string) => void;
+}
+
+export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault }: VaultGridProps) {
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<"all" | "yours">("all");
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+
+  const filtered = vaults.filter((v) =>
+    v.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleCreate = () => {
+    if (!newName.trim()) return;
+    onCreateVault(newName.trim(), newDesc.trim());
+    setNewName("");
+    setNewDesc("");
+    setShowCreate(false);
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="px-8 pt-8 pb-2">
+        <h1 className="font-heading text-2xl font-bold text-foreground">Vault</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Organize your legal documents and knowledge bases
+        </p>
+      </div>
+
+      {/* Action cards */}
+      <div className="px-8 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+        <Dialog open={showCreate} onOpenChange={setShowCreate}>
+          <DialogTrigger asChild>
+            <Card className="border border-border hover:border-primary/40 cursor-pointer transition-colors group">
+              <CardContent className="flex items-center gap-4 py-5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                  <FolderOpen className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground group-hover:text-primary transition-colors">Create vault</p>
+                  <p className="text-xs text-muted-foreground">Upload and organize documents</p>
+                </div>
+              </CardContent>
+            </Card>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create Vault</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Supply Agreements" />
+              </div>
+              <div className="space-y-2">
+                <Label>Description (optional)</Label>
+                <Textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="What's this vault for?" rows={3} />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+                <Button onClick={handleCreate} disabled={!newName.trim()}>Create</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Card className="border border-border hover:border-primary/40 cursor-pointer transition-colors group opacity-60">
+          <CardContent className="flex items-center gap-4 py-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
+              <BookOpen className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-medium text-foreground">Create knowledge base</p>
+              <p className="text-xs text-muted-foreground">Add firm-specific guidance</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabs + Search */}
+      <div className="px-8 flex items-center gap-4 border-b border-border pb-0">
+        <button
+          onClick={() => setTab("all")}
+          className={`pb-2.5 text-sm font-medium border-b-2 transition-colors ${
+            tab === "all" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          All vaults
+        </button>
+        <button
+          onClick={() => setTab("yours")}
+          className={`pb-2.5 text-sm font-medium border-b-2 transition-colors ${
+            tab === "yours" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Your vaults
+        </button>
+        <div className="flex-1" />
+        <div className="relative pb-2">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search vaults..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-8 w-52 text-sm"
+          />
+        </div>
+      </div>
+
+      {/* Vault grid */}
+      <div className="flex-1 overflow-auto px-8 py-6">
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-center">
+            <FolderOpen className="h-10 w-10 text-muted-foreground mb-3" />
+            <p className="font-medium text-foreground">No vaults yet</p>
+            <p className="text-sm text-muted-foreground mt-1">Create a vault to get started</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtered.map((vault, i) => (
+              <Card
+                key={vault.id}
+                className="border border-border hover:border-primary/30 cursor-pointer transition-all group overflow-hidden"
+                onClick={() => onSelectVault(vault.id)}
+              >
+                {/* Color strip */}
+                <div className={`h-1.5 ${VAULT_COLORS[i % VAULT_COLORS.length]}`} />
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <FolderOpen className="h-5 w-5 text-muted-foreground" />
+                    <Badge variant="outline" className="text-[10px]">Vault</Badge>
+                  </div>
+                  <p className="font-medium text-foreground text-sm truncate">{vault.name}</p>
+                  {vault.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{vault.description}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {fileCounts[vault.id] ?? 0} files
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
