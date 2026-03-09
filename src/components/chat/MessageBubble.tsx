@@ -26,6 +26,66 @@ interface MessageBubbleProps {
   steps?: AgentStep[];
   isStreamingSteps?: boolean;
   onFollowUp?: (text: string) => void;
+  onEditMessage?: (messageId: string, content: string) => void;
+}
+
+/** User message action bar (edit, copy) */
+function UserMessageActions({ content, onEdit }: { content: string; onEdit?: () => void }) {
+  const { toast } = useToast();
+
+  const copyToClipboard = async () => {
+    await navigator.clipboard.writeText(content);
+    toast({ title: "Copied", description: "Message copied to clipboard" });
+  };
+
+  return (
+    <div className="flex items-center gap-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      {onEdit && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+          onClick={onEdit}
+          title="Edit"
+        >
+          <Pencil className="h-3 w-3" />
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+        onClick={copyToClipboard}
+        title="Copy"
+      >
+        <Copy className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+}
+
+/** Attachment badges (vault, files) shown under user messages */
+function AttachmentBadges({ attachments }: { attachments: ChatMessage["attachments"] }) {
+  if (!attachments) return null;
+  const { vaultName, fileNames } = attachments;
+  if (!vaultName && (!fileNames || fileNames.length === 0)) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5">
+      {vaultName && (
+        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
+          <Database className="h-2.5 w-2.5" />
+          {vaultName}
+        </Badge>
+      )}
+      {fileNames?.map((name, i) => (
+        <Badge key={i} variant="outline" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
+          <Paperclip className="h-2.5 w-2.5" />
+          {name}
+        </Badge>
+      ))}
+    </div>
+  );
 }
 
 // Map Unicode superscript digits to normal digits
