@@ -38,7 +38,6 @@ export default function Vault() {
         .order("created_at");
       setVaults(data || []);
 
-      // Get file counts per vault
       if (data?.length) {
         const counts: Record<string, number> = {};
         for (const v of data) {
@@ -117,21 +116,43 @@ export default function Vault() {
     if (!profile?.organization_id || !selectedVaultId) return;
     setUploading(true);
     for (const file of fileList) {
-      const storagePath = `${profile.organization_id}/${selectedVaultId}/${crypto.randomUUID()}-${file.name}`;
       const fileId = crypto.randomUUID();
+      const r2Key = `${profile.organization_id}/${selectedVaultId}/${fileId}-${file.name}`;
       try {
-        const { error: storageError } = await supabase.storage
-          .from("vault-files")
-          .upload(storagePath, file);
-        if (storageError) throw storageError;
+        // Upload to R2 via edge function
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("orgId", profile.organization_id);
+        formData.append("r2Key", r2Key);
 
+        const { data: { session } } = await supabase.auth.getSession();
+        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+        const response = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/r2-upload`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${session?.access_token}`,
+            },
+            body: formData,
+          }
+        );
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || "Upload failed");
+        }
+
+        const result = await response.json();
+
+        // Create file record in DB
         const { error: dbError } = await supabase.from("files").insert({
           id: fileId,
           name: file.name,
           original_name: file.name,
           mime_type: file.type || "application/octet-stream",
           size_bytes: file.size,
-          storage_path: storagePath,
+          storage_path: result.r2_key || r2Key,
           vault_id: selectedVaultId,
           organization_id: profile.organization_id!,
           uploaded_by: profile.id,
