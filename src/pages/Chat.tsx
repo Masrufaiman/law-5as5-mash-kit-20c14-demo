@@ -135,7 +135,7 @@ export default function Chat() {
       setPromptMode(pMode);
 
       navigate("/chat", { replace: true, state: {} });
-      createConversationAndSend(msg, vault, deep, srcs, pMode);
+      createConversationAndSend(msg, vault, deep, srcs, pMode, vName);
     }
   }, [location.state, profile?.organization_id]);
 
