@@ -564,9 +564,8 @@ export default function Chat() {
                   const isLastUser = msg.role === "user" && i === lastUserIdx;
                   const nextMsg = messages[i + 1] || undefined;
 
-                  // Only pass steps to the LAST message in the list (either last assistant, or last user if no assistant after it)
-                  const isLastMessage = i === messages.length - 1;
-                  const showSteps = isLastMessage || (isLastUser && !messages.some((m, j) => j > i && m.role === "assistant"));
+                  // Only pass steps to assistant messages (not user messages — the streaming indicator handles that)
+                  const showSteps = msg.role === "assistant" && isLastMessage;
 
                   return (
                     <div key={msg.id}>
