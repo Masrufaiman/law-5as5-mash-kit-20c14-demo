@@ -6,6 +6,7 @@ export interface ChatMessage {
   content: string;
   citations?: Citation[];
   model?: string;
+  followUps?: string[];
   createdAt: Date;
 }
 
@@ -18,6 +19,7 @@ export interface Citation {
   index: number;
   source: string;
   excerpt: string;
+  url?: string;
 }
 
 interface StreamChatOptions {
@@ -156,7 +158,7 @@ export function useStreamChat() {
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantId
-                      ? { ...m, citations: parsed.citations }
+                      ? { ...m, citations: parsed.citations, followUps: parsed.followUps }
                       : m
                   )
                 );
@@ -183,7 +185,6 @@ export function useStreamChat() {
 
   const regenerateLastMessage = useCallback(
     (options: StreamChatOptions) => {
-      // Remove last assistant message, re-send last user message
       setMessages((prev) => {
         const withoutLast = prev[prev.length - 1]?.role === "assistant"
           ? prev.slice(0, -1)
@@ -194,9 +195,7 @@ export function useStreamChat() {
       const lastUserContent = lastUserMsgRef.current;
       if (!lastUserContent) return;
 
-      // We need to remove the user msg too since sendMessage adds it
       setMessages((prev) => {
-        // Remove the last user message so sendMessage can re-add it
         const lastIdx = prev.length - 1;
         if (prev[lastIdx]?.role === "user") {
           return prev.slice(0, -1);

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   MessageSquare,
   FolderOpen,
@@ -20,6 +21,8 @@ import {
   ChevronDown,
   ChevronRight,
   Search,
+  Share,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +33,17 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 
 interface VaultItem {
   id: string;
@@ -46,6 +60,7 @@ export function NavigationSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
+  const { toast } = useToast();
   const isAdmin = profile?.role === "admin" || profile?.role === "superadmin";
 
   const [vaultsOpen, setVaultsOpen] = useState(true);
@@ -57,6 +72,7 @@ export function NavigationSidebar() {
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [searchResults, setSearchResults] = useState<RecentChat[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<RecentChat | null>(null);
 
   useEffect(() => {
     if (!profile?.organization_id) return;
@@ -75,11 +91,10 @@ export function NavigationSidebar() {
       .select("id, title, created_at")
       .eq("organization_id", profile.organization_id)
       .order("updated_at", { ascending: false })
-      .limit(10)
+      .limit(20)
       .then(({ data }) => { setRecentChats(data || []); setIsLoadingChats(false); });
   }, [profile?.organization_id]);
 
-  // Keyboard shortcut for search
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
@@ -91,7 +106,6 @@ export function NavigationSidebar() {
     return () => document.removeEventListener("keydown", down);
   }, []);
 
-  // Live search conversations
   const handleSearchChange = useCallback(async (value: string) => {
     setSearchQuery(value);
     if (!value.trim() || !profile?.organization_id) {
@@ -107,6 +121,40 @@ export function NavigationSidebar() {
       .limit(10);
     setSearchResults(data || []);
   }, [profile?.organization_id]);
+
+  const handleShareChat = async (chatId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const token = crypto.randomUUID();
+    const { error } = await supabase
+      .from("conversations")
+      .update({ share_token: token, is_public: true })
+      .eq("id", chatId);
+    if (error) {
+      toast({ title: "Error", description: "Failed to share", variant: "destructive" });
+      return;
+    }
+    const shareUrl = `${window.location.origin}/shared/${token}`;
+    await navigator.clipboard.writeText(shareUrl);
+    toast({ title: "Link copied!", description: "Public share link copied to clipboard" });
+  };
+
+  const handleDeleteChat = async () => {
+    if (!deleteTarget) return;
+    const { error } = await supabase
+      .from("conversations")
+      .delete()
+      .eq("id", deleteTarget.id);
+    if (error) {
+      toast({ title: "Error", description: "Failed to delete conversation", variant: "destructive" });
+    } else {
+      setRecentChats((prev) => prev.filter((c) => c.id !== deleteTarget.id));
+      toast({ title: "Deleted", description: "Conversation deleted" });
+      if (location.search.includes(deleteTarget.id)) {
+        navigate("/chat", { replace: true });
+      }
+    }
+    setDeleteTarget(null);
+  };
 
   const orgName = profile?.full_name?.split(" ")[0] || "LawKit";
 
@@ -186,37 +234,59 @@ export function NavigationSidebar() {
               </button>
             </button>
             {recentsOpen && (
-              <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
-                {isLoadingChats ? (
-                  <>
-                    <Skeleton className="h-3 w-20 mx-2 my-1 bg-sidebar-accent/30" />
-                    <Skeleton className="h-3 w-24 mx-2 my-1 bg-sidebar-accent/30" />
-                    <Skeleton className="h-3 w-16 mx-2 my-1 bg-sidebar-accent/30" />
-                  </>
-                ) : recentChats.length > 0 ? (
-                  recentChats.map((chat) => (
-                    <button
-                      key={chat.id}
-                      onClick={() => navigate(`/chat?id=${chat.id}`)}
-                      className={cn(
-                        "flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors truncate",
-                        location.search.includes(chat.id)
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                      )}
-                    >
-                      <MessageSquare className="h-2.5 w-2.5 shrink-0 opacity-50" />
-                      <span className="truncate">{chat.title}</span>
-                    </button>
-                  ))
-                ) : (
-                  <p className="px-2 py-1 text-xs text-sidebar-foreground/40">No conversations yet</p>
-                )}
-              </div>
+              <ScrollArea className="max-h-52">
+                <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
+                  {isLoadingChats ? (
+                    <>
+                      <Skeleton className="h-3 w-20 mx-2 my-1 bg-sidebar-accent/30" />
+                      <Skeleton className="h-3 w-24 mx-2 my-1 bg-sidebar-accent/30" />
+                      <Skeleton className="h-3 w-16 mx-2 my-1 bg-sidebar-accent/30" />
+                    </>
+                  ) : recentChats.length > 0 ? (
+                    recentChats.map((chat) => (
+                      <div
+                        key={chat.id}
+                        className={cn(
+                          "group/chat flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors",
+                          location.search.includes(chat.id)
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                        )}
+                      >
+                        <button
+                          onClick={() => navigate(`/chat?id=${chat.id}`)}
+                          className="flex items-center gap-1.5 min-w-0 flex-1"
+                        >
+                          <MessageSquare className="h-2.5 w-2.5 shrink-0 opacity-50" />
+                          <span className="truncate">{chat.title}</span>
+                        </button>
+                        <div className="hidden group-hover/chat:flex items-center gap-0.5 shrink-0">
+                          <button
+                            onClick={(e) => handleShareChat(chat.id, e)}
+                            className="p-0.5 rounded hover:bg-sidebar-accent text-sidebar-foreground/40 hover:text-sidebar-foreground transition-colors"
+                            title="Share"
+                          >
+                            <Share className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(chat); }}
+                            className="p-0.5 rounded hover:bg-destructive/20 text-sidebar-foreground/40 hover:text-destructive transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="px-2 py-1 text-xs text-sidebar-foreground/40">No conversations yet</p>
+                  )}
+                </div>
+              </ScrollArea>
             )}
           </div>
 
-          {/* Vault section with collapsible sub-items */}
+          {/* Vault section */}
           <div>
             <button
               onClick={() => {
@@ -310,6 +380,24 @@ export function NavigationSidebar() {
         </div>
       </div>
 
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{deleteTarget?.title}". This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteChat} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Global search command palette */}
       <CommandDialog open={searchOpen} onOpenChange={(open) => { setSearchOpen(open); if (!open) { setSearchQuery(""); setSearchResults([]); } }}>
         <CommandInput
@@ -320,7 +408,6 @@ export function NavigationSidebar() {
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
 
-          {/* Live search results */}
           {searchResults.length > 0 && (
             <CommandGroup heading="Search Results">
               {searchResults.map((c) => (

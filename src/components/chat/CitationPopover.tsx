@@ -1,34 +1,69 @@
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { FileText } from "lucide-react";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { FileText, ExternalLink, Globe } from "lucide-react";
 import type { Citation } from "@/hooks/useStreamChat";
 
 interface CitationPopoverProps {
   citation: Citation;
 }
 
+function getDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace("www.", "");
+  } catch {
+    return url;
+  }
+}
+
 export function CitationPopover({ citation }: CitationPopoverProps) {
+  const domain = citation.url ? getDomain(citation.url) : null;
+
   return (
-    <Popover>
-      <PopoverTrigger asChild>
+    <HoverCard openDelay={200} closeDelay={100}>
+      <HoverCardTrigger asChild>
         <button className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20 transition-colors">
           {citation.index}
         </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 p-3" align="start">
+      </HoverCardTrigger>
+      <HoverCardContent className="w-72 p-3" align="start" side="top">
         <div className="flex items-start gap-2">
-          <FileText className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-          <div className="min-w-0">
+          {citation.url ? (
+            <img
+              src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
+              alt=""
+              className="h-4 w-4 rounded shrink-0 mt-0.5"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+          ) : (
+            <FileText className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+          )}
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-foreground truncate">
               {citation.source}
             </p>
-            {citation.excerpt && (
-              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-4 leading-relaxed">
+            {domain && (
+              <p className="text-[10px] text-muted-foreground truncate">{domain}</p>
+            )}
+            {citation.excerpt && !citation.url && (
+              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-3 leading-relaxed">
                 {citation.excerpt}
               </p>
             )}
+            {citation.url && (
+              <a
+                href={citation.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline mt-1"
+              >
+                <ExternalLink className="h-2.5 w-2.5" />
+                Open source
+              </a>
+            )}
           </div>
         </div>
-      </PopoverContent>
-    </Popover>
+      </HoverCardContent>
+    </HoverCard>
   );
 }

@@ -107,7 +107,7 @@ serve(async (req) => {
 
     const { data: profile } = await adminClient
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, full_name, email")
       .eq("id", userId)
       .single();
 
@@ -121,6 +121,13 @@ serve(async (req) => {
     const orgId = profile.organization_id;
     const body: ChatRequest = await req.json();
     const { conversationId, message, vaultId, deepResearch, attachedFileIds, sources, history, useCase } = body;
+
+    // Load org info for personalization
+    const { data: orgData } = await adminClient
+      .from("organizations")
+      .select("name")
+      .eq("id", orgId)
+      .single();
 
     const steps: { name: string; status: "done" | "working" }[] = [];
 
@@ -158,15 +165,11 @@ serve(async (req) => {
       steps.push({ name: "Searching documents (vector)", status: "working" });
 
       try {
-        // Embed user query
         const queryEmbedding = await embedQuery(message, openaiConf.api_key, embeddingModel);
-
         const collectionName = `${qdrantConf.collection_prefix || "org_"}${orgId}`;
 
-        // Build filter
         const mustFilters: any[] = [{ key: "org_id", match: { value: orgId } }];
         if (vaultId) {
-          // Get file IDs in this vault
           const { data: vaultFiles } = await adminClient
             .from("files")
             .select("id")
@@ -352,7 +355,7 @@ serve(async (req) => {
       }
     }
 
-    // Build system prompt
+    // Build system prompt with personalized context
     const promptMode = (body as any).promptMode;
     let customPrompt = "";
     if (promptMode && agentConf.prompts?.[promptMode]) {
@@ -360,6 +363,9 @@ serve(async (req) => {
     } else {
       customPrompt = agentConf.prompts?.chat || "";
     }
+
+    const personalizationContext = `\n\n## User & Organization Context\n- Organization: ${orgData?.name || "Unknown"}\n- User: ${profile.full_name || profile.email || "Unknown"}\n- Email: ${profile.email || "Unknown"}\n`;
+
     const basePrompt = customPrompt || `You are LawKit AI, an expert legal research and drafting assistant. You provide accurate, well-reasoned legal analysis with proper citations.
 
 ## Guidelines
@@ -375,9 +381,11 @@ serve(async (req) => {
 - When creating tables, use proper markdown table syntax
 - Always structure your analysis clearly with sections
 - NEVER use placeholder text like [Firm Name], [Contact Person], [Email Address], [Phone Number], [Your Name], [Date]. Instead, use the actual data from the user's organization and profile when available, or write realistic generic content.
-- Do not include "---" horizontal rules or "References:" sections at the end of drafted documents`;
+- Do not include "---" horizontal rules or "References:" sections at the end of drafted documents
+- At the end of your response, suggest 3 follow-up questions the user might want to ask, each on its own line starting with ">>FOLLOWUP: "`;
 
     const systemPrompt = `${basePrompt}
+${personalizationContext}
 ${knowledgeContext}
 ${ragContext || vaultContext}
 ${perplexityContext}`;
@@ -508,13 +516,29 @@ ${perplexityContext}`;
             }
           }
 
-          // Merge citations
-          const vaultCitations = extractCitations(fullContent, ragContext || vaultContext);
+          // Extract follow-up questions from content
+          const followUps: string[] = [];
+          const followUpLines = fullContent.split("\n").filter(line => line.startsWith(">>FOLLOWUP: "));
+          followUpLines.forEach(line => {
+            const q = line.replace(">>FOLLOWUP: ", "").trim();
+            if (q) followUps.push(q);
+          });
+
+          // Strip follow-up lines from content for storage
+          const cleanedContent = fullContent.split("\n").filter(line => !line.startsWith(">>FOLLOWUP: ")).join("\n").trim();
+
+          // Merge citations — also match superscript numbers
+          const vaultCitations = extractCitations(cleanedContent, ragContext || vaultContext);
           const allCitations = [...vaultCitations, ...ragCitations, ...perplexityCitations];
+
+          // Deduplicate citations by index
+          const uniqueCitations = Array.from(
+            new Map(allCitations.map(c => [c.index, c])).values()
+          );
 
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ type: "done", citations: allCitations, model: modelId })}\n\n`
+              `data: ${JSON.stringify({ type: "done", citations: uniqueCitations, model: modelId, followUps })}\n\n`
             )
           );
 
@@ -524,9 +548,9 @@ ${perplexityContext}`;
               conversation_id: conversationId,
               organization_id: orgId,
               role: "assistant",
-              content: fullContent,
+              content: cleanedContent,
               model_used: modelId,
-              citations: allCitations.length > 0 ? allCitations : null,
+              citations: uniqueCitations.length > 0 ? uniqueCitations : null,
             });
 
             const { count } = await adminClient
@@ -535,7 +559,7 @@ ${perplexityContext}`;
               .eq("conversation_id", conversationId);
 
             if (count && count <= 2) {
-              const title = fullContent.substring(0, 60).replace(/[#*\n]/g, '').trim() + (fullContent.length > 60 ? "..." : "");
+              const title = cleanedContent.substring(0, 60).replace(/[#*\n]/g, '').trim() + (cleanedContent.length > 60 ? "..." : "");
               await adminClient
                 .from("conversations")
                 .update({ title })
@@ -572,16 +596,38 @@ ${perplexityContext}`;
   }
 });
 
+// Superscript digit mapping
+const SUPERSCRIPT_DIGITS: Record<string, string> = {
+  "\u2070": "0", "\u00b9": "1", "\u00b2": "2", "\u00b3": "3", "\u2074": "4",
+  "\u2075": "5", "\u2076": "6", "\u2077": "7", "\u2078": "8", "\u2079": "9",
+};
+
 function extractCitations(content: string, vaultContext: string): { index: number; source: string; excerpt: string }[] {
   const citations: { index: number; source: string; excerpt: string }[] = [];
-  const matches = content.matchAll(/\[(\d+)\]/g);
   const seen = new Set<number>();
 
-  for (const match of matches) {
+  // Match [N] format
+  const bracketMatches = content.matchAll(/\[(\d+)\]/g);
+  for (const match of bracketMatches) {
     const idx = parseInt(match[1]);
     if (seen.has(idx)) continue;
     seen.add(idx);
+    const docMatch = vaultContext.match(new RegExp(`### \\[${idx}\\] (.+?)\\n([\\s\\S]*?)(?=### \\[|$)`));
+    citations.push({
+      index: idx,
+      source: docMatch?.[1] || `Source ${idx}`,
+      excerpt: docMatch?.[2]?.substring(0, 200)?.trim() || "",
+    });
+  }
 
+  // Match superscript numbers
+  const superscriptPattern = /[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+/g;
+  const superMatches = content.matchAll(superscriptPattern);
+  for (const match of superMatches) {
+    const digits = match[0].split("").map(c => SUPERSCRIPT_DIGITS[c] || c).join("");
+    const idx = parseInt(digits);
+    if (isNaN(idx) || seen.has(idx)) continue;
+    seen.add(idx);
     const docMatch = vaultContext.match(new RegExp(`### \\[${idx}\\] (.+?)\\n([\\s\\S]*?)(?=### \\[|$)`));
     citations.push({
       index: idx,

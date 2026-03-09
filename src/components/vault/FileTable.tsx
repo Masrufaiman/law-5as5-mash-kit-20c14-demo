@@ -1,6 +1,9 @@
-import { FileText, FileSpreadsheet, File as FileIcon } from "lucide-react";
+import { FileText, FileSpreadsheet, File as FileIcon, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 import { format } from "date-fns";
 
@@ -40,6 +43,23 @@ interface FileTableProps {
 }
 
 export function FileTable({ files }: FileTableProps) {
+  const { toast } = useToast();
+
+  const handleRetry = async (fileId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    toast({ title: "Retrying...", description: "Re-processing file" });
+    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    const { data: { session } } = await supabase.auth.getSession();
+    await fetch(`https://${projectId}.supabase.co/functions/v1/document-processor`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify({ fileId }),
+    });
+  };
+
   if (files.length === 0) return null;
 
   return (
@@ -66,9 +86,22 @@ export function FileTable({ files }: FileTableProps) {
               <span className="text-xs text-muted-foreground font-mono">{getTypeLabel(file.mime_type)}</span>
             </TableCell>
             <TableCell>
-              <Badge variant="secondary" className={`text-[10px] ${statusColors[file.status] || ""}`}>
-                {file.status}
-              </Badge>
+              <div className="flex items-center gap-1.5">
+                <Badge variant="secondary" className={`text-[10px] ${statusColors[file.status] || ""}`}>
+                  {file.status}
+                </Badge>
+                {(file.status === "processing" || file.status === "error") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 w-5 p-0"
+                    onClick={(e) => handleRetry(file.id, e)}
+                    title="Retry processing"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
             </TableCell>
             <TableCell>
               <span className="text-xs text-muted-foreground">
