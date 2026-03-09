@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 interface Choice {
   number: number;
@@ -18,11 +19,78 @@ interface ChoiceCardsProps {
 }
 
 /**
+ * Detect "insufficient information" / "need more details" patterns.
+ * Returns suggested topic choices if detected.
+ */
+export function parseNeedMoreInfo(content: string): { preamble: string; choices: Choice[] } | null {
+  const needMorePatterns = [
+    /don't have sufficient information/i,
+    /insufficient information/i,
+    /need more (details|context|information|specifics)/i,
+    /please (specify|clarify|provide more)/i,
+    /could you (specify|clarify|provide|tell me)/i,
+    /which (area|topic|type|kind|category)/i,
+  ];
+
+  const hasNeedMore = needMorePatterns.some((p) => p.test(content));
+  if (!hasNeedMore) return null;
+
+  // Try to extract any suggested topics from the content
+  const lines = content.split("\n");
+  const choices: Choice[] = [];
+  let preamble = content;
+
+  // Look for inline suggestions like "area of law or topic"
+  const defaultChoices = [
+    { number: 1, title: "Corporate Law", description: "Business formation, M&A, governance" },
+    { number: 2, title: "Contract Law", description: "Agreements, disputes, enforcement" },
+    { number: 3, title: "Intellectual Property", description: "Patents, trademarks, copyrights" },
+    { number: 4, title: "Employment Law", description: "Labor regulations, compliance, disputes" },
+  ];
+
+  // Check if the AI already provided numbered suggestions
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const match = line.match(/^(\d+)\.\s+(?:\*\*(.+?)\*\*[\s:—–-]*(.*)|(.*))$/);
+    if (match) {
+      const num = parseInt(match[1]);
+      if (match[2]) {
+        choices.push({ number: num, title: match[2].trim(), description: (match[3] || "").trim() });
+      } else if (match[4]) {
+        const plain = match[4].trim();
+        const colonIdx = plain.search(/[:\-—–]/);
+        if (colonIdx > 0) {
+          choices.push({ number: num, title: plain.slice(0, colonIdx).trim(), description: plain.slice(colonIdx + 1).trim() });
+        } else {
+          choices.push({ number: num, title: plain, description: "" });
+        }
+      }
+    }
+  }
+
+  if (choices.length >= 2) {
+    // Use the AI's own suggestions
+    const firstChoiceIdx = lines.findIndex((l) => /^\d+\.\s+/.test(l.trim()));
+    if (firstChoiceIdx > 0) {
+      preamble = lines.slice(0, firstChoiceIdx).join("\n").trim();
+    }
+    return { preamble, choices };
+  }
+
+  // Fall back to default topic choices
+  return { preamble: content.trim(), choices: defaultChoices };
+}
+
+/**
  * Parse numbered choice patterns from markdown text.
  * Supports: "1. **Title** — description" or "1. Title: description"
  * Returns null if the content doesn't look like a choice list.
  */
 export function parseChoices(content: string): { preamble: string; choices: Choice[] } | null {
+  // First check for "need more info" pattern
+  const needMore = parseNeedMoreInfo(content);
+  if (needMore) return needMore;
+
   const lines = content.split("\n");
   const choices: Choice[] = [];
   let preamble = "";
@@ -60,6 +128,11 @@ export function parseChoices(content: string): { preamble: string; choices: Choi
   // Need at least 2 choices to be considered a choice list
   if (choices.length < 2) return null;
 
+  // Ensure these look like actionable choices, not document sections
+  // If titles are very long (>80 chars) or too many items (>6), likely not a choice list
+  const avgTitleLen = choices.reduce((acc, c) => acc + c.title.length, 0) / choices.length;
+  if (choices.length > 6 || avgTitleLen > 80) return null;
+
   // Everything before the first choice is preamble
   if (choiceStartIdx > 0) {
     preamble = lines.slice(0, choiceStartIdx).join("\n").trim();
@@ -74,7 +147,9 @@ export function ChoiceCards({ choices, preamble, onSelect, disabled }: ChoiceCar
   return (
     <div className="space-y-3">
       {preamble && (
-        <p className="text-sm text-foreground/90 leading-relaxed">{preamble}</p>
+        <div className="text-sm text-foreground/90 leading-relaxed prose prose-sm max-w-none">
+          <ReactMarkdown>{preamble}</ReactMarkdown>
+        </div>
       )}
 
       <div className="grid gap-2">

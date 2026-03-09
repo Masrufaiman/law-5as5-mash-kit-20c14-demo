@@ -60,7 +60,7 @@ export function ResponseActions({ content, messageId, onRegenerate }: ResponseAc
   };
 
   return (
-    <div className="flex items-center gap-0.5 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+    <div className="flex items-center gap-0.5 mt-2 opacity-50 group-hover:opacity-100 transition-opacity">
       <Button
         variant="ghost"
         size="sm"

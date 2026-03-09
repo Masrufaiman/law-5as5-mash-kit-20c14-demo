@@ -184,9 +184,9 @@ export function NavigationSidebar() {
               <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
                 {isLoadingVaults ? (
                   <>
-                    <Skeleton className="h-5 w-24 mx-2 my-1" />
-                    <Skeleton className="h-5 w-20 mx-2 my-1" />
-                    <Skeleton className="h-5 w-28 mx-2 my-1" />
+                    <Skeleton className="h-3 w-20 mx-2 my-1.5 bg-sidebar-accent/40" />
+                    <Skeleton className="h-3 w-16 mx-2 my-1.5 bg-sidebar-accent/40" />
+                    <Skeleton className="h-3 w-24 mx-2 my-1.5 bg-sidebar-accent/40" />
                   </>
                 ) : vaults.length > 0 ? (
                   vaults.map((vault) => (
@@ -214,22 +214,12 @@ export function NavigationSidebar() {
             <div className="space-y-0.5">
               {isLoadingChats ? (
                 <>
-                  <div className="flex items-center gap-2 px-2.5 py-1.5">
-                    <Skeleton className="h-3 w-3 rounded shrink-0" />
-                    <Skeleton className="h-3 w-28" />
-                  </div>
-                  <div className="flex items-center gap-2 px-2.5 py-1.5">
-                    <Skeleton className="h-3 w-3 rounded shrink-0" />
-                    <Skeleton className="h-3 w-24" />
-                  </div>
-                  <div className="flex items-center gap-2 px-2.5 py-1.5">
-                    <Skeleton className="h-3 w-3 rounded shrink-0" />
-                    <Skeleton className="h-3 w-32" />
-                  </div>
-                  <div className="flex items-center gap-2 px-2.5 py-1.5">
-                    <Skeleton className="h-3 w-3 rounded shrink-0" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
+                  {[112, 96, 128, 80].map((w, i) => (
+                    <div key={i} className="flex items-center gap-2 px-2.5 py-1.5">
+                      <Skeleton className="h-3 w-3 rounded shrink-0 bg-sidebar-accent/40" />
+                      <Skeleton className="h-3 bg-sidebar-accent/40" style={{ width: `${w}px` }} />
+                    </div>
+                  ))}
                 </>
               ) : recentChats.length > 0 ? (
                 recentChats.map((chat) => (
