@@ -84,6 +84,7 @@ export default function Vault() {
 
     for (const file of fileList) {
       const storagePath = `${profile.organization_id}/${selectedVaultId}/${crypto.randomUUID()}-${file.name}`;
+      const fileId = crypto.randomUUID();
       try {
         // Upload to storage
         const { error: storageError } = await supabase.storage
@@ -93,6 +94,7 @@ export default function Vault() {
 
         // Create file record
         const { error: dbError } = await supabase.from("files").insert({
+          id: fileId,
           name: file.name,
           original_name: file.name,
           mime_type: file.type || "application/octet-stream",
@@ -104,6 +106,11 @@ export default function Vault() {
           status: "processing",
         });
         if (dbError) throw dbError;
+
+        // Trigger background processing
+        supabase.functions.invoke("document-processor", {
+          body: { fileId },
+        }).catch((err) => console.warn("Processing trigger failed:", err));
 
         toast({ title: "Uploaded", description: `${file.name} uploaded successfully.` });
       } catch (err: any) {
