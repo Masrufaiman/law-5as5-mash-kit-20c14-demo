@@ -38,14 +38,16 @@ export default function Onboarding() {
 
     try {
       const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const orgId = crypto.randomUUID();
 
-      // Create org
-      const { data: org, error: orgError } = await supabase
+      // Create org — no .select() to avoid RLS SELECT policy blocking RETURNING
+      const { error: orgError } = await supabase
         .from("organizations")
-        .insert({ name: orgName, slug })
-        .select()
-        .single();
-      if (orgError) throw orgError;
+        .insert({ id: orgId, name: orgName, slug });
+      if (orgError) {
+        if (orgError.code === "23505") throw new Error("Organization name already exists, try another name.");
+        throw orgError;
+      }
 
       // Check if profile exists
       const { data: existingProfile } = await supabase
@@ -61,7 +63,7 @@ export default function Onboarding() {
         const { error: updateError } = await supabase
           .from("profiles")
           .update({
-            organization_id: org.id,
+            organization_id: orgId,
             role,
             full_name: user.user_metadata?.full_name || user.email?.split("@")[0],
           })
@@ -73,7 +75,7 @@ export default function Onboarding() {
           .insert({
             id: user.id,
             email: user.email!,
-            organization_id: org.id,
+            organization_id: orgId,
             role,
             full_name: user.user_metadata?.full_name || user.email?.split("@")[0],
           });
@@ -84,7 +86,7 @@ export default function Onboarding() {
       await supabase.from("vaults").insert({
         name: "General",
         description: "Default document vault",
-        organization_id: org.id,
+        organization_id: orgId,
         created_by: user.id,
       });
 
