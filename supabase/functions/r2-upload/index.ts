@@ -146,6 +146,36 @@ Deno.serve(async (req) => {
   }
 });
 
+// URI-encode a string per AWS SigV4 rules (encode everything except unreserved chars)
+function uriEncode(str: string, encodeSlash = true): string {
+  let encoded = "";
+  for (const ch of str) {
+    if (
+      (ch >= "A" && ch <= "Z") ||
+      (ch >= "a" && ch <= "z") ||
+      (ch >= "0" && ch <= "9") ||
+      ch === "_" || ch === "-" || ch === "~" || ch === "."
+    ) {
+      encoded += ch;
+    } else if (ch === "/" && !encodeSlash) {
+      encoded += ch;
+    } else {
+      const bytes = new TextEncoder().encode(ch);
+      for (const b of bytes) {
+        encoded += "%" + b.toString(16).toUpperCase().padStart(2, "0");
+      }
+    }
+  }
+  return encoded;
+}
+
+// Build sorted canonical query string from URL search params
+function getCanonicalQueryString(parsedUrl: URL): string {
+  const params = Array.from(parsedUrl.searchParams.entries());
+  params.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0);
+  return params.map(([k, v]) => `${uriEncode(k)}=${uriEncode(v)}`).join("&");
+}
+
 // AWS Signature V4 for R2
 async function signedR2Request(
   method: string,
@@ -154,6 +184,9 @@ async function signedR2Request(
   body: Uint8Array,
   contentType?: string
 ): Promise<Response> {
+  const accessKeyId = (config.access_key_id || "").trim();
+  const secretAccessKey = (config.secret_access_key || "").trim();
+
   const parsedUrl = new URL(url);
   const region = config.region === "auto" ? "auto" : config.region || "auto";
   const service = "s3";
@@ -175,10 +208,14 @@ async function signedR2Request(
   const signedHeaders = signedHeaderKeys.join(";");
   const canonicalHeaders = signedHeaderKeys.map((k) => `${k}:${headers[k]}\n`).join("");
 
+  // Properly encode the URI path (don't encode slashes)
+  const canonicalUri = uriEncode(decodeURIComponent(parsedUrl.pathname), false) || "/";
+  const canonicalQueryString = getCanonicalQueryString(parsedUrl);
+
   const canonicalRequest = [
     method,
-    parsedUrl.pathname,
-    parsedUrl.search.replace("?", ""),
+    canonicalUri,
+    canonicalQueryString,
     canonicalHeaders,
     signedHeaders,
     payloadHash,
@@ -192,10 +229,10 @@ async function signedR2Request(
     await sha256Hex(new TextEncoder().encode(canonicalRequest)),
   ].join("\n");
 
-  const signingKey = await getSignatureKey(config.secret_access_key, dateStamp, region, service);
+  const signingKey = await getSignatureKey(secretAccessKey, dateStamp, region, service);
   const signature = await hmacHex(signingKey, stringToSign);
 
-  const authorization = `AWS4-HMAC-SHA256 Credential=${config.access_key_id}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
   const fetchHeaders: Record<string, string> = {
     ...headers,
