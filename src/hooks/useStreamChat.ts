@@ -28,6 +28,7 @@ interface StreamChatOptions {
   attachedFileIds?: string[];
   sources?: string[];
   useCase?: string; // "red_flag" | "review" | "chat" — hints Perplexity model selection
+  promptMode?: string; // selects system prompt: "red_flags" | "drafting" | "chat"
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`;
@@ -80,6 +81,7 @@ export function useStreamChat() {
             attachedFileIds: options.attachedFileIds,
             sources: options.sources,
             useCase: options.useCase,
+            promptMode: options.promptMode,
             history,
           }),
           signal: controller.signal,
