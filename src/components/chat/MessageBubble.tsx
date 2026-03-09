@@ -86,7 +86,7 @@ function AgentAvatar({ isUser }: { isUser: boolean }) {
       className={cn(
         "flex h-6 w-6 items-center justify-center rounded-full shrink-0",
         isUser
-          ? "bg-primary text-primary-foreground text-[10px] font-bold"
+          ? "bg-primary/20 text-primary text-[10px] font-bold"
           : "bg-muted text-muted-foreground"
       )}
     >

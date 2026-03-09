@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -55,6 +55,8 @@ export function NavigationSidebar() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [isLoadingVaults, setIsLoadingVaults] = useState(true);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
+  const [searchResults, setSearchResults] = useState<RecentChat[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!profile?.organization_id) return;
@@ -88,6 +90,23 @@ export function NavigationSidebar() {
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
   }, []);
+
+  // Live search conversations
+  const handleSearchChange = useCallback(async (value: string) => {
+    setSearchQuery(value);
+    if (!value.trim() || !profile?.organization_id) {
+      setSearchResults([]);
+      return;
+    }
+    const { data } = await supabase
+      .from("conversations")
+      .select("id, title, created_at")
+      .eq("organization_id", profile.organization_id)
+      .ilike("title", `%${value}%`)
+      .order("updated_at", { ascending: false })
+      .limit(10);
+    setSearchResults(data || []);
+  }, [profile?.organization_id]);
 
   const orgName = profile?.full_name?.split(" ")[0] || "LawKit";
 
@@ -292,10 +311,33 @@ export function NavigationSidebar() {
       </div>
 
       {/* Global search command palette */}
-      <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <CommandInput placeholder="Search vaults, files, conversations..." />
+      <CommandDialog open={searchOpen} onOpenChange={(open) => { setSearchOpen(open); if (!open) { setSearchQuery(""); setSearchResults([]); } }}>
+        <CommandInput
+          placeholder="Search vaults, files, conversations..."
+          value={searchQuery}
+          onValueChange={handleSearchChange}
+        />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
+
+          {/* Live search results */}
+          {searchResults.length > 0 && (
+            <CommandGroup heading="Search Results">
+              {searchResults.map((c) => (
+                <CommandItem
+                  key={c.id}
+                  onSelect={() => {
+                    setSearchOpen(false);
+                    navigate(`/chat?id=${c.id}`);
+                  }}
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  {c.title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+
           <CommandGroup heading="Quick Actions">
             <CommandItem onSelect={() => { setSearchOpen(false); navigate("/"); }}>
               <MessageSquare className="mr-2 h-4 w-4" />
@@ -306,7 +348,7 @@ export function NavigationSidebar() {
               Open vault
             </CommandItem>
           </CommandGroup>
-          {recentChats.length > 0 && (
+          {!searchQuery && recentChats.length > 0 && (
             <CommandGroup heading="Recent Chats">
               {recentChats.slice(0, 5).map((c) => (
                 <CommandItem

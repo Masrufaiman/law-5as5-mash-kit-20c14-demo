@@ -373,7 +373,9 @@ serve(async (req) => {
 - If you reference web research results, cite them with their source URLs
 - Format responses with markdown: headers, lists, bold for key terms
 - When creating tables, use proper markdown table syntax
-- Always structure your analysis clearly with sections`;
+- Always structure your analysis clearly with sections
+- NEVER use placeholder text like [Firm Name], [Contact Person], [Email Address], [Phone Number], [Your Name], [Date]. Instead, use the actual data from the user's organization and profile when available, or write realistic generic content.
+- Do not include "---" horizontal rules or "References:" sections at the end of drafted documents`;
 
     const systemPrompt = `${basePrompt}
 ${knowledgeContext}
