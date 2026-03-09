@@ -8,7 +8,7 @@ import { MultiStepQuestionnaire, parseMultiStepQuestions } from "./MultiStepQues
 import { StepTracker } from "./StepTracker";
 import { Card } from "@/components/ui/card";
 import { FileText, Bot } from "lucide-react";
-import type { ChatMessage, Citation } from "@/hooks/useStreamChat";
+import type { ChatMessage, Citation, AgentStep } from "@/hooks/useStreamChat";
 
 interface MessageBubbleProps {
   message: ChatMessage;
