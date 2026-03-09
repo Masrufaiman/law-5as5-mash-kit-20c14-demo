@@ -1,5 +1,11 @@
 import { useState, useRef, useCallback } from "react";
 
+export interface MessageAttachments {
+  vaultName?: string;
+  vaultId?: string;
+  fileNames?: string[];
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -8,6 +14,7 @@ export interface ChatMessage {
   citations?: Citation[];
   model?: string;
   followUps?: string[];
+  attachments?: MessageAttachments;
   createdAt: Date;
 }
 
