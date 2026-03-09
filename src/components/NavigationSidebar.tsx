@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   MessageSquare,
   FolderOpen,
@@ -51,24 +52,28 @@ export function NavigationSidebar() {
   const [vaults, setVaults] = useState<VaultItem[]>([]);
   const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [isLoadingVaults, setIsLoadingVaults] = useState(true);
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
 
   useEffect(() => {
     if (!profile?.organization_id) return;
+    setIsLoadingVaults(true);
+    setIsLoadingChats(true);
+
     supabase
       .from("vaults")
       .select("id, name")
       .eq("organization_id", profile.organization_id)
       .order("created_at")
-      .then(({ data }) => setVaults(data || []));
+      .then(({ data }) => { setVaults(data || []); setIsLoadingVaults(false); });
 
-    // Load recent conversations
     supabase
       .from("conversations")
       .select("id, title, created_at")
       .eq("organization_id", profile.organization_id)
       .order("updated_at", { ascending: false })
       .limit(10)
-      .then(({ data }) => setRecentChats(data || []));
+      .then(({ data }) => { setRecentChats(data || []); setIsLoadingChats(false); });
   }, [profile?.organization_id]);
 
   // Keyboard shortcut for search
@@ -175,30 +180,59 @@ export function NavigationSidebar() {
                 <ChevronRight className="h-3.5 w-3.5 opacity-50" />
               )}
             </button>
-            {vaultsOpen && vaults.length > 0 && (
+            {vaultsOpen && (
               <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
-                {vaults.map((vault) => (
-                  <button
-                    key={vault.id}
-                    onClick={() => navigate(`/vault?vault=${vault.id}`)}
-                    className="flex w-full items-center rounded-md px-2 py-1 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors truncate"
-                  >
-                    {vault.name}
-                  </button>
-                ))}
+                {isLoadingVaults ? (
+                  <>
+                    <Skeleton className="h-5 w-24 mx-2 my-1" />
+                    <Skeleton className="h-5 w-20 mx-2 my-1" />
+                    <Skeleton className="h-5 w-28 mx-2 my-1" />
+                  </>
+                ) : vaults.length > 0 ? (
+                  vaults.map((vault) => (
+                    <button
+                      key={vault.id}
+                      onClick={() => navigate(`/vault?vault=${vault.id}`)}
+                      className="flex w-full items-center rounded-md px-2 py-1 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors truncate"
+                    >
+                      {vault.name}
+                    </button>
+                  ))
+                ) : (
+                  <p className="px-2 py-1 text-xs text-sidebar-foreground/40">No vaults</p>
+                )}
               </div>
             )}
           </div>
 
           {/* Recent Chats */}
-          {recentChats.length > 0 && (
-            <>
-              <div className="my-2 h-px bg-sidebar-border" />
-              <p className="text-[10px] font-medium text-sidebar-foreground/40 px-2.5 py-1 uppercase tracking-wider">
-                Recent
-              </p>
-              <div className="space-y-0.5">
-                {recentChats.map((chat) => (
+          <>
+            <div className="my-2 h-px bg-sidebar-border" />
+            <p className="text-[10px] font-medium text-sidebar-foreground/40 px-2.5 py-1 uppercase tracking-wider">
+              Recent
+            </p>
+            <div className="space-y-0.5">
+              {isLoadingChats ? (
+                <>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5">
+                    <Skeleton className="h-3 w-3 rounded shrink-0" />
+                    <Skeleton className="h-3 w-28" />
+                  </div>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5">
+                    <Skeleton className="h-3 w-3 rounded shrink-0" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5">
+                    <Skeleton className="h-3 w-3 rounded shrink-0" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5">
+                    <Skeleton className="h-3 w-3 rounded shrink-0" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                </>
+              ) : recentChats.length > 0 ? (
+                recentChats.map((chat) => (
                   <button
                     key={chat.id}
                     onClick={() => navigate(`/chat?id=${chat.id}`)}
@@ -212,10 +246,12 @@ export function NavigationSidebar() {
                     <MessageSquare className="h-3 w-3 shrink-0 opacity-50" />
                     <span className="truncate">{chat.title}</span>
                   </button>
-                ))}
-              </div>
-            </>
-          )}
+                ))
+              ) : (
+                <p className="px-2.5 py-1.5 text-xs text-sidebar-foreground/40">No conversations yet</p>
+              )}
+            </div>
+          </>
 
           {/* Separator */}
           <div className="my-2 h-px bg-sidebar-border" />

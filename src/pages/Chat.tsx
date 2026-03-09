@@ -50,6 +50,7 @@ export default function Chat() {
   const [conversationTitle, setConversationTitle] = useState("New Conversation");
   const [input, setInput] = useState("");
   const [showSources, setShowSources] = useState(false);
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [vaultId, setVaultId] = useState<string | undefined>();
   const [deepResearch, setDeepResearch] = useState(false);
   const [activeSources, setActiveSources] = useState<string[]>([]);
@@ -65,35 +66,40 @@ export default function Chat() {
   }, [searchParams, profile?.organization_id]);
 
   const loadConversation = async (convId: string) => {
-    const { data: conv } = await supabase
-      .from("conversations")
-      .select("id, title, vault_id")
-      .eq("id", convId)
-      .single();
+    setIsLoadingConversation(true);
+    try {
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("id, title, vault_id")
+        .eq("id", convId)
+        .single();
 
-    if (!conv) return;
+      if (!conv) return;
 
-    setConversationId(conv.id);
-    setConversationTitle(conv.title);
-    if (conv.vault_id) setVaultId(conv.vault_id);
+      setConversationId(conv.id);
+      setConversationTitle(conv.title);
+      if (conv.vault_id) setVaultId(conv.vault_id);
 
-    const { data: msgs } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("conversation_id", convId)
-      .order("created_at", { ascending: true });
+      const { data: msgs } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", convId)
+        .order("created_at", { ascending: true });
 
-    if (msgs?.length) {
-      loadHistory(
-        msgs.map((m) => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content,
-          citations: (m.citations as any) || undefined,
-          model: m.model_used || undefined,
-          createdAt: new Date(m.created_at),
-        }))
-      );
+      if (msgs?.length) {
+        loadHistory(
+          msgs.map((m) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            citations: (m.citations as any) || undefined,
+            model: m.model_used || undefined,
+            createdAt: new Date(m.created_at),
+          }))
+        );
+      }
+    } finally {
+      setIsLoadingConversation(false);
     }
   };
 
@@ -283,7 +289,58 @@ export default function Chat() {
           </div>
 
           {/* Messages */}
-          {messages.length === 0 && !isStreaming ? (
+          {/* Skeleton while loading a past conversation */}
+          {isLoadingConversation ? (
+            <div className="flex-1">
+              <div className="mx-auto max-w-3xl px-6 py-6 space-y-8">
+                {/* User message skeleton */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Skeleton className="h-6 w-6 rounded-full" />
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                  <div className="pl-8 space-y-2">
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                </div>
+                {/* Assistant message skeleton */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Skeleton className="h-6 w-6 rounded-full" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                  <div className="pl-8 space-y-2.5">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-5/6" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                </div>
+                {/* Another exchange skeleton */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Skeleton className="h-6 w-6 rounded-full" />
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                  <div className="pl-8 space-y-2">
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Skeleton className="h-6 w-6 rounded-full" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                  <div className="pl-8 space-y-2.5">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-4/5" />
+                    <Skeleton className="h-4 w-3/4" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : messages.length === 0 && !isStreaming ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center px-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
                 <MessageSquare className="h-6 w-6 text-muted-foreground" />
