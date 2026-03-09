@@ -294,7 +294,14 @@ serve(async (req) => {
     }
 
     // Build system prompt
-    const customPrompt = agentConf.prompts?.chat || "";
+    // Select prompt based on promptMode
+    const promptMode = (body as any).promptMode;
+    let customPrompt = "";
+    if (promptMode && agentConf.prompts?.[promptMode]) {
+      customPrompt = agentConf.prompts[promptMode];
+    } else {
+      customPrompt = agentConf.prompts?.chat || "";
+    }
     const basePrompt = customPrompt || `You are LawKit AI, an expert legal research and drafting assistant. You provide accurate, well-reasoned legal analysis with proper citations.
 
 ## Guidelines

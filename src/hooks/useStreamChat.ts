@@ -163,8 +163,8 @@ export function useStreamChat() {
                 setError(parsed.error);
               }
             } catch {
-              buffer = line + "\n" + buffer;
-              break;
+              // Skip unparseable lines instead of re-buffering (prevents infinite loops)
+              continue;
             }
           }
         }
