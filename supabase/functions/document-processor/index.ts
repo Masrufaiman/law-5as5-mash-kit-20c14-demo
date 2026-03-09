@@ -174,6 +174,9 @@ Deno.serve(async (req) => {
       extractedText = `[Unsupported format: ${file.mime_type}]`;
     }
 
+    // Sanitize null bytes — PostgreSQL text columns reject \u0000
+    extractedText = extractedText.replace(/\u0000/g, "");
+
     // --- STEP 3: Save extracted text to R2 ---
     let extractedTextR2Key: string | null = null;
     if (r2Conf.access_key_id && r2Conf.bucket_name && extractedText.length > 0) {

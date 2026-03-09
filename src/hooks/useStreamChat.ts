@@ -4,6 +4,7 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  reasoning?: string;
   citations?: Citation[];
   model?: string;
   followUps?: string[];
@@ -107,6 +108,7 @@ export function useStreamChat() {
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let assistantContent = "";
+        let assistantReasoning = "";
         let assistantId = crypto.randomUUID();
         let buffer = "";
         let streamDone = false;
@@ -135,6 +137,26 @@ export function useStreamChat() {
 
               if (parsed.type === "steps") {
                 setSteps(parsed.steps);
+              } else if (parsed.type === "reasoning") {
+                assistantReasoning += parsed.content;
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last?.role === "assistant" && last.id === assistantId) {
+                    return prev.map((m, i) =>
+                      i === prev.length - 1 ? { ...m, reasoning: assistantReasoning } : m
+                    );
+                  }
+                  return [
+                    ...prev,
+                    {
+                      id: assistantId,
+                      role: "assistant" as const,
+                      content: "",
+                      reasoning: assistantReasoning,
+                      createdAt: new Date(),
+                    },
+                  ];
+                });
               } else if (parsed.type === "token") {
                 assistantContent += parsed.content;
                 setMessages((prev) => {

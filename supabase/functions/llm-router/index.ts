@@ -485,7 +485,9 @@ ${perplexityContext}`;
           const reader = aiResponse.body!.getReader();
           const decoder = new TextDecoder();
           let fullContent = "";
+          let reasoningContent = "";
           let buffer = "";
+          let inThinkBlock = false;
 
           while (true) {
             const { done, value } = await reader.read();
@@ -505,10 +507,46 @@ ${perplexityContext}`;
                 const parsed = JSON.parse(jsonStr);
                 const content = parsed.choices?.[0]?.delta?.content;
                 if (content) {
-                  fullContent += content;
-                  controller.enqueue(
-                    encoder.encode(`data: ${JSON.stringify({ type: "token", content })}\n\n`)
-                  );
+                  // Detect <think> blocks for reasoning
+                  let remaining = content;
+                  while (remaining.length > 0) {
+                    if (inThinkBlock) {
+                      const closeIdx = remaining.indexOf("</think>");
+                      if (closeIdx !== -1) {
+                        reasoningContent += remaining.slice(0, closeIdx);
+                        controller.enqueue(
+                          encoder.encode(`data: ${JSON.stringify({ type: "reasoning", content: remaining.slice(0, closeIdx) })}\n\n`)
+                        );
+                        remaining = remaining.slice(closeIdx + 8);
+                        inThinkBlock = false;
+                      } else {
+                        reasoningContent += remaining;
+                        controller.enqueue(
+                          encoder.encode(`data: ${JSON.stringify({ type: "reasoning", content: remaining })}\n\n`)
+                        );
+                        remaining = "";
+                      }
+                    } else {
+                      const openIdx = remaining.indexOf("<think>");
+                      if (openIdx !== -1) {
+                        const before = remaining.slice(0, openIdx);
+                        if (before) {
+                          fullContent += before;
+                          controller.enqueue(
+                            encoder.encode(`data: ${JSON.stringify({ type: "token", content: before })}\n\n`)
+                          );
+                        }
+                        remaining = remaining.slice(openIdx + 7);
+                        inThinkBlock = true;
+                      } else {
+                        fullContent += remaining;
+                        controller.enqueue(
+                          encoder.encode(`data: ${JSON.stringify({ type: "token", content: remaining })}\n\n`)
+                        );
+                        remaining = "";
+                      }
+                    }
+                  }
                 }
               } catch {
                 // Partial JSON, skip

@@ -208,10 +208,10 @@ export function MessageBubble({
     };
   }, [citations]);
 
-  // Steps section
-  const stepsSection = !isUser && steps && steps.length > 0 ? (
+  // Steps section (with reasoning)
+  const stepsSection = !isUser && (steps?.length || message.reasoning) ? (
     <div className="mb-2">
-      <StepTracker steps={steps} isStreaming={isStreamingSteps} />
+      <StepTracker steps={steps || []} isStreaming={isStreamingSteps} reasoning={message.reasoning} />
     </div>
   ) : null;
 
