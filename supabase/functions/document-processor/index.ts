@@ -157,15 +157,17 @@ Deno.serve(async (req) => {
     ) {
       extractedText = `[Spreadsheet: ${file.original_name}] — Text extraction pending.`;
     } else if (file.mime_type?.startsWith("image/")) {
-      if (ocrConf.aws_access_key && ocrConf.aws_secret_key) {
+      if (ocrConf.mistral_api_key) {
         try {
-          extractedText = await callTextract(fileBuffer, ocrConf);
+          console.log(`[document-processor] Using Mistral OCR for image`);
+          const ocrResult = await callMistralOCR(fileBuffer, file.mime_type, ocrConf.mistral_api_key);
+          extractedText = ocrResult.text;
           ocrUsed = true;
         } catch (ocrErr: any) {
           extractedText = `[Image: ${file.original_name}] — OCR failed: ${ocrErr.message}`;
         }
       } else {
-        extractedText = `[Image: ${file.original_name}] — No OCR configured.`;
+        extractedText = `[Image: ${file.original_name}] — No OCR configured. Add Mistral API key in Admin → Infrastructure.`;
       }
     } else {
       extractedText = `[Unsupported format: ${file.mime_type}]`;
