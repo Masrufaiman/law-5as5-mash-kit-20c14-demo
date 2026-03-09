@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import type { Citation } from "@/hooks/useStreamChat";
+import { StepTracker } from "@/components/chat/StepTracker";
 import {
   Plus,
   Share,
@@ -27,6 +28,7 @@ import {
   Check,
   X,
   Pencil,
+  Reply,
 } from "lucide-react";
 
 export default function Chat() {
