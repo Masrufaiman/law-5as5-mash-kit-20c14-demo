@@ -23,6 +23,8 @@ import {
   Search,
   Share,
   Trash2,
+  PanelLeftClose,
+  PanelLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
