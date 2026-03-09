@@ -62,7 +62,10 @@ function injectCitations(text: string, citations: Citation[]): React.ReactNode[]
 
 /** Strip trailing "Citations:" or "Sources:" block from content */
 function stripCitationsBlock(content: string): string {
-  return content.replace(/\n{1,2}(?:Citations|Sources|References)\s*:?\s*\n(?:\[\d+\][^\n]*\n?)+$/i, "").trim();
+  return content
+    .replace(/\n{0,3}---+\s*\n{0,3}(?:(?:Citations|Sources|References)\s*:?\s*\n(?:\[\d+\][^\n]*\n?)*)?$/i, "")
+    .replace(/\n{1,2}(?:Citations|Sources|References)\s*:?\s*\n(?:\[\d+\][^\n]*\n?)+$/i, "")
+    .trim();
 }
 
 /** Detect if content is a document/draft (heading + long content, or bold ALL-CAPS title) */
@@ -83,7 +86,7 @@ function AgentAvatar({ isUser }: { isUser: boolean }) {
       className={cn(
         "flex h-6 w-6 items-center justify-center rounded-full shrink-0",
         isUser
-          ? "bg-primary text-primary-foreground text-[10px] font-bold"
+          ? "bg-primary/20 text-primary text-[10px] font-bold"
           : "bg-muted text-muted-foreground"
       )}
     >

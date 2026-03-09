@@ -15,6 +15,7 @@ import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
+import SharedChat from "./pages/SharedChat";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/shared/:token" element={<SharedChat />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

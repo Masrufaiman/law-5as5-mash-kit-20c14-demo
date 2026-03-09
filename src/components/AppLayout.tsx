@@ -17,7 +17,7 @@ export function AppLayout({ children, rightPanel }: AppLayoutProps) {
               <div className="h-full overflow-auto">{children}</div>
             </ResizablePanel>
             <ResizableHandle />
-            <ResizablePanel collapsible collapsedSize={0} defaultSize={30} minSize={20} maxSize={40}>
+            <ResizablePanel collapsible collapsedSize={0} defaultSize={45} minSize={25} maxSize={50}>
               <div className="h-full overflow-auto border-l border-border">{rightPanel}</div>
             </ResizablePanel>
           </ResizablePanelGroup>
