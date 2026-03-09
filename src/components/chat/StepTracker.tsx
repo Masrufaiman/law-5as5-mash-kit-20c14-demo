@@ -14,7 +14,7 @@ interface StepTrackerProps {
 }
 
 export function StepTracker({ steps, isStreaming }: StepTrackerProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   if (steps.length === 0) return null;
 

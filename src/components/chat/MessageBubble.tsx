@@ -4,9 +4,11 @@ import { cn } from "@/lib/utils";
 import { ResponseActions } from "./ResponseActions";
 import { CitationPopover } from "./CitationPopover";
 import { ChoiceCards, parseChoices } from "./ChoiceCards";
+import { MultiStepQuestionnaire, parseMultiStepQuestions } from "./MultiStepQuestionnaire";
+import { StepTracker } from "./StepTracker";
 import { Card } from "@/components/ui/card";
-import { FileText } from "lucide-react";
-import type { ChatMessage, Citation } from "@/hooks/useStreamChat";
+import { FileText, Bot } from "lucide-react";
+import type { ChatMessage, Citation, AgentStep } from "@/hooks/useStreamChat";
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -15,6 +17,8 @@ interface MessageBubbleProps {
   onChoiceSelect?: (text: string) => void;
   onDocumentOpen?: (title: string, content: string) => void;
   isLastAssistant?: boolean;
+  steps?: AgentStep[];
+  isStreamingSteps?: boolean;
 }
 
 /**
@@ -55,11 +59,38 @@ function injectCitations(text: string, citations: Citation[]): React.ReactNode[]
   });
 }
 
-/** Detect if content is a document/draft (heading + long content) */
+/** Strip trailing "Citations:" or "Sources:" block from content */
+function stripCitationsBlock(content: string): string {
+  return content.replace(/\n{1,2}(?:Citations|Sources|References)\s*:?\s*\n(?:\[\d+\][^\n]*\n?)+$/i, "").trim();
+}
+
+/** Detect if content is a document/draft (heading + long content, or bold ALL-CAPS title) */
 function detectDocument(content: string): { title: string } | null {
-  const match = content.match(/^#\s+(.+)/m) || content.match(/^##\s+(.+)/m);
-  if (match && content.length > 500) return { title: match[1] };
+  // Standard heading pattern
+  const headingMatch = content.match(/^#\s+(.+)/m) || content.match(/^##\s+(.+)/m);
+  if (headingMatch && content.length > 500) return { title: headingMatch[1] };
+
+  // Bold ALL-CAPS title pattern like **MUTUAL NON-DISCLOSURE AGREEMENT**
+  const boldMatch = content.match(/^\*\*([A-Z][A-Z\s\-–—,]+[A-Z])\*\*/m);
+  if (boldMatch && content.length > 500) return { title: boldMatch[1] };
+
   return null;
+}
+
+/** Agent avatar component */
+function AgentAvatar({ isUser }: { isUser: boolean }) {
+  return (
+    <div
+      className={cn(
+        "flex h-6 w-6 items-center justify-center rounded-full shrink-0",
+        isUser
+          ? "bg-primary text-primary-foreground text-[10px] font-bold"
+          : "bg-muted text-muted-foreground"
+      )}
+    >
+      {isUser ? "U" : <Bot className="h-3.5 w-3.5" />}
+    </div>
+  );
 }
 
 export function MessageBubble({
@@ -69,17 +100,27 @@ export function MessageBubble({
   onChoiceSelect,
   onDocumentOpen,
   isLastAssistant,
+  steps,
+  isStreamingSteps,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const citations = message.citations || [];
 
+  // Clean content: strip trailing citations block from AI text
+  const cleanContent = !isUser ? stripCitationsBlock(message.content) : message.content;
+
+  // Detect multi-step questionnaire pattern (only for last assistant, not streaming)
+  const questionnaireData = !isUser && !isStreaming && isLastAssistant && onChoiceSelect
+    ? parseMultiStepQuestions(cleanContent)
+    : null;
+
   // Detect choice patterns in assistant messages (only for last assistant, not streaming)
-  const choiceData = !isUser && !isStreaming && isLastAssistant && onChoiceSelect
-    ? parseChoices(message.content)
+  const choiceData = !isUser && !isStreaming && isLastAssistant && onChoiceSelect && !questionnaireData
+    ? parseChoices(cleanContent)
     : null;
 
   // Detect document patterns
-  const docInfo = !isUser && !isStreaming ? detectDocument(message.content) : null;
+  const docInfo = !isUser && !isStreaming ? detectDocument(cleanContent) : null;
 
   // Build custom components that inject inline citation popovers
   const citeComponents = React.useMemo(() => {
@@ -114,31 +155,40 @@ export function MessageBubble({
     };
   }, [citations]);
 
+  // Steps section (collapsed by default, under assistant header)
+  const stepsSection = !isUser && steps && steps.length > 0 ? (
+    <div className="mb-2">
+      <StepTracker steps={steps} isStreaming={isStreamingSteps} />
+    </div>
+  ) : null;
+
   // Render document as compact card instead of full content
   if (docInfo && onDocumentOpen) {
     return (
       <div className="group">
         <div className="flex items-center gap-2 mb-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground text-[10px] font-bold shrink-0">
-            LK
-          </div>
+          <AgentAvatar isUser={false} />
           <span className="text-xs font-semibold text-foreground">LawKit AI</span>
         </div>
 
         <div className="pl-8 space-y-3">
+          {stepsSection}
+
           {/* Brief intro text before the document */}
           {(() => {
-            const firstHeadingIdx = message.content.search(/^#{1,2}\s+/m);
-            const intro = firstHeadingIdx > 0 ? message.content.slice(0, firstHeadingIdx).trim() : null;
+            const firstHeadingIdx = cleanContent.search(/^(?:#{1,2}\s+|\*\*[A-Z])/m);
+            const intro = firstHeadingIdx > 0 ? cleanContent.slice(0, firstHeadingIdx).trim() : null;
             return intro ? (
-              <p className="text-sm text-foreground/90 leading-relaxed">{intro}</p>
+              <div className="text-sm text-foreground/90 leading-relaxed prose prose-sm max-w-none">
+                <ReactMarkdown>{intro}</ReactMarkdown>
+              </div>
             ) : null;
           })()}
 
           {/* Compact document card */}
           <Card
             className="cursor-pointer border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-all duration-200 p-0"
-            onClick={() => onDocumentOpen(docInfo.title, message.content)}
+            onClick={() => onDocumentOpen(docInfo.title, cleanContent)}
           >
             <div className="flex items-center gap-3 p-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -151,12 +201,44 @@ export function MessageBubble({
             </div>
           </Card>
 
-          {!isStreaming && message.content && (
+          {!isStreaming && cleanContent && (
             <ResponseActions
-              content={message.content}
+              content={cleanContent}
               messageId={message.id}
               onRegenerate={onRegenerate}
             />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Render multi-step questionnaire
+  if (questionnaireData && onChoiceSelect) {
+    return (
+      <div className="group">
+        <div className="flex items-center gap-2 mb-2">
+          <AgentAvatar isUser={false} />
+          <span className="text-xs font-semibold text-foreground">LawKit AI</span>
+        </div>
+
+        <div className="pl-8">
+          {stepsSection}
+          <MultiStepQuestionnaire
+            preamble={questionnaireData.preamble}
+            questions={questionnaireData.questions}
+            onComplete={onChoiceSelect}
+            disabled={isStreaming}
+          />
+
+          {!isStreaming && cleanContent && (
+            <div className="mt-2">
+              <ResponseActions
+                content={cleanContent}
+                messageId={message.id}
+                onRegenerate={onRegenerate}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -168,13 +250,12 @@ export function MessageBubble({
     return (
       <div className="group">
         <div className="flex items-center gap-2 mb-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground text-[10px] font-bold shrink-0">
-            LK
-          </div>
+          <AgentAvatar isUser={false} />
           <span className="text-xs font-semibold text-foreground">LawKit AI</span>
         </div>
 
         <div className="pl-8">
+          {stepsSection}
           <ChoiceCards
             choices={choiceData.choices}
             preamble={choiceData.preamble}
@@ -182,10 +263,10 @@ export function MessageBubble({
             disabled={isStreaming}
           />
 
-          {!isStreaming && message.content && (
+          {!isStreaming && cleanContent && (
             <div className="mt-2">
               <ResponseActions
-                content={message.content}
+                content={cleanContent}
                 messageId={message.id}
                 onRegenerate={onRegenerate}
               />
@@ -200,16 +281,7 @@ export function MessageBubble({
     <div className="group">
       {/* Avatar + role header */}
       <div className="flex items-center gap-2 mb-2">
-        <div
-          className={cn(
-            "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold shrink-0",
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground"
-          )}
-        >
-          {isUser ? "U" : "LK"}
-        </div>
+        <AgentAvatar isUser={isUser} />
         <span className="text-xs font-semibold text-foreground">
           {isUser ? "You" : "LawKit AI"}
         </span>
@@ -217,6 +289,8 @@ export function MessageBubble({
 
       {/* Content */}
       <div className="pl-8">
+        {!isUser && stepsSection}
+
         {isUser ? (
           <p className="text-sm text-foreground whitespace-pre-wrap">{message.content}</p>
         ) : (
@@ -276,7 +350,7 @@ export function MessageBubble({
                 ...citeComponents,
               }}
             >
-              {message.content}
+              {cleanContent}
             </ReactMarkdown>
           </div>
         )}
@@ -287,9 +361,9 @@ export function MessageBubble({
         )}
 
         {/* Actions for assistant messages */}
-        {!isUser && !isStreaming && message.content && (
+        {!isUser && !isStreaming && cleanContent && (
           <ResponseActions
-            content={message.content}
+            content={cleanContent}
             messageId={message.id}
             onRegenerate={onRegenerate}
           />
