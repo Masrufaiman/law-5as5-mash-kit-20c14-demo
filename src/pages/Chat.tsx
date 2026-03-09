@@ -5,7 +5,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { MessageBubble } from "@/components/chat/MessageBubble";
-import { StepTracker } from "@/components/chat/StepTracker";
 import { SourcesPanel } from "@/components/chat/SourcesPanel";
 import { DocumentEditor } from "@/components/editor/DocumentEditor";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,6 +22,7 @@ import {
   PanelRightOpen,
   PanelRightClose,
   StopCircle,
+  Bot,
 } from "lucide-react";
 
 export default function Chat() {
@@ -238,7 +238,6 @@ export default function Chat() {
   // Check if assistant has started content (for skeleton)
   const lastMsg = messages[messages.length - 1];
   const showSkeleton = isStreaming && lastMsg?.role === "user" && steps.length === 0;
-  const showStepsBeforeResponse = steps.length > 0;
 
   const rightPanel = editorDoc ? (
     <DocumentEditor
@@ -329,27 +328,6 @@ export default function Chat() {
                     <Skeleton className="h-4 w-2/3" />
                   </div>
                 </div>
-                {/* Another exchange skeleton */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Skeleton className="h-6 w-6 rounded-full" />
-                    <Skeleton className="h-3 w-12" />
-                  </div>
-                  <div className="pl-8 space-y-2">
-                    <Skeleton className="h-4 w-1/2" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Skeleton className="h-6 w-6 rounded-full" />
-                    <Skeleton className="h-3 w-16" />
-                  </div>
-                  <div className="pl-8 space-y-2.5">
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-4/5" />
-                    <Skeleton className="h-4 w-3/4" />
-                  </div>
-                </div>
               </div>
             </div>
           ) : messages.length === 0 && !isStreaming ? (
@@ -368,8 +346,8 @@ export default function Chat() {
             <ScrollArea className="flex-1">
               <div className="mx-auto max-w-3xl px-6 py-6 space-y-6">
                 {messages.map((msg, i) => {
-                  const isLastUser = msg.role === "user" && i === lastUserIdx;
                   const isLastAssistant = msg.role === "assistant" && i === lastAssistantIdx;
+                  const isLastUser = msg.role === "user" && i === lastUserIdx;
 
                   return (
                     <div key={msg.id}>
@@ -384,21 +362,16 @@ export default function Chat() {
                         onChoiceSelect={handleChoiceSelect}
                         onDocumentOpen={handleDocumentOpen}
                         isLastAssistant={isLastAssistant}
+                        steps={isLastAssistant || (isLastUser && !messages.some((m, j) => j > i && m.role === "assistant")) ? steps : undefined}
+                        isStreamingSteps={isStreaming}
                       />
-
-                      {/* Steps AFTER last user message, BEFORE the assistant response */}
-                      {isLastUser && showStepsBeforeResponse && (
-                        <div className="pl-8 mt-4">
-                          <StepTracker steps={steps} isStreaming={isStreaming} />
-                        </div>
-                      )}
 
                       {/* Skeleton loading when waiting for first token */}
                       {isLastUser && showSkeleton && (
                         <div className="pl-8 mt-4 space-y-3">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
-                              <span className="text-[10px] font-bold text-muted-foreground">LK</span>
+                              <Bot className="h-3.5 w-3.5 text-muted-foreground" />
                             </div>
                             <span className="text-xs font-semibold text-foreground">LawKit AI</span>
                           </div>
