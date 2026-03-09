@@ -86,7 +86,12 @@ export default function Chat() {
 
       setConversationId(conv.id);
       setConversationTitle(conv.title);
-      if (conv.vault_id) setVaultId(conv.vault_id);
+      if (conv.vault_id) {
+        setVaultId(conv.vault_id);
+        // Load vault name
+        const { data: vaultData } = await supabase.from("vaults").select("name").eq("id", conv.vault_id).single();
+        if (vaultData) setVaultName(vaultData.name);
+      }
 
       const { data: msgs } = await supabase
         .from("messages")
