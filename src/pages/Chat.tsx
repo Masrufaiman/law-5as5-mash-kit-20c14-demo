@@ -50,6 +50,7 @@ export default function Chat() {
   const [conversationTitle, setConversationTitle] = useState("New Conversation");
   const [input, setInput] = useState("");
   const [showSources, setShowSources] = useState(false);
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [vaultId, setVaultId] = useState<string | undefined>();
   const [deepResearch, setDeepResearch] = useState(false);
   const [activeSources, setActiveSources] = useState<string[]>([]);
