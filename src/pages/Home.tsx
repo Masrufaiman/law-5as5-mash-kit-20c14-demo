@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -165,6 +166,7 @@ export default function Home() {
   const [improving, setImproving] = useState(false);
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [searchFilter, setSearchFilter] = useState("");
+  const [promptMode, setPromptMode] = useState<string | undefined>();
 
   useEffect(() => {
     if (!profile?.organization_id) return;
