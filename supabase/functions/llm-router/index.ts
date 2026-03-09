@@ -13,9 +13,11 @@ interface ChatRequest {
   vaultId?: string;
   deepResearch?: boolean;
   attachedFileIds?: string[];
+  attachedFileNames?: string[];
   sources?: string[];
   history?: { role: string; content: string }[];
   useCase?: string;
+  vaultName?: string;
 }
 
 // ---------- Multi-model Perplexity selection ----------
