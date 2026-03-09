@@ -172,7 +172,7 @@ export function AgentTab({ orgId }: AgentTabProps) {
         name: "Agent Configuration",
         provider: "agent_config",
         organization_id: orgId,
-        config,
+        config: JSON.parse(JSON.stringify(config)),
         is_active: true,
       };
 
