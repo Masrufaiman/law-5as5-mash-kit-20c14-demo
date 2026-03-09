@@ -535,7 +535,30 @@ export default function Chat() {
             </div>
           ) : (
             <ScrollArea className="flex-1" ref={scrollContainerRef as any}>
-              <div className="mx-auto max-w-3xl px-6 py-6 space-y-6">
+              <div className="mx-auto max-w-3xl px-6 py-6 space-y-6 relative" ref={messagesContainerRef}>
+                {/* Reply tooltip for text selection */}
+                {selectionTooltip && (
+                  <div
+                    data-reply-tooltip
+                    className="fixed z-50 animate-in fade-in-0 zoom-in-95"
+                    style={{
+                      left: selectionTooltip.x,
+                      top: selectionTooltip.y,
+                      transform: "translate(-50%, -100%)",
+                    }}
+                  >
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 shadow-md border border-border"
+                      onClick={handleReplyWithSelection}
+                    >
+                      <Reply className="h-3 w-3" />
+                      Reply
+                    </Button>
+                  </div>
+                )}
+
                 {messages.map((msg, i) => {
                   const isLastAssistant = msg.role === "assistant" && i === lastAssistantIdx;
                   const isLastUser = msg.role === "user" && i === lastUserIdx;
