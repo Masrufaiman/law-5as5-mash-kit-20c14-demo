@@ -176,8 +176,7 @@ serve(async (req) => {
             .from("files")
             .select("id")
             .eq("vault_id", vaultId)
-            .eq("organization_id", orgId)
-            .eq("status", "ready");
+            .eq("organization_id", orgId);
 
           if (vaultFiles?.length) {
             mustFilters.push({
