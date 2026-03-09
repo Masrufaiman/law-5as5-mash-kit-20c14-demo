@@ -65,6 +65,7 @@ export function NavigationSidebar() {
   const { toast } = useToast();
   const isAdmin = profile?.role === "admin" || profile?.role === "superadmin";
 
+  const [collapsed, setCollapsed] = useState(false);
   const [vaultsOpen, setVaultsOpen] = useState(true);
   const [recentsOpen, setRecentsOpen] = useState(true);
   const [vaults, setVaults] = useState<VaultItem[]>([]);
