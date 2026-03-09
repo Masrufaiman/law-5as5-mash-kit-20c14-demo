@@ -111,9 +111,7 @@ export function AgentTab({ orgId }: AgentTabProps) {
           setUserDailyLimit(String(c.rate_limits?.user_daily || 100));
           setWorkflows(c.workflows || []);
           // OCR
-          setAwsAccessKey(c.ocr?.aws_access_key || "");
-          setAwsSecretKey(c.ocr?.aws_secret_key || "");
-          setAwsRegion(c.ocr?.aws_region || "eu-central-1");
+          setMistralApiKey(c.ocr?.mistral_api_key || "");
           // Qdrant
           setQdrantUrl(c.qdrant?.url || "");
           setQdrantApiKey(c.qdrant?.api_key || "");
