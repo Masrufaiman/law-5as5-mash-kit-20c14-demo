@@ -234,6 +234,13 @@ serve(async (req) => {
       }
     }
 
+    // Load vault name for context
+    let vaultName = "";
+    if (vaultId) {
+      const { data: vaultData } = await adminClient.from("vaults").select("name").eq("id", vaultId).single();
+      vaultName = vaultData?.name || "";
+    }
+
     // Fallback: direct file text if no Qdrant results
     let vaultContext = "";
     if (!ragContext && (vaultId || attachedFileIds?.length)) {
