@@ -62,7 +62,10 @@ function injectCitations(text: string, citations: Citation[]): React.ReactNode[]
 
 /** Strip trailing "Citations:" or "Sources:" block from content */
 function stripCitationsBlock(content: string): string {
-  return content.replace(/\n{1,2}(?:Citations|Sources|References)\s*:?\s*\n(?:\[\d+\][^\n]*\n?)+$/i, "").trim();
+  return content
+    .replace(/\n{0,3}---+\s*\n{0,3}(?:(?:Citations|Sources|References)\s*:?\s*\n(?:\[\d+\][^\n]*\n?)*)?$/i, "")
+    .replace(/\n{1,2}(?:Citations|Sources|References)\s*:?\s*\n(?:\[\d+\][^\n]*\n?)+$/i, "")
+    .trim();
 }
 
 /** Detect if content is a document/draft (heading + long content, or bold ALL-CAPS title) */
