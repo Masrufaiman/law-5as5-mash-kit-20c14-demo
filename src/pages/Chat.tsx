@@ -148,6 +148,69 @@ export default function Chat() {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, steps]);
 
+  // Text selection → Reply tooltip
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleMouseUp = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+        setSelectionTooltip(null);
+        return;
+      }
+
+      const selectedText = selection.toString().trim();
+      if (selectedText.length < 3) {
+        setSelectionTooltip(null);
+        return;
+      }
+
+      // Check if selection is within an assistant message
+      const anchorNode = selection.anchorNode;
+      const focusNode = selection.focusNode;
+      if (!anchorNode || !focusNode) return;
+
+      const isInContainer = container.contains(anchorNode) && container.contains(focusNode);
+      if (!isInContainer) {
+        setSelectionTooltip(null);
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+
+      setSelectionTooltip({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+        text: selectedText,
+      });
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      // Hide tooltip if clicking outside of it
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-reply-tooltip]")) {
+        setSelectionTooltip(null);
+      }
+    };
+
+    container.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => {
+      container.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
+  }, []);
+
+  const handleReplyWithSelection = () => {
+    if (!selectionTooltip) return;
+    const quoted = `> ${selectionTooltip.text.replace(/\n/g, "\n> ")}\n\n`;
+    setInput(quoted + input);
+    setSelectionTooltip(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
   // Show error toast
   useEffect(() => {
     if (error) {
