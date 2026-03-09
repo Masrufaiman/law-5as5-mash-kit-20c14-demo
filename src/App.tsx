@@ -15,6 +15,7 @@ import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
+import SharedChat from "./pages/SharedChat";
 
 const queryClient = new QueryClient();
 
