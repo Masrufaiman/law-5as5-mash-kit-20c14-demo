@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Bot, Wrench, FileText, Gauge, Brain, AlertTriangle, PenTool } from "lucide-react";
+import { Bot, Wrench, FileText, Gauge, Brain, AlertTriangle, PenTool, Workflow, Database, Eye, Plus, Trash2 } from "lucide-react";
 
 const JURISDICTIONS = ["United States", "United Kingdom", "European Union", "Australia", "Canada", "India", "Singapore", "Hong Kong"];
 const CITATION_STYLES = ["Bluebook", "OSCOLA", "AGLC", "McGill", "APA Legal", "Chicago"];
@@ -21,6 +21,18 @@ const PROMPT_USE_CASES = [
   { id: "red_flags", label: "Red Flag Detection", icon: AlertTriangle },
   { id: "drafting", label: "Document Drafting", icon: PenTool },
 ];
+
+const WORKFLOW_ICONS = ["FileText", "Clock", "ListChecks", "Scale", "Search", "BookOpen", "Zap", "AlertTriangle"];
+
+interface WorkflowConfig {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  steps: number;
+  icon: string;
+  systemPrompt: string;
+}
 
 interface AgentTabProps {
   orgId: string;
@@ -57,7 +69,24 @@ export function AgentTab({ orgId }: AgentTabProps) {
   const [orgDailyLimit, setOrgDailyLimit] = useState("1000");
   const [userDailyLimit, setUserDailyLimit] = useState("100");
 
+  // Workflows
+  const [workflows, setWorkflows] = useState<WorkflowConfig[]>([]);
+
+  // OCR (AWS Textract)
+  const [awsAccessKey, setAwsAccessKey] = useState("");
+  const [awsSecretKey, setAwsSecretKey] = useState("");
+  const [awsRegion, setAwsRegion] = useState("eu-central-1");
+
+  // Qdrant
+  const [qdrantUrl, setQdrantUrl] = useState("");
+  const [qdrantApiKey, setQdrantApiKey] = useState("");
+  const [qdrantCollectionPrefix, setQdrantCollectionPrefix] = useState("org_");
+
+  // OpenAI (for embeddings)
+  const [openaiApiKey, setOpenaiApiKey] = useState("");
+
   useEffect(() => {
+    // Load agent config
     supabase
       .from("api_integrations")
       .select("*")
@@ -82,6 +111,17 @@ export function AgentTab({ orgId }: AgentTabProps) {
           setDraftingPrompt(c.prompts?.drafting || "");
           setOrgDailyLimit(String(c.rate_limits?.org_daily || 1000));
           setUserDailyLimit(String(c.rate_limits?.user_daily || 100));
+          setWorkflows(c.workflows || []);
+          // OCR
+          setAwsAccessKey(c.ocr?.aws_access_key || "");
+          setAwsSecretKey(c.ocr?.aws_secret_key || "");
+          setAwsRegion(c.ocr?.aws_region || "eu-central-1");
+          // Qdrant
+          setQdrantUrl(c.qdrant?.url || "");
+          setQdrantApiKey(c.qdrant?.api_key || "");
+          setQdrantCollectionPrefix(c.qdrant?.collection_prefix || "org_");
+          // OpenAI
+          setOpenaiApiKey(c.openai?.api_key || "");
         }
       });
   }, [orgId]);
@@ -112,6 +152,20 @@ export function AgentTab({ orgId }: AgentTabProps) {
           org_daily: parseInt(orgDailyLimit),
           user_daily: parseInt(userDailyLimit),
         },
+        workflows,
+        ocr: {
+          aws_access_key: awsAccessKey,
+          aws_secret_key: awsSecretKey,
+          aws_region: awsRegion,
+        },
+        qdrant: {
+          url: qdrantUrl,
+          api_key: qdrantApiKey,
+          collection_prefix: qdrantCollectionPrefix,
+        },
+        openai: {
+          api_key: openaiApiKey,
+        },
       };
 
       const payload = {
@@ -138,6 +192,26 @@ export function AgentTab({ orgId }: AgentTabProps) {
     }
   };
 
+  const addWorkflow = () => {
+    setWorkflows([...workflows, {
+      id: crypto.randomUUID(),
+      title: "",
+      description: "",
+      type: "Workflow",
+      steps: 3,
+      icon: "FileText",
+      systemPrompt: "",
+    }]);
+  };
+
+  const updateWorkflow = (id: string, field: keyof WorkflowConfig, value: any) => {
+    setWorkflows(wfs => wfs.map(w => w.id === id ? { ...w, [field]: value } : w));
+  };
+
+  const removeWorkflow = (id: string) => {
+    setWorkflows(wfs => wfs.filter(w => w.id !== id));
+  };
+
   const RED_FLAG_CATEGORY_OPTIONS = [
     "liability", "indemnity", "termination", "ip_assignment", "non_compete",
     "data_privacy", "governing_law", "limitation_of_liability", "confidentiality", "warranty",
@@ -147,7 +221,7 @@ export function AgentTab({ orgId }: AgentTabProps) {
     <div className="space-y-4">
       <div>
         <h3 className="font-heading text-base font-semibold">Agentic AI Settings</h3>
-        <p className="text-xs text-muted-foreground">Configure AI agent behavior, document analysis, prompts, and rate limits.</p>
+        <p className="text-xs text-muted-foreground">Configure AI agent behavior, workflows, document processing, and infrastructure.</p>
       </div>
 
       <Tabs defaultValue="behavior" className="space-y-4">
@@ -155,11 +229,17 @@ export function AgentTab({ orgId }: AgentTabProps) {
           <TabsTrigger value="behavior" className="text-xs gap-1.5 data-[state=active]:bg-background">
             <Bot className="h-3.5 w-3.5" /> Behavior
           </TabsTrigger>
+          <TabsTrigger value="workflows" className="text-xs gap-1.5 data-[state=active]:bg-background">
+            <Workflow className="h-3.5 w-3.5" /> Workflows
+          </TabsTrigger>
           <TabsTrigger value="tools" className="text-xs gap-1.5 data-[state=active]:bg-background">
             <Wrench className="h-3.5 w-3.5" /> Tools
           </TabsTrigger>
           <TabsTrigger value="prompts" className="text-xs gap-1.5 data-[state=active]:bg-background">
             <FileText className="h-3.5 w-3.5" /> Prompts
+          </TabsTrigger>
+          <TabsTrigger value="infrastructure" className="text-xs gap-1.5 data-[state=active]:bg-background">
+            <Database className="h-3.5 w-3.5" /> Infrastructure
           </TabsTrigger>
           <TabsTrigger value="limits" className="text-xs gap-1.5 data-[state=active]:bg-background">
             <Gauge className="h-3.5 w-3.5" /> Rate Limits
@@ -210,9 +290,77 @@ export function AgentTab({ orgId }: AgentTabProps) {
           </Card>
         </TabsContent>
 
+        {/* Workflows */}
+        <TabsContent value="workflows" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Workflow Templates</p>
+              <p className="text-xs text-muted-foreground">Configure workflows shown on the home page.</p>
+            </div>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={addWorkflow}>
+              <Plus className="h-3 w-3" /> Add Workflow
+            </Button>
+          </div>
+
+          {workflows.length === 0 && (
+            <Card className="border border-dashed border-border">
+              <CardContent className="py-8 text-center">
+                <p className="text-xs text-muted-foreground">No workflows configured. Default workflows will be shown.</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {workflows.map((wf) => (
+            <Card key={wf.id} className="border border-border">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">{wf.title || "New Workflow"}</CardTitle>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => removeWorkflow(wf.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Title</Label>
+                    <Input value={wf.title} onChange={e => updateWorkflow(wf.id, "title", e.target.value)} className="h-8 text-sm" placeholder="Draft a client alert" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Icon</Label>
+                    <Select value={wf.icon} onValueChange={v => updateWorkflow(wf.id, "icon", v)}>
+                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {WORKFLOW_ICONS.map(icon => <SelectItem key={icon} value={icon}>{icon}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Description</Label>
+                  <Input value={wf.description} onChange={e => updateWorkflow(wf.id, "description", e.target.value)} className="h-8 text-sm" placeholder="Generate a structured legal alert..." />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Type</Label>
+                    <Input value={wf.type} onChange={e => updateWorkflow(wf.id, "type", e.target.value)} className="h-8 text-sm" placeholder="Workflow" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Steps</Label>
+                    <Input type="number" value={wf.steps} onChange={e => updateWorkflow(wf.id, "steps", parseInt(e.target.value) || 1)} className="h-8 text-sm" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">System Prompt</Label>
+                  <Textarea value={wf.systemPrompt} onChange={e => updateWorkflow(wf.id, "systemPrompt", e.target.value)} placeholder="Custom system prompt for this workflow..." rows={3} className="text-sm font-mono" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </TabsContent>
+
         {/* Tools */}
         <TabsContent value="tools" className="space-y-4">
-          {/* Document Analysis */}
           <Card className="border border-border">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
@@ -244,7 +392,6 @@ export function AgentTab({ orgId }: AgentTabProps) {
             </CardContent>
           </Card>
 
-          {/* Red Flag Detection */}
           <Card className="border border-border">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
@@ -316,6 +463,90 @@ export function AgentTab({ orgId }: AgentTabProps) {
               </Card>
             );
           })}
+        </TabsContent>
+
+        {/* Infrastructure */}
+        <TabsContent value="infrastructure" className="space-y-4">
+          {/* OCR - AWS Textract */}
+          <Card className="border border-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-primary" />
+                <CardTitle className="text-sm">OCR — AWS Textract</CardTitle>
+              </div>
+              <CardDescription className="text-xs">Optical Character Recognition for scanned PDFs and images.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">AWS Access Key ID</Label>
+                  <Input type="password" value={awsAccessKey} onChange={e => setAwsAccessKey(e.target.value)} className="h-8 text-sm font-mono" placeholder="AKIA..." />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">AWS Secret Access Key</Label>
+                  <Input type="password" value={awsSecretKey} onChange={e => setAwsSecretKey(e.target.value)} className="h-8 text-sm font-mono" placeholder="••••••••" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">AWS Region</Label>
+                <Select value={awsRegion} onValueChange={setAwsRegion}>
+                  <SelectTrigger className="h-8 text-sm w-48"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="eu-central-1">eu-central-1 (Frankfurt)</SelectItem>
+                    <SelectItem value="us-east-1">us-east-1 (N. Virginia)</SelectItem>
+                    <SelectItem value="us-west-2">us-west-2 (Oregon)</SelectItem>
+                    <SelectItem value="ap-southeast-1">ap-southeast-1 (Singapore)</SelectItem>
+                    <SelectItem value="eu-west-1">eu-west-1 (Ireland)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* OpenAI Embeddings */}
+          <Card className="border border-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <Brain className="h-4 w-4 text-primary" />
+                <CardTitle className="text-sm">OpenAI — Embeddings</CardTitle>
+              </div>
+              <CardDescription className="text-xs">API key for generating text embeddings (text-embedding-3-small).</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">OpenAI API Key</Label>
+                <Input type="password" value={openaiApiKey} onChange={e => setOpenaiApiKey(e.target.value)} className="h-8 text-sm font-mono" placeholder="sk-..." />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Qdrant */}
+          <Card className="border border-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4 text-primary" />
+                <CardTitle className="text-sm">Qdrant — Vector Database</CardTitle>
+              </div>
+              <CardDescription className="text-xs">Store and search document embeddings for RAG retrieval.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Qdrant URL</Label>
+                  <Input value={qdrantUrl} onChange={e => setQdrantUrl(e.target.value)} className="h-8 text-sm font-mono" placeholder="https://your-cluster.qdrant.io:6333" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Qdrant API Key</Label>
+                  <Input type="password" value={qdrantApiKey} onChange={e => setQdrantApiKey(e.target.value)} className="h-8 text-sm font-mono" placeholder="••••••••" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Collection Name Prefix</Label>
+                <Input value={qdrantCollectionPrefix} onChange={e => setQdrantCollectionPrefix(e.target.value)} className="h-8 text-sm w-40" placeholder="org_" />
+                <p className="text-[10px] text-muted-foreground">Collections will be named: {qdrantCollectionPrefix}{"<org_id>"}</p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Rate Limits */}

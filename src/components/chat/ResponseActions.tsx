@@ -99,7 +99,7 @@ export function ResponseActions({ content, messageId, onRegenerate }: ResponseAc
         onClick={() => handleFeedback("up")}
         title="Helpful"
       >
-        <ThumbsUp className="h-3 w-3" />
+        <ThumbsUp className="h-3 w-3" fill={feedback === "up" ? "currentColor" : "none"} />
       </Button>
       <Button
         variant="ghost"
@@ -111,7 +111,7 @@ export function ResponseActions({ content, messageId, onRegenerate }: ResponseAc
         onClick={() => handleFeedback("down")}
         title="Not helpful"
       >
-        <ThumbsDown className="h-3 w-3" />
+        <ThumbsDown className="h-3 w-3" fill={feedback === "down" ? "currentColor" : "none"} />
       </Button>
     </div>
   );

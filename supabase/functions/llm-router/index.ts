@@ -15,7 +15,7 @@ interface ChatRequest {
   attachedFileIds?: string[];
   sources?: string[];
   history?: { role: string; content: string }[];
-  useCase?: string; // optional frontend hint: "red_flag" | "review" | "chat"
+  useCase?: string;
 }
 
 // ---------- Multi-model Perplexity selection ----------
@@ -40,25 +40,19 @@ const MODEL_CONFIG: Record<string, { maxTokens: number; systemPrompt: string }> 
 
 function selectPerplexityModel(message: string, deepResearch: boolean, useCase?: string): string {
   if (deepResearch) return "sonar-deep-research";
-
-  // Explicit frontend hint takes priority
   if (useCase === "red_flag") return "sonar-reasoning";
   if (useCase === "review") return "sonar-pro";
 
   const lower = message.toLowerCase();
-  // Red flag / risk analysis → reasoning model
   if (/red.?flag|risk.?analy|clause.?review|compliance.?check|due.?diligence|problematic|risky|liability/i.test(lower)) {
     return "sonar-reasoning";
   }
-  // Review table / comparison / extraction → pro model (2x citations)
   if (/review.?table|compar|extract.?terms|obligation|provision|summar.*clause|side.?by.?side|benchmark/i.test(lower)) {
     return "sonar-pro";
   }
-  // Default: fast sonar
   return "sonar";
 }
 
-// Map source names to Perplexity search domain filters
 const SOURCE_DOMAIN_MAP: Record<string, string[]> = {
   "EDGAR (SEC)": ["sec.gov", "edgar.sec.gov"],
   "CourtListener": ["courtlistener.com"],
@@ -102,7 +96,6 @@ serve(async (req) => {
 
     const { data: userData, error: userError } = await userClient.auth.getUser();
     if (userError || !userData?.user) {
-      console.error("Auth error:", userError?.message);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -131,7 +124,7 @@ serve(async (req) => {
 
     const steps: { name: string; status: "done" | "working" }[] = [];
 
-    // Load agent config for custom system prompts
+    // Load agent config
     const { data: agentConfig } = await adminClient
       .from("api_integrations")
       .select("config")
@@ -140,8 +133,11 @@ serve(async (req) => {
       .maybeSingle();
 
     const agentConf = (agentConfig?.config as any) || {};
+    const qdrantConf = agentConf.qdrant || {};
+    const openaiConf = agentConf.openai || {};
+    const embeddingModel = agentConf.document_analysis?.embedding_model || "text-embedding-3-small";
 
-    // Load knowledge base context
+    // Load knowledge base
     const { data: knowledgeEntries } = await adminClient
       .from("knowledge_entries")
       .select("title, content, category")
@@ -154,9 +150,90 @@ serve(async (req) => {
       steps.push({ name: `Loaded ${knowledgeEntries.length} knowledge base entries`, status: "done" });
     }
 
-    // Load vault file context
+    // --- RAG: Qdrant vector search ---
+    let ragContext = "";
+    let ragCitations: { index: number; source: string; excerpt: string }[] = [];
+
+    if ((vaultId || attachedFileIds?.length) && qdrantConf.url && qdrantConf.api_key && openaiConf.api_key) {
+      steps.push({ name: "Searching documents (vector)", status: "working" });
+
+      try {
+        // Embed user query
+        const queryEmbedding = await embedQuery(message, openaiConf.api_key, embeddingModel);
+
+        const collectionName = `${qdrantConf.collection_prefix || "org_"}${orgId}`;
+
+        // Build filter
+        const mustFilters: any[] = [{ key: "org_id", match: { value: orgId } }];
+        if (vaultId) {
+          // Get file IDs in this vault
+          const { data: vaultFiles } = await adminClient
+            .from("files")
+            .select("id")
+            .eq("vault_id", vaultId)
+            .eq("organization_id", orgId)
+            .eq("status", "ready");
+
+          if (vaultFiles?.length) {
+            mustFilters.push({
+              key: "file_id",
+              match: { any: vaultFiles.map(f => f.id) },
+            });
+          }
+        }
+        if (attachedFileIds?.length) {
+          mustFilters.push({
+            key: "file_id",
+            match: { any: attachedFileIds },
+          });
+        }
+
+        const searchResp = await fetch(`${qdrantConf.url}/collections/${collectionName}/points/search`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "api-key": qdrantConf.api_key,
+          },
+          body: JSON.stringify({
+            vector: queryEmbedding,
+            limit: 8,
+            with_payload: true,
+            filter: { must: mustFilters },
+          }),
+        });
+
+        if (searchResp.ok) {
+          const searchData = await searchResp.json();
+          const results = searchData.result || [];
+
+          if (results.length > 0) {
+            ragContext = "\n\n## Relevant Document Chunks\n";
+            results.forEach((r: any, i: number) => {
+              const p = r.payload || {};
+              ragContext += `### [${i + 1}] ${p.file_name || "Unknown"} (chunk ${p.chunk_index})\n${p.content}\n\n`;
+              ragCitations.push({
+                index: i + 1,
+                source: p.file_name || "Document",
+                excerpt: (p.content || "").substring(0, 200),
+              });
+            });
+            steps[steps.length - 1] = { name: `Found ${results.length} relevant chunks`, status: "done" };
+          } else {
+            steps[steps.length - 1] = { name: "No matching chunks found", status: "done" };
+          }
+        } else {
+          console.error("Qdrant search failed:", await searchResp.text());
+          steps[steps.length - 1] = { name: "Vector search failed — using fallback", status: "done" };
+        }
+      } catch (ragErr: any) {
+        console.error("RAG error:", ragErr.message);
+        steps[steps.length - 1] = { name: "Vector search error — using fallback", status: "done" };
+      }
+    }
+
+    // Fallback: direct file text if no Qdrant results
     let vaultContext = "";
-    if (vaultId || attachedFileIds?.length) {
+    if (!ragContext && (vaultId || attachedFileIds?.length)) {
       steps.push({ name: "Searching vault documents", status: "working" });
       const fileQuery = adminClient.from("files").select("id, name, extracted_text").eq("organization_id", orgId);
       if (vaultId) fileQuery.eq("vault_id", vaultId);
@@ -175,21 +252,6 @@ serve(async (req) => {
       }
     }
 
-    // Load file chunks (RAG)
-    let chunkContext = "";
-    if (vaultId) {
-      const { data: chunks } = await adminClient
-        .from("file_chunks")
-        .select("content, file_id, chunk_index")
-        .eq("organization_id", orgId)
-        .limit(20);
-      
-      if (chunks?.length) {
-        chunkContext = "\n\n## Document Chunks (RAG)\n" +
-          chunks.map((c) => c.content).join("\n---\n");
-      }
-    }
-
     // ---- PERPLEXITY SEARCH ----
     let perplexityContext = "";
     let perplexityCitations: { index: number; source: string; excerpt: string; url?: string }[] = [];
@@ -201,7 +263,6 @@ serve(async (req) => {
       const searchType = deepResearch ? "deep research" : pplxModel === "sonar-reasoning" ? "risk analysis" : pplxModel === "sonar-pro" ? "detailed search" : "web search";
       steps.push({ name: `Running ${searchType} (${pplxModel})`, status: "working" });
 
-      // Get Perplexity API key from api_integrations
       const { data: perplexityConfig } = await adminClient
         .from("api_integrations")
         .select("api_key_encrypted, config")
@@ -214,7 +275,6 @@ serve(async (req) => {
         try {
           const perplexityKey = atob(perplexityConfig.api_key_encrypted);
 
-          // Build domain filter from sources
           const domainFilter: string[] = [];
           if (sources) {
             for (const s of sources) {
@@ -225,7 +285,6 @@ serve(async (req) => {
             }
           }
 
-          // Build search query with jurisdiction context
           let searchQuery = message;
           if (sources && sources.length > 0) {
             const jurisdictionNames = sources.filter(s => s !== "Web Search");
@@ -294,7 +353,6 @@ serve(async (req) => {
     }
 
     // Build system prompt
-    // Select prompt based on promptMode
     const promptMode = (body as any).promptMode;
     let customPrompt = "";
     if (promptMode && agentConf.prompts?.[promptMode]) {
@@ -319,20 +377,18 @@ serve(async (req) => {
 
     const systemPrompt = `${basePrompt}
 ${knowledgeContext}
-${vaultContext}
-${chunkContext}
+${ragContext || vaultContext}
 ${perplexityContext}`;
 
-    // Determine AI provider - use org's configured LLM
+    // Determine AI provider
     let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
     let aiKey = Deno.env.get("LOVABLE_API_KEY") || "";
-    let modelId = "google/gemini-2.5-flash"; // default fallback
+    let modelId = "google/gemini-2.5-flash";
     let headers: Record<string, string> = {
       Authorization: `Bearer ${aiKey}`,
       "Content-Type": "application/json",
     };
 
-    // Load user-configured LLM from admin panel
     const { data: llmConfigs } = await adminClient
       .from("llm_configs")
       .select("*")
@@ -346,9 +402,7 @@ ${perplexityContext}`;
       const cfg = llmConfigs[0];
       let configuredModel = cfg.model_id;
       
-      // Ensure model has provider prefix for Lovable AI gateway
       if (configuredModel && !configuredModel.includes("/")) {
-        // Map common model names to gateway format
         if (configuredModel.startsWith("gemini")) {
           configuredModel = `google/${configuredModel}`;
         } else if (configuredModel.startsWith("gpt")) {
@@ -357,7 +411,6 @@ ${perplexityContext}`;
       }
       
       modelId = configuredModel || modelId;
-      console.log("Using configured model:", modelId);
     }
 
     // Build messages array
@@ -453,9 +506,9 @@ ${perplexityContext}`;
             }
           }
 
-          // Merge citations from vault docs + Perplexity
-          const vaultCitations = extractCitations(fullContent, vaultContext);
-          const allCitations = [...vaultCitations, ...perplexityCitations];
+          // Merge citations
+          const vaultCitations = extractCitations(fullContent, ragContext || vaultContext);
+          const allCitations = [...vaultCitations, ...ragCitations, ...perplexityCitations];
 
           controller.enqueue(
             encoder.encode(
@@ -536,4 +589,23 @@ function extractCitations(content: string, vaultContext: string): { index: numbe
   }
 
   return citations;
+}
+
+// --- OpenAI Embedding for query ---
+async function embedQuery(text: string, apiKey: string, model: string): Promise<number[]> {
+  const resp = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ input: [text], model }),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`OpenAI embedding error: ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  return data.data[0].embedding;
 }
