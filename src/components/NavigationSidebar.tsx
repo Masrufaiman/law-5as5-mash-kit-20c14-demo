@@ -179,17 +179,27 @@ export function NavigationSidebar() {
                 <ChevronRight className="h-3.5 w-3.5 opacity-50" />
               )}
             </button>
-            {vaultsOpen && vaults.length > 0 && (
+            {vaultsOpen && (
               <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
-                {vaults.map((vault) => (
-                  <button
-                    key={vault.id}
-                    onClick={() => navigate(`/vault?vault=${vault.id}`)}
-                    className="flex w-full items-center rounded-md px-2 py-1 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors truncate"
-                  >
-                    {vault.name}
-                  </button>
-                ))}
+                {isLoadingVaults ? (
+                  <>
+                    <Skeleton className="h-5 w-24 mx-2 my-1" />
+                    <Skeleton className="h-5 w-20 mx-2 my-1" />
+                    <Skeleton className="h-5 w-28 mx-2 my-1" />
+                  </>
+                ) : vaults.length > 0 ? (
+                  vaults.map((vault) => (
+                    <button
+                      key={vault.id}
+                      onClick={() => navigate(`/vault?vault=${vault.id}`)}
+                      className="flex w-full items-center rounded-md px-2 py-1 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors truncate"
+                    >
+                      {vault.name}
+                    </button>
+                  ))
+                ) : (
+                  <p className="px-2 py-1 text-xs text-sidebar-foreground/40">No vaults</p>
+                )}
               </div>
             )}
           </div>
