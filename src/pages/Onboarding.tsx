@@ -26,6 +26,15 @@ export default function Onboarding() {
     if (!user) return;
     setSubmitting(true);
 
+    // Ensure the Supabase client is primed with the latest auth tokens
+    // (prevents DB requests being sent without the JWT in some environments)
+    if (session?.access_token && session?.refresh_token) {
+      await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
+    }
+
     try {
       const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
