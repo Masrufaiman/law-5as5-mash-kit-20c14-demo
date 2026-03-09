@@ -87,7 +87,9 @@ Deno.serve(async (req) => {
     if (r2Conf.access_key_id && r2Conf.bucket_name) {
       console.log(`[document-processor] Downloading from R2: ${r2Key}`);
       const endpoint = r2Conf.endpoint_url || `https://${r2Conf.account_id}.r2.cloudflarestorage.com`;
-      const downloadUrl = `${endpoint}/${r2Conf.bucket_name}/${r2Key}`;
+      // URI-encode each path segment to handle spaces/special chars in filenames
+      const encodedR2Key = r2Key.split("/").map((seg: string) => encodeURIComponent(seg)).join("/");
+      const downloadUrl = `${endpoint}/${r2Conf.bucket_name}/${encodedR2Key}`;
       const downloadResp = await signedR2Request("GET", downloadUrl, r2Conf, new Uint8Array());
       if (!downloadResp.ok) {
         console.warn(`[document-processor] R2 download failed (${downloadResp.status}), trying Supabase Storage fallback`);
