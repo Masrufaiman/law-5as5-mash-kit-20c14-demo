@@ -8,10 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Shield } from "lucide-react";
+import { Plus, Shield } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import type { Tables } from "@/integrations/supabase/types";
 import { Constants } from "@/integrations/supabase/types";
@@ -26,17 +25,18 @@ export default function Admin() {
   const [showAdd, setShowAdd] = useState(false);
 
   const isAdmin = profile?.role === "admin" || profile?.role === "superadmin";
-  if (!isAdmin) return <Navigate to="/" replace />;
 
   useEffect(() => {
-    loadConfigs();
-  }, []);
+    if (isAdmin) loadConfigs();
+  }, [isAdmin]);
 
   const loadConfigs = async () => {
     const { data } = await supabase.from("llm_configs").select("*").order("created_at");
     setConfigs(data || []);
     setLoading(false);
   };
+
+  if (!isAdmin) return <Navigate to="/" replace />;
 
   return (
     <AppLayout>
@@ -82,9 +82,7 @@ export default function Admin() {
                         </Badge>
                         <Badge variant="outline">{config.use_case}</Badge>
                       </div>
-                      {config.is_default && (
-                        <Badge variant="secondary">Default</Badge>
-                      )}
+                      {config.is_default && <Badge variant="secondary">Default</Badge>}
                     </CardContent>
                   </Card>
                 ))}
@@ -114,7 +112,6 @@ function AddLlmForm({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
 
     try {
-      // For now, store a placeholder encrypted key — real encryption via edge function later
       const encoder = new TextEncoder();
       const keyData = encoder.encode(apiKey);
       const iv = crypto.getRandomValues(new Uint8Array(12));
