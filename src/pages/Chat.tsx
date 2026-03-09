@@ -587,18 +587,26 @@ export default function Chat() {
                         onFollowUp={handleChoiceSelect}
                       />
 
-                      {/* Skeleton loading when waiting for first token */}
-                      {isLastUser && showSkeleton && (
-                        <div className="pl-8 mt-4 space-y-3">
+                      {/* Streaming indicator: skeleton or steps, always shows LawKit AI branding */}
+                      {isLastUser && showStreamingIndicator && (
+                        <div className="mt-4">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
                               <Bot className="h-3.5 w-3.5 text-muted-foreground" />
                             </div>
                             <span className="text-xs font-semibold text-foreground">LawKit AI</span>
                           </div>
-                          <Skeleton className="h-4 w-3/4" />
-                          <Skeleton className="h-4 w-full" />
-                          <Skeleton className="h-4 w-2/3" />
+                          <div className="pl-8">
+                            {steps.length > 0 ? (
+                              <StepTracker steps={steps} isStreaming={true} />
+                            ) : (
+                              <div className="space-y-3">
+                                <Skeleton className="h-4 w-3/4" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-2/3" />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

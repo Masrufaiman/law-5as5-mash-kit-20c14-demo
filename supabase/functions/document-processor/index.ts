@@ -336,77 +336,45 @@ Deno.serve(async (req) => {
   }
 });
 
-// --- AWS Textract ---
-async function callTextract(fileBytes: Uint8Array, ocrConf: any): Promise<string> {
-  const region = ocrConf.aws_region || "eu-central-1";
-  const service = "textract";
-  const host = `textract.${region}.amazonaws.com`;
-  const url = `https://${host}`;
+// --- Mistral OCR ---
+async function callMistralOCR(fileBytes: Uint8Array, mimeType: string, apiKey: string): Promise<{ text: string; pageCount: number }> {
+  // Convert Uint8Array to base64
+  let binary = "";
+  const chunkSize = 32768;
+  for (let i = 0; i < fileBytes.length; i += chunkSize) {
+    const slice = fileBytes.subarray(i, Math.min(i + chunkSize, fileBytes.length));
+    binary += String.fromCharCode(...slice);
+  }
+  const base64 = btoa(binary);
+  const dataUrl = `data:${mimeType};base64,${base64}`;
 
-  const body = JSON.stringify({
-    Document: {
-      Bytes: btoa(String.fromCharCode(...fileBytes.slice(0, 5 * 1024 * 1024))),
-    },
-  });
-
-  const now = new Date();
-  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
-  const dateStamp = amzDate.slice(0, 8);
-
-  const bodyBytes = new TextEncoder().encode(body);
-  const payloadHash = await sha256Hex(bodyBytes);
-
-  const headers: Record<string, string> = {
-    host,
-    "x-amz-date": amzDate,
-    "x-amz-content-sha256": payloadHash,
-    "content-type": "application/x-amz-json-1.1",
-    "x-amz-target": "Textract.DetectDocumentText",
-  };
-
-  const signedHeaderKeys = Object.keys(headers).sort();
-  const signedHeaders = signedHeaderKeys.join(";");
-  const canonicalHeaders = signedHeaderKeys.map(k => `${k}:${headers[k]}\n`).join("");
-
-  const canonicalRequest = [
-    "POST",
-    "/",
-    "",
-    canonicalHeaders,
-    signedHeaders,
-    payloadHash,
-  ].join("\n");
-
-  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
-  const stringToSign = [
-    "AWS4-HMAC-SHA256",
-    amzDate,
-    credentialScope,
-    await sha256Hex(new TextEncoder().encode(canonicalRequest)),
-  ].join("\n");
-
-  const signingKey = await getSignatureKey(ocrConf.aws_secret_key, dateStamp, region, service);
-  const signature = await hmacHex(signingKey, stringToSign);
-
-  const authorization = `AWS4-HMAC-SHA256 Credential=${ocrConf.aws_access_key}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
-  const resp = await fetch(url, {
+  const response = await fetch("https://api.mistral.ai/v1/ocr", {
     method: "POST",
-    headers: { ...headers, Authorization: authorization },
-    body,
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "mistral-ocr-latest",
+      document: {
+        type: "document_url",
+        document_url: dataUrl,
+      },
+      include_image_base64: false,
+    }),
   });
 
-  if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error(`Textract error ${resp.status}: ${errText.slice(0, 300)}`);
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Mistral OCR error ${response.status}: ${errText.slice(0, 300)}`);
   }
 
-  const result = await resp.json();
-  const lines = (result.Blocks || [])
-    .filter((b: any) => b.BlockType === "LINE")
-    .map((b: any) => b.Text);
+  const data = await response.json();
+  const pageTexts = data.pages?.map((page: any) => page.markdown || "") ?? [];
+  const text = pageTexts.join("\n\n");
+  const pageCount = data.pages?.length ?? 1;
 
-  return lines.join("\n");
+  return { text, pageCount };
 }
 
 // --- OpenAI Embeddings ---
