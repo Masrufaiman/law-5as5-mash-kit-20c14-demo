@@ -51,24 +51,28 @@ export function NavigationSidebar() {
   const [vaults, setVaults] = useState<VaultItem[]>([]);
   const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [isLoadingVaults, setIsLoadingVaults] = useState(true);
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
 
   useEffect(() => {
     if (!profile?.organization_id) return;
+    setIsLoadingVaults(true);
+    setIsLoadingChats(true);
+
     supabase
       .from("vaults")
       .select("id, name")
       .eq("organization_id", profile.organization_id)
       .order("created_at")
-      .then(({ data }) => setVaults(data || []));
+      .then(({ data }) => { setVaults(data || []); setIsLoadingVaults(false); });
 
-    // Load recent conversations
     supabase
       .from("conversations")
       .select("id, title, created_at")
       .eq("organization_id", profile.organization_id)
       .order("updated_at", { ascending: false })
       .limit(10)
-      .then(({ data }) => setRecentChats(data || []));
+      .then(({ data }) => { setRecentChats(data || []); setIsLoadingChats(false); });
   }, [profile?.organization_id]);
 
   // Keyboard shortcut for search
