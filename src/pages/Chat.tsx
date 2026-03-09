@@ -186,6 +186,7 @@ export default function Chat() {
       conversationId: data.id,
       organizationId: profile.organization_id!,
       vaultId: vault,
+      vaultName: vName || vaultName,
       deepResearch: deep,
       sources: srcs,
       useCase: pMode,
