@@ -144,7 +144,9 @@ export function MultiStepQuestionnaire({ preamble, questions, onComplete, disabl
   return (
     <div className="space-y-3">
       {preamble && (
-        <p className="text-sm text-foreground/90 leading-relaxed">{preamble}</p>
+        <div className="text-sm text-foreground/90 leading-relaxed prose prose-sm max-w-none">
+          <ReactMarkdown>{preamble}</ReactMarkdown>
+        </div>
       )}
 
       {/* Progress bar */}

@@ -36,6 +36,7 @@ const App = () => (
             <Route path="/documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/shared/:token" element={<SharedChat />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
