@@ -27,8 +27,8 @@ interface StreamChatOptions {
   deepResearch?: boolean;
   attachedFileIds?: string[];
   sources?: string[];
-  useCase?: string; // "red_flag" | "review" | "chat" — hints Perplexity model selection
-  promptMode?: string; // selects system prompt: "red_flags" | "drafting" | "chat"
+  useCase?: string;
+  promptMode?: string;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`;
@@ -39,6 +39,7 @@ export function useStreamChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const lastUserMsgRef = useRef<string>("");
 
   const loadHistory = useCallback((history: ChatMessage[]) => {
     setMessages(history);
@@ -49,6 +50,7 @@ export function useStreamChat() {
       setError(null);
       setSteps([]);
       setIsStreaming(true);
+      lastUserMsgRef.current = content;
 
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -151,21 +153,18 @@ export function useStreamChat() {
                   ];
                 });
               } else if (parsed.type === "done") {
-                // Update with citations
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantId
-                      ? { ...m, citations: parsed.citations, model: parsed.model }
+                      ? { ...m, citations: parsed.citations }
                       : m
                   )
                 );
-                // Mark all steps as done
                 setSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
               } else if (parsed.type === "error") {
                 setError(parsed.error);
               }
             } catch {
-              // Skip unparseable lines instead of re-buffering (prevents infinite loops)
               continue;
             }
           }
@@ -180,6 +179,36 @@ export function useStreamChat() {
       }
     },
     [messages]
+  );
+
+  const regenerateLastMessage = useCallback(
+    (options: StreamChatOptions) => {
+      // Remove last assistant message, re-send last user message
+      setMessages((prev) => {
+        const withoutLast = prev[prev.length - 1]?.role === "assistant"
+          ? prev.slice(0, -1)
+          : prev;
+        return withoutLast;
+      });
+
+      const lastUserContent = lastUserMsgRef.current;
+      if (!lastUserContent) return;
+
+      // We need to remove the user msg too since sendMessage adds it
+      setMessages((prev) => {
+        // Remove the last user message so sendMessage can re-add it
+        const lastIdx = prev.length - 1;
+        if (prev[lastIdx]?.role === "user") {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+
+      setTimeout(() => {
+        sendMessage(lastUserContent, options);
+      }, 100);
+    },
+    [sendMessage]
   );
 
   const cancelStream = useCallback(() => {
@@ -202,5 +231,6 @@ export function useStreamChat() {
     cancelStream,
     clearMessages,
     loadHistory,
+    regenerateLastMessage,
   };
 }

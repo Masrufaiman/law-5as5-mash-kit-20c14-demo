@@ -7,9 +7,10 @@ import type { ChatMessage } from "@/hooks/useStreamChat";
 interface MessageBubbleProps {
   message: ChatMessage;
   isStreaming?: boolean;
+  onRegenerate?: () => void;
 }
 
-export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
+export function MessageBubble({ message, isStreaming, onRegenerate }: MessageBubbleProps) {
   const isUser = message.role === "user";
 
   return (
@@ -29,11 +30,6 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
         <span className="text-xs font-semibold text-foreground">
           {isUser ? "You" : "LawKit AI"}
         </span>
-        {message.model && !isUser && (
-          <span className="text-[10px] text-muted-foreground/60 font-mono">
-            {message.model.split("/").pop()}
-          </span>
-        )}
       </div>
 
       {/* Content — no background, clean prose */}
@@ -154,9 +150,13 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
           </div>
         )}
 
-        {/* Actions for assistant messages — always visible */}
+        {/* Actions for assistant messages */}
         {!isUser && !isStreaming && message.content && (
-          <ResponseActions content={message.content} />
+          <ResponseActions
+            content={message.content}
+            messageId={message.id}
+            onRegenerate={onRegenerate}
+          />
         )}
       </div>
     </div>

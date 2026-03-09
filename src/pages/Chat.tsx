@@ -7,7 +7,9 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { StepTracker } from "@/components/chat/StepTracker";
 import { SourcesPanel } from "@/components/chat/SourcesPanel";
+import { DocumentEditor } from "@/components/editor/DocumentEditor";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +23,7 @@ import {
   PanelRightOpen,
   PanelRightClose,
   StopCircle,
+  FileText,
 } from "lucide-react";
 
 export default function Chat() {
@@ -40,6 +43,7 @@ export default function Chat() {
     cancelStream,
     clearMessages,
     loadHistory,
+    regenerateLastMessage,
   } = useStreamChat();
 
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -50,6 +54,7 @@ export default function Chat() {
   const [deepResearch, setDeepResearch] = useState(false);
   const [activeSources, setActiveSources] = useState<string[]>([]);
   const [promptMode, setPromptMode] = useState<string | undefined>();
+  const [editorDoc, setEditorDoc] = useState<{ title: string; content: string } | null>(null);
 
   // Load conversation from URL ?id=
   useEffect(() => {
@@ -118,6 +123,8 @@ export default function Chat() {
     }
   }, [error]);
 
+  const lastStreamOptions = useRef<any>(null);
+
   const createConversationAndSend = async (
     msg: string,
     vault?: string,
@@ -146,14 +153,16 @@ export default function Chat() {
     setConversationId(data.id);
     setConversationTitle(data.title);
 
-    sendMessage(msg, {
+    const opts = {
       conversationId: data.id,
       organizationId: profile.organization_id!,
       vaultId: vault,
       deepResearch: deep,
       sources: srcs,
       useCase: pMode,
-    });
+    };
+    lastStreamOptions.current = opts;
+    sendMessage(msg, opts);
   };
 
   const handleSend = async () => {
@@ -164,21 +173,29 @@ export default function Chat() {
     if (!conversationId) {
       await createConversationAndSend(msg, vaultId, deepResearch, activeSources, promptMode);
     } else {
-      sendMessage(msg, {
+      const opts = {
         conversationId,
         organizationId: profile.organization_id!,
         vaultId,
         deepResearch,
         sources: activeSources,
         useCase: promptMode,
-      });
+      };
+      lastStreamOptions.current = opts;
+      sendMessage(msg, opts);
     }
+  };
+
+  const handleRegenerate = () => {
+    if (!lastStreamOptions.current || isStreaming) return;
+    regenerateLastMessage(lastStreamOptions.current);
   };
 
   const handleNewThread = () => {
     setConversationId(null);
     setConversationTitle("New Conversation");
     setPromptMode(undefined);
+    setEditorDoc(null);
     clearMessages();
     navigate("/chat", { replace: true });
   };
@@ -188,11 +205,32 @@ export default function Chat() {
     .filter((m) => m.role === "assistant" && m.citations)
     .flatMap((m) => m.citations || []);
 
-  // Find last assistant message index for step placement
-  const lastAssistantIdx = messages.reduce((acc, m, i) => m.role === "assistant" ? i : acc, -1);
+  // Find last user message index for step placement (steps go AFTER last user msg, BEFORE assistant response)
+  const lastUserIdx = messages.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
+
+  // Check if assistant has started content (for skeleton)
+  const lastMsg = messages[messages.length - 1];
+  const showSkeleton = isStreaming && lastMsg?.role === "user" && steps.length === 0;
+  const showStepsBeforeResponse = steps.length > 0;
+
+  // Detect document titles in assistant messages (lines starting with "## " or "# " could be docs)
+  const extractDocTitle = (content: string): string | null => {
+    // Look for a draft/document pattern
+    const match = content.match(/^#\s+(.+)/m) || content.match(/^##\s+(.+)/m);
+    if (match && content.length > 500) return match[1];
+    return null;
+  };
+
+  const rightPanel = editorDoc ? (
+    <DocumentEditor
+      title={editorDoc.title}
+      content={editorDoc.content}
+      onClose={() => setEditorDoc(null)}
+    />
+  ) : undefined;
 
   return (
-    <AppLayout>
+    <AppLayout rightPanel={rightPanel}>
       <div className="flex h-full">
         {/* Main chat area */}
         <div className="flex flex-1 flex-col min-w-0">
@@ -259,36 +297,64 @@ export default function Chat() {
             </div>
           ) : (
             <ScrollArea className="flex-1">
-              <div className="mx-auto max-w-3xl px-6 py-6 space-y-8">
-                {messages.map((msg, i) => (
-                  <div key={msg.id}>
-                    <MessageBubble
-                      message={msg}
-                      isStreaming={
-                        isStreaming &&
-                        msg.role === "assistant" &&
-                        i === messages.length - 1
-                      }
-                    />
-                    {/* Show steps BELOW the last assistant message */}
-                    {msg.role === "assistant" &&
-                      i === lastAssistantIdx &&
-                      steps.length > 0 && (
-                        <div className="pl-8 mt-3">
+              <div className="mx-auto max-w-3xl px-6 py-6 space-y-6">
+                {messages.map((msg, i) => {
+                  const isLastUser = msg.role === "user" && i === lastUserIdx;
+                  const docTitle = msg.role === "assistant" ? extractDocTitle(msg.content) : null;
+
+                  return (
+                    <div key={msg.id}>
+                      <MessageBubble
+                        message={msg}
+                        isStreaming={
+                          isStreaming &&
+                          msg.role === "assistant" &&
+                          i === messages.length - 1
+                        }
+                        onRegenerate={msg.role === "assistant" ? handleRegenerate : undefined}
+                      />
+
+                      {/* Document link under assistant message */}
+                      {docTitle && !isStreaming && (
+                        <button
+                          onClick={() =>
+                            setEditorDoc(
+                              editorDoc?.title === docTitle
+                                ? null
+                                : { title: docTitle, content: msg.content }
+                            )
+                          }
+                          className="flex items-center gap-2 mt-2 pl-8 text-xs text-primary hover:underline transition-colors"
+                        >
+                          <FileText className="h-3 w-3" />
+                          <span>Open "{docTitle}" in editor</span>
+                        </button>
+                      )}
+
+                      {/* Steps AFTER last user message, BEFORE the assistant response */}
+                      {isLastUser && showStepsBeforeResponse && (
+                        <div className="pl-8 mt-4">
                           <StepTracker steps={steps} isStreaming={isStreaming} />
                         </div>
                       )}
-                  </div>
-                ))}
 
-                {/* Steps when streaming but no assistant message yet */}
-                {steps.length > 0 &&
-                  lastAssistantIdx === -1 &&
-                  isStreaming && (
-                    <div className="pl-8">
-                      <StepTracker steps={steps} isStreaming={isStreaming} />
+                      {/* Skeleton loading when waiting for first token */}
+                      {isLastUser && showSkeleton && (
+                        <div className="pl-8 mt-4 space-y-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
+                              <span className="text-[10px] font-bold text-muted-foreground">LK</span>
+                            </div>
+                            <span className="text-xs font-semibold text-foreground">LawKit AI</span>
+                          </div>
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-2/3" />
+                        </div>
+                      )}
                     </div>
-                  )}
+                  );
+                })}
 
                 <div ref={scrollRef} />
               </div>
