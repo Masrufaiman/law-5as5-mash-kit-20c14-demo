@@ -207,6 +207,7 @@ export default function Chat() {
         conversationId,
         organizationId: profile.organization_id!,
         vaultId,
+        vaultName,
         deepResearch,
         sources: activeSources,
         useCase: promptMode,
