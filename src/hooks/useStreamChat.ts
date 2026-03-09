@@ -34,8 +34,10 @@ interface StreamChatOptions {
   conversationId: string;
   organizationId: string;
   vaultId?: string;
+  vaultName?: string;
   deepResearch?: boolean;
   attachedFileIds?: string[];
+  attachedFileNames?: string[];
   sources?: string[];
   useCase?: string;
   promptMode?: string;
