@@ -158,7 +158,8 @@ export default function Chat() {
     vault?: string,
     deep?: boolean,
     srcs?: string[],
-    pMode?: string
+    pMode?: string,
+    vName?: string
   ) => {
     if (!profile?.organization_id) return;
 
