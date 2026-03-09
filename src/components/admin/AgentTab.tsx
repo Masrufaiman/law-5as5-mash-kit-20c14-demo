@@ -424,37 +424,7 @@ export function AgentTab({ orgId }: AgentTabProps) {
             </CardContent>
           </Card>
 
-          {/* Citation Lookup */}
-          <Card className="border border-border">
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-primary" />
-                <CardTitle className="text-sm">Citation Lookup</CardTitle>
-              </div>
-              <CardDescription className="text-xs">Preferred legal databases and citation format.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <Label className="text-xs">Preferred Databases</Label>
-                <div className="flex flex-wrap gap-3">
-                  {CITATION_DB_OPTIONS.map((db) => (
-                    <div key={db.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`db-${db.id}`}
-                        checked={citationDatabases.includes(db.id)}
-                        onCheckedChange={() => {
-                          setCitationDatabases(prev =>
-                            prev.includes(db.id) ? prev.filter(d => d !== db.id) : [...prev, db.id]
-                          );
-                        }}
-                      />
-                      <label htmlFor={`db-${db.id}`} className="text-xs cursor-pointer">{db.label}</label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Citation Lookup removed — citations come from user docs, KB, and legal APIs */}
 
           {/* Tavily */}
           <Card className="border border-border">

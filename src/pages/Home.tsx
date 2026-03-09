@@ -8,10 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
-  Paperclip,
-  BookOpen,
   Sparkles,
   Wand2,
   Globe,
@@ -25,11 +24,21 @@ import {
   Clock,
   ListChecks,
   ChevronRight,
+  BookOpen,
+  Loader2,
 } from "lucide-react";
+
+const INTERNAL_PROVIDERS = ["cloudflare_r2", "agent_config", "knowledge_document"];
 
 interface VaultItem {
   id: string;
   name: string;
+}
+
+interface KBSource {
+  id: string;
+  title: string;
+  category: string | null;
 }
 
 interface WorkflowCard {
@@ -75,6 +84,7 @@ export default function Home() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { toast } = useToast();
 
   const [message, setMessage] = useState("");
   const [deepResearch, setDeepResearch] = useState(false);
@@ -82,10 +92,14 @@ export default function Home() {
   const [selectedVault, setSelectedVault] = useState<VaultItem | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [activeSources, setActiveSources] = useState<string[]>([]);
-  const [integrations, setIntegrations] = useState<{ name: string; provider: string }[]>([]);
+  const [kbSources, setKbSources] = useState<KBSource[]>([]);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [improving, setImproving] = useState(false);
 
   useEffect(() => {
     if (!profile?.organization_id) return;
+    
+    // Load vaults
     supabase
       .from("vaults")
       .select("id, name")
@@ -93,17 +107,27 @@ export default function Home() {
       .order("created_at")
       .then(({ data }) => setVaults(data || []));
 
+    // Load knowledge base entries as sources
     supabase
-      .from("api_integrations")
-      .select("name, provider")
-      .eq("organization_id", profile.organization_id)
-      .eq("is_active", true)
-      .then(({ data }) => setIntegrations(data || []));
+      .from("knowledge_entries")
+      .select("id, title, category")
+      .or(`organization_id.eq.${profile.organization_id},is_global.eq.true`)
+      .order("title")
+      .then(({ data }) => setKbSources(data || []));
   }, [profile?.organization_id]);
 
   const handleSend = () => {
     if (!message.trim()) return;
-    navigate("/chat", { state: { initialMessage: message, deepResearch, selectedVault, attachedFiles, activeSources } });
+    navigate("/chat", {
+      state: {
+        initialMessage: message,
+        deepResearch,
+        selectedVault,
+        attachedFiles,
+        activeSources,
+        webSearch: webSearchEnabled,
+      },
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -134,6 +158,74 @@ export default function Home() {
     );
   };
 
+  const handleImprove = async () => {
+    if (!message.trim() || improving) return;
+    setImproving(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Not authenticated");
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            conversationId: "",
+            message: `Rewrite and improve this legal research prompt to be clearer, more specific, and more effective. Return ONLY the improved prompt, nothing else:\n\n"${message}"`,
+            history: [],
+          }),
+        }
+      );
+
+      if (!resp.ok) throw new Error("Failed to improve prompt");
+
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let improved = "";
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+          let line = buffer.slice(0, newlineIndex);
+          buffer = buffer.slice(newlineIndex + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.type === "token") improved += parsed.content;
+          } catch {}
+        }
+      }
+
+      if (improved.trim()) {
+        // Remove surrounding quotes if present
+        let clean = improved.trim();
+        if (clean.startsWith('"') && clean.endsWith('"')) clean = clean.slice(1, -1);
+        setMessage(clean);
+        toast({ title: "Prompt improved" });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setImproving(false);
+    }
+  };
+
+  // Chips that go inside the prompt box
+  const hasChips = selectedVault || webSearchEnabled || deepResearch || activeSources.length > 0 || attachedFiles.length > 0;
+
   return (
     <AppLayout>
       <div className="flex h-full flex-col items-center justify-center px-6">
@@ -148,77 +240,59 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Context chips above input */}
-          <div className="flex items-center justify-center gap-2 flex-wrap">
-            {selectedVault ? (
-              <Badge
-                variant="outline"
-                className="gap-1.5 cursor-pointer hover:bg-muted text-xs py-1 px-2.5"
-                onClick={() => setSelectedVault(null)}
-              >
-                <FolderOpen className="h-3 w-3" />
-                {selectedVault.name}
-                <X className="h-2.5 w-2.5 ml-0.5" />
-              </Badge>
-            ) : (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-                    <FolderOpen className="h-3 w-3" />
-                    Choose vault
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-48 p-2" align="center">
-                  <p className="text-xs font-medium text-foreground px-2 py-1.5">Select a vault</p>
-                  {vaults.map((v) => (
-                    <button
-                      key={v.id}
-                      onClick={() => setSelectedVault(v)}
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                    >
-                      <FolderOpen className="h-3 w-3 text-muted-foreground" />
-                      {v.name}
-                    </button>
-                  ))}
-                  {vaults.length === 0 && (
-                    <p className="text-xs text-muted-foreground px-2 py-1.5">No vaults yet</p>
-                  )}
-                </PopoverContent>
-              </Popover>
-            )}
-            <span className="text-border">·</span>
-            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-              <Scale className="h-3 w-3" />
-              Set client matter
-            </button>
-          </div>
-
-          {/* Attached files */}
-          {(attachedFiles.length > 0 || activeSources.length > 0) && (
-            <div className="flex flex-wrap gap-1.5 justify-center">
-              {attachedFiles.map((file, i) => (
-                <Badge key={i} variant="secondary" className="gap-1.5 text-xs py-1 px-2.5">
-                  <FileText className="h-3 w-3" />
-                  {file.name}
-                  <button onClick={() => removeFile(i)}>
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </Badge>
-              ))}
-              {activeSources.map((source) => (
-                <Badge key={source} variant="secondary" className="gap-1.5 text-xs py-1 px-2.5">
-                  <Globe className="h-3 w-3" />
-                  {source}
-                  <button onClick={() => toggleSource(source)}>
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          )}
-
           {/* Main prompt box */}
           <div className="border border-border rounded-lg bg-card overflow-hidden">
+            {/* Tags inside prompt box */}
+            {hasChips && (
+              <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+                {selectedVault && (
+                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
+                    <FolderOpen className="h-2.5 w-2.5" />
+                    {selectedVault.name}
+                    <button onClick={() => setSelectedVault(null)} className="ml-0.5">
+                      <X className="h-2 w-2" />
+                    </button>
+                  </Badge>
+                )}
+                {webSearchEnabled && (
+                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
+                    <Globe className="h-2.5 w-2.5" />
+                    Web Search
+                    <button onClick={() => setWebSearchEnabled(false)} className="ml-0.5">
+                      <X className="h-2 w-2" />
+                    </button>
+                  </Badge>
+                )}
+                {deepResearch && (
+                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
+                    <Search className="h-2.5 w-2.5" />
+                    Deep Research
+                    <button onClick={() => setDeepResearch(false)} className="ml-0.5">
+                      <X className="h-2 w-2" />
+                    </button>
+                  </Badge>
+                )}
+                {activeSources.map((source) => (
+                  <Badge key={source} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
+                    <BookOpen className="h-2.5 w-2.5" />
+                    {source}
+                    <button onClick={() => toggleSource(source)} className="ml-0.5">
+                      <X className="h-2 w-2" />
+                    </button>
+                  </Badge>
+                ))}
+                {attachedFiles.map((file, i) => (
+                  <Badge key={i} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
+                    <FileText className="h-2.5 w-2.5" />
+                    {file.name}
+                    <button onClick={() => removeFile(i)} className="ml-0.5">
+                      <X className="h-2 w-2" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+
             <Textarea
               ref={textareaRef}
               value={message}
@@ -239,7 +313,7 @@ export default function Home() {
                     Files & sources
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-56 p-2" align="start">
+                <PopoverContent className="w-64 p-2" align="start">
                   <button
                     onClick={handleFileSelect}
                     className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
@@ -247,35 +321,78 @@ export default function Home() {
                     <Upload className="h-3.5 w-3.5 text-muted-foreground" />
                     Upload files
                   </button>
+
                   <div className="my-1 h-px bg-border" />
-                  <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">From vault</p>
+                  <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
+                    Vaults
+                  </p>
                   {vaults.slice(0, 5).map((v) => (
                     <button
                       key={v.id}
                       onClick={() => setSelectedVault(v)}
-                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                    >
-                      <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                      {v.name}
-                    </button>
-                  ))}
-                  <div className="my-1 h-px bg-border" />
-                  <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">Sources</p>
-                  {["Web search", "EDGAR", "LexisNexis"].map((src) => (
-                    <button
-                      key={src}
-                      onClick={() => toggleSource(src)}
                       className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
                     >
                       <span className="flex items-center gap-2.5">
-                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                        {src}
+                        <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                        {v.name}
                       </span>
-                      {activeSources.includes(src) && (
+                      {selectedVault?.id === v.id && (
                         <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                       )}
                     </button>
                   ))}
+                  {vaults.length === 0 && (
+                    <p className="text-xs text-muted-foreground px-2.5 py-1.5">No vaults yet</p>
+                  )}
+
+                  <div className="my-1 h-px bg-border" />
+                  <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
+                    Search
+                  </p>
+                  <button
+                    onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                    className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                      Web Search
+                    </span>
+                    {webSearchEnabled && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                  </button>
+                  <button
+                    onClick={() => setDeepResearch(!deepResearch)}
+                    className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                      Deep Research
+                    </span>
+                    {deepResearch && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                  </button>
+
+                  {kbSources.length > 0 && (
+                    <>
+                      <div className="my-1 h-px bg-border" />
+                      <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
+                        Knowledge Base
+                      </p>
+                      {kbSources.map((kb) => (
+                        <button
+                          key={kb.id}
+                          onClick={() => toggleSource(kb.title)}
+                          className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                        >
+                          <span className="flex items-center gap-2.5">
+                            <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                            {kb.title}
+                          </span>
+                          {activeSources.includes(kb.title) && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                          )}
+                        </button>
+                      ))}
+                    </>
+                  )}
                 </PopoverContent>
               </Popover>
 
@@ -284,27 +401,20 @@ export default function Home() {
                 Prompts
               </Button>
 
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
-                <Wand2 className="h-3.5 w-3.5" />
-                Customize
-              </Button>
-
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
-                <Sparkles className="h-3.5 w-3.5" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                onClick={handleImprove}
+                disabled={!message.trim() || improving}
+              >
+                {improving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
                 Improve
               </Button>
-
-              <div className="mx-1 h-4 w-px bg-border" />
-
-              {/* Deep research toggle */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-muted-foreground">Deep research</span>
-                <Switch
-                  checked={deepResearch}
-                  onCheckedChange={setDeepResearch}
-                  className="scale-75"
-                />
-              </div>
 
               <div className="flex-1" />
 
@@ -319,23 +429,6 @@ export default function Home() {
               </Button>
             </div>
           </div>
-
-          {/* Integration chips */}
-          {integrations.length > 0 && (
-            <div className="flex items-center justify-center gap-1.5 flex-wrap">
-              {integrations.map((int) => (
-                <Badge
-                  key={int.name}
-                  variant="outline"
-                  className="text-[10px] cursor-pointer hover:bg-muted py-0.5 px-2"
-                  onClick={() => toggleSource(int.name)}
-                >
-                  <Plus className="h-2.5 w-2.5 mr-1" />
-                  {int.name}
-                </Badge>
-              ))}
-            </div>
-          )}
 
           {/* Recommended workflows */}
           <div className="space-y-3 pb-8">
