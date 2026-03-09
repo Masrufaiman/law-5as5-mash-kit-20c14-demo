@@ -256,7 +256,7 @@ serve(async (req) => {
         vaultContext = "\n\n## Relevant Documents\n" +
           files
             .filter((f) => f.extracted_text)
-            .map((f, i) => `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, 3000)}`)
+            .map((f, i) => `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, 15000)}`)
             .join("\n\n");
         steps[steps.length - 1] = { name: `Searched ${files.length} documents in vault`, status: "done" };
       } else {
