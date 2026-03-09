@@ -64,10 +64,16 @@ export function useStreamChat() {
       setIsStreaming(true);
       lastUserMsgRef.current = content;
 
+      const attachments: MessageAttachments = {};
+      if (options.vaultName) attachments.vaultName = options.vaultName;
+      if (options.vaultId) attachments.vaultId = options.vaultId;
+      if (options.attachedFileNames?.length) attachments.fileNames = options.attachedFileNames;
+
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "user",
         content,
+        attachments: Object.keys(attachments).length > 0 ? attachments : undefined,
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, userMsg]);
