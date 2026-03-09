@@ -150,9 +150,7 @@ export function AgentTab({ orgId }: AgentTabProps) {
         },
         workflows,
         ocr: {
-          aws_access_key: awsAccessKey,
-          aws_secret_key: awsSecretKey,
-          aws_region: awsRegion,
+          mistral_api_key: mistralApiKey,
         },
         qdrant: {
           url: qdrantUrl,
