@@ -105,6 +105,11 @@ export default function Vault() {
         });
         if (dbError) throw dbError;
 
+        // Trigger background processing
+        supabase.functions.invoke("document-processor", {
+          body: { fileId: storagePath },
+        }).catch((err) => console.warn("Processing trigger failed:", err));
+
         toast({ title: "Uploaded", description: `${file.name} uploaded successfully.` });
       } catch (err: any) {
         toast({ title: "Upload failed", description: err.message, variant: "destructive" });
