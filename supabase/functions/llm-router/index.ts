@@ -17,6 +17,26 @@ interface ChatRequest {
   history?: { role: string; content: string }[];
 }
 
+// Map source names to Perplexity search domain filters
+const SOURCE_DOMAIN_MAP: Record<string, string[]> = {
+  "EDGAR (SEC)": ["sec.gov", "edgar.sec.gov"],
+  "CourtListener": ["courtlistener.com"],
+  "EUR-Lex": ["eur-lex.europa.eu"],
+  "WorldLII": ["worldlii.org"],
+  "US Law": ["law.cornell.edu", "supremecourt.gov", "uscourts.gov"],
+  "UK Law": ["legislation.gov.uk", "judiciary.uk", "bailii.org"],
+  "Indian Law": ["indiankanoon.org", "sci.gov.in"],
+  "Canadian Law": ["canlii.org", "laws-lois.justice.gc.ca"],
+  "Australian Law": ["austlii.edu.au", "legislation.gov.au"],
+  "French Law": ["legifrance.gouv.fr"],
+  "German Law": ["gesetze-im-internet.de"],
+  "Brazilian Law": ["planalto.gov.br"],
+  "Singapore Law": ["sso.agc.gov.sg", "elitigation.sg"],
+  "UAE Law": ["tamimi.com"],
+  "Italian Law": ["normattiva.it"],
+  "Web Search": [],
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -35,7 +55,6 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify user with getUser
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -52,7 +71,6 @@ serve(async (req) => {
     const userId = userData.user.id;
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Get user profile for org_id
     const { data: profile } = await adminClient
       .from("profiles")
       .select("organization_id")
@@ -70,10 +88,19 @@ serve(async (req) => {
     const body: ChatRequest = await req.json();
     const { conversationId, message, vaultId, deepResearch, attachedFileIds, sources, history } = body;
 
-    // Build agentic steps for SSE
     const steps: { name: string; status: "done" | "working" }[] = [];
 
-    // Collect context from knowledge base
+    // Load agent config for custom system prompts
+    const { data: agentConfig } = await adminClient
+      .from("api_integrations")
+      .select("config")
+      .eq("organization_id", orgId)
+      .eq("provider", "agent_config")
+      .maybeSingle();
+
+    const agentConf = (agentConfig?.config as any) || {};
+
+    // Load knowledge base context
     const { data: knowledgeEntries } = await adminClient
       .from("knowledge_entries")
       .select("title, content, category")
@@ -86,7 +113,7 @@ serve(async (req) => {
       steps.push({ name: `Loaded ${knowledgeEntries.length} knowledge base entries`, status: "done" });
     }
 
-    // Collect vault file context if vault is selected
+    // Load vault file context
     let vaultContext = "";
     if (vaultId || attachedFileIds?.length) {
       steps.push({ name: "Searching vault documents", status: "working" });
@@ -101,14 +128,13 @@ serve(async (req) => {
             .filter((f) => f.extracted_text)
             .map((f, i) => `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, 3000)}`)
             .join("\n\n");
-        // Update step
         steps[steps.length - 1] = { name: `Searched ${files.length} documents in vault`, status: "done" };
       } else {
         steps[steps.length - 1] = { name: "No matching documents found", status: "done" };
       }
     }
 
-    // Check for file chunks (RAG)
+    // Load file chunks (RAG)
     let chunkContext = "";
     if (vaultId) {
       const { data: chunks } = await adminClient
@@ -123,8 +149,110 @@ serve(async (req) => {
       }
     }
 
+    // ---- PERPLEXITY SEARCH ----
+    let perplexityContext = "";
+    let perplexityCitations: { index: number; source: string; excerpt: string; url?: string }[] = [];
+    const needsSearch = (sources && sources.length > 0) || deepResearch;
+
+    if (needsSearch) {
+      const searchType = deepResearch ? "deep research" : "web search";
+      steps.push({ name: `Running ${searchType} via Perplexity`, status: "working" });
+
+      // Get Perplexity API key from api_integrations
+      const { data: perplexityConfig } = await adminClient
+        .from("api_integrations")
+        .select("api_key_encrypted, config")
+        .eq("organization_id", orgId)
+        .eq("provider", "perplexity")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (perplexityConfig?.api_key_encrypted) {
+        try {
+          const perplexityKey = atob(perplexityConfig.api_key_encrypted);
+          const pplxModel = deepResearch ? "sonar-deep-research" : "sonar-pro";
+
+          // Build domain filter from sources
+          const domainFilter: string[] = [];
+          if (sources) {
+            for (const s of sources) {
+              const domains = SOURCE_DOMAIN_MAP[s];
+              if (domains && domains.length > 0) {
+                domainFilter.push(...domains);
+              }
+            }
+          }
+
+          // Build search query with jurisdiction context
+          let searchQuery = message;
+          if (sources && sources.length > 0) {
+            const jurisdictionNames = sources.filter(s => s !== "Web Search");
+            if (jurisdictionNames.length > 0) {
+              searchQuery = `${message}\n\nFocus on: ${jurisdictionNames.join(", ")}`;
+            }
+          }
+
+          const pplxBody: any = {
+            model: pplxModel,
+            messages: [
+              { role: "system", content: "You are a legal research assistant. Provide detailed, accurate legal information with proper citations. Focus on authoritative legal sources." },
+              { role: "user", content: searchQuery },
+            ],
+          };
+
+          if (domainFilter.length > 0) {
+            pplxBody.search_domain_filter = domainFilter.slice(0, 5);
+          }
+
+          const pplxResp = await fetch("https://api.perplexity.ai/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${perplexityKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(pplxBody),
+          });
+
+          if (pplxResp.ok) {
+            const pplxData = await pplxResp.json();
+            const pplxContent = pplxData.choices?.[0]?.message?.content || "";
+            const pplxCitationUrls: string[] = pplxData.citations || [];
+
+            perplexityContext = `\n\n## Web Research Results (via Perplexity)\n${pplxContent}`;
+
+            if (pplxCitationUrls.length > 0) {
+              perplexityContext += "\n\n### Sources:\n" +
+                pplxCitationUrls.map((url: string, i: number) => `[${i + 1}] ${url}`).join("\n");
+
+              perplexityCitations = pplxCitationUrls.map((url: string, i: number) => ({
+                index: i + 100,
+                source: new URL(url).hostname.replace("www.", ""),
+                excerpt: url,
+                url,
+              }));
+            }
+
+            steps[steps.length - 1] = {
+              name: `${searchType} complete — ${pplxCitationUrls.length} sources found`,
+              status: "done",
+            };
+          } else {
+            const errText = await pplxResp.text();
+            console.error("Perplexity error:", pplxResp.status, errText);
+            steps[steps.length - 1] = { name: `${searchType} failed — continuing without`, status: "done" };
+          }
+        } catch (pplxErr) {
+          console.error("Perplexity call failed:", pplxErr);
+          steps[steps.length - 1] = { name: "Search failed — continuing without", status: "done" };
+        }
+      } else {
+        steps[steps.length - 1] = { name: "No Perplexity API key configured — skipping search", status: "done" };
+      }
+    }
+
     // Build system prompt
-    const systemPrompt = `You are LawKit AI, an expert legal research and drafting assistant. You provide accurate, well-reasoned legal analysis with proper citations.
+    const customPrompt = agentConf.prompts?.chat || "";
+    const basePrompt = customPrompt || `You are LawKit AI, an expert legal research and drafting assistant. You provide accurate, well-reasoned legal analysis with proper citations.
 
 ## Guidelines
 - Be thorough but concise
@@ -132,14 +260,26 @@ serve(async (req) => {
 - When drafting, use professional legal language
 - Always note jurisdictional considerations
 - If you reference uploaded documents, cite them with their document number
+- If you reference web research results, cite them with their source URLs
 - Format responses with markdown: headers, lists, bold for key terms
 - When creating tables, use proper markdown table syntax
-- Always structure your analysis clearly with sections
+- Always structure your analysis clearly with sections`;
+
+    const systemPrompt = `${basePrompt}
 ${knowledgeContext}
 ${vaultContext}
-${chunkContext}`;
+${chunkContext}
+${perplexityContext}`;
 
-    // Determine which AI provider to use
+    // Determine AI provider
+    let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+    let aiKey = Deno.env.get("LOVABLE_API_KEY") || "";
+    let modelId = "google/gemini-3-flash-preview";
+    let headers: Record<string, string> = {
+      Authorization: `Bearer ${aiKey}`,
+      "Content-Type": "application/json",
+    };
+
     const { data: llmConfigs } = await adminClient
       .from("llm_configs")
       .select("*")
@@ -149,22 +289,8 @@ ${chunkContext}`;
       .order("is_default", { ascending: false })
       .limit(1);
 
-    // Default: use Lovable AI Gateway
-    let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-    let aiKey = Deno.env.get("LOVABLE_API_KEY") || "";
-    let modelId = "google/gemini-3-flash-preview";
-    let headers: Record<string, string> = {
-      Authorization: `Bearer ${aiKey}`,
-      "Content-Type": "application/json",
-    };
-
-    if (llmConfigs?.[0]) {
-      const config = llmConfigs[0];
-      if (config.model_id) modelId = config.model_id;
-    }
-
-    if (deepResearch) {
-      steps.push({ name: "Conducting deep research analysis", status: "working" });
+    if (llmConfigs?.[0]?.model_id) {
+      modelId = llmConfigs[0].model_id;
     }
 
     // Build messages array
@@ -190,7 +316,6 @@ ${chunkContext}`;
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // Send agentic steps
           const allSteps = [
             ...steps,
             { name: "Generating response", status: "working" as const },
@@ -199,7 +324,6 @@ ${chunkContext}`;
             encoder.encode(`data: ${JSON.stringify({ type: "steps", steps: allSteps })}\n\n`)
           );
 
-          // Call AI
           const aiResponse = await fetch(aiUrl, {
             method: "POST",
             headers,
@@ -228,7 +352,6 @@ ${chunkContext}`;
             return;
           }
 
-          // Stream the AI response
           const reader = aiResponse.body!.getReader();
           const decoder = new TextDecoder();
           let fullContent = "";
@@ -263,11 +386,13 @@ ${chunkContext}`;
             }
           }
 
-          // Send completion with citations
-          const citations = extractCitations(fullContent, vaultContext);
+          // Merge citations from vault docs + Perplexity
+          const vaultCitations = extractCitations(fullContent, vaultContext);
+          const allCitations = [...vaultCitations, ...perplexityCitations];
+
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ type: "done", citations, model: modelId })}\n\n`
+              `data: ${JSON.stringify({ type: "done", citations: allCitations, model: modelId })}\n\n`
             )
           );
 
@@ -279,10 +404,9 @@ ${chunkContext}`;
               role: "assistant",
               content: fullContent,
               model_used: modelId,
-              citations: citations.length > 0 ? citations : null,
+              citations: allCitations.length > 0 ? allCitations : null,
             });
 
-            // Update conversation title if first message
             const { count } = await adminClient
               .from("messages")
               .select("*", { count: "exact", head: true })
