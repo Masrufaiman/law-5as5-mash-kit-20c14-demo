@@ -123,11 +123,13 @@ export default function Chat() {
       initialMessageSentRef.current = true;
       const msg = state.initialMessage;
       const vault = state.selectedVault?.id;
+      const vName = state.selectedVault?.name;
       const deep = state.deepResearch || false;
       const srcs = state.activeSources || [];
       const pMode = state.promptMode;
 
       setVaultId(vault);
+      setVaultName(vName);
       setDeepResearch(deep);
       setActiveSources(srcs);
       setPromptMode(pMode);
