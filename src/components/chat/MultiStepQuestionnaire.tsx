@@ -62,6 +62,12 @@ export function parseMultiStepQuestions(content: string): { preamble: string; qu
 
   if (questions.length < 2) return null;
 
+  // False positive guard: don't trigger on data/analysis content
+  const allText = questions.map(q => q.question).join(" ");
+  const hasMonetaryValues = /[\$₹€£¥৳]|USD|BDT|INR|EUR|GBP|\b\d{1,3}(,\d{3})*\.\d{2}\b/i.test(allText);
+  const hasFileExtensions = /\.\w{2,4}\b/.test(allText);
+  if (hasMonetaryValues || hasFileExtensions) return null;
+
   if (questionStartIdx > 0) {
     preamble = lines.slice(0, questionStartIdx).join("\n").trim();
   }
