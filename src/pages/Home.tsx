@@ -215,6 +215,7 @@ export default function Home() {
         selectedVault,
         attachedFiles,
         activeSources,
+        promptMode,
       },
     });
   };
@@ -316,7 +317,7 @@ export default function Home() {
     : JURISDICTION_SOURCES;
 
   // Chips that go inside the prompt box
-  const hasChips = selectedVault || deepResearch || activeSources.length > 0 || attachedFiles.length > 0;
+  const hasChips = selectedVault || deepResearch || activeSources.length > 0 || attachedFiles.length > 0 || promptMode;
 
   return (
     <AppLayout>
