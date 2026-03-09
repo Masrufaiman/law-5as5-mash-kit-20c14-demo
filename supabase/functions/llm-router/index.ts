@@ -170,7 +170,7 @@ serve(async (req) => {
         const queryEmbedding = await embedQuery(message, openaiConf.api_key, embeddingModel);
         const collectionName = `${qdrantConf.collection_prefix || "org_"}${orgId}`;
 
-        const mustFilters: any[] = [{ key: "org_id", match: { value: orgId } }];
+        const mustFilters: any[] = [];
         if (vaultId) {
           const { data: vaultFiles } = await adminClient
             .from("files")
