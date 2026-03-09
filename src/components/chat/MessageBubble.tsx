@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { ResponseActions } from "./ResponseActions";
@@ -9,7 +9,10 @@ import { StepTracker } from "./StepTracker";
 import { SourcesFooter } from "./SourcesFooter";
 import { FollowUpSuggestions } from "./FollowUpSuggestions";
 import { Card } from "@/components/ui/card";
-import { FileText, Bot } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { FileText, Bot, Copy, Pencil, Database, Paperclip } from "lucide-react";
 import type { ChatMessage, Citation, AgentStep } from "@/hooks/useStreamChat";
 
 interface MessageBubbleProps {
