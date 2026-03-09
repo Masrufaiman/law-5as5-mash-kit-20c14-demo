@@ -211,14 +211,18 @@ export function NavigationSidebar() {
         </div>
 
         {/* Create button */}
-        <div className="px-3 py-3">
+        <div className={cn("py-3", collapsed ? "px-1.5" : "px-3")}>
           <Button
             size="sm"
-            className="w-full justify-start gap-2 bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 h-8 text-xs"
+            className={cn(
+              "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 h-8 text-xs",
+              collapsed ? "w-full justify-center p-0" : "w-full justify-start gap-2"
+            )}
             onClick={() => navigate("/")}
+            title="New Chat"
           >
-            <Plus className="h-3.5 w-3.5" />
-            New Chat
+            <Plus className="h-3.5 w-3.5 shrink-0" />
+            {!collapsed && "New Chat"}
           </Button>
         </div>
 
