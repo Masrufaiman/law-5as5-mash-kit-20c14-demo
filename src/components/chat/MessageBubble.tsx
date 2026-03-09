@@ -3,12 +3,18 @@ import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { ResponseActions } from "./ResponseActions";
 import { CitationPopover } from "./CitationPopover";
+import { ChoiceCards, parseChoices } from "./ChoiceCards";
+import { Card } from "@/components/ui/card";
+import { FileText } from "lucide-react";
 import type { ChatMessage, Citation } from "@/hooks/useStreamChat";
 
 interface MessageBubbleProps {
   message: ChatMessage;
   isStreaming?: boolean;
   onRegenerate?: () => void;
+  onChoiceSelect?: (text: string) => void;
+  onDocumentOpen?: (title: string, content: string) => void;
+  isLastAssistant?: boolean;
 }
 
 /**
@@ -49,23 +55,31 @@ function injectCitations(text: string, citations: Citation[]): React.ReactNode[]
   });
 }
 
-/** Wrap a markdown component to inject inline citations into its text children */
-function withCitations<P extends { children?: React.ReactNode }>(
-  Component: React.FC<P> | string,
-  citations: Citation[]
-) {
-  return function CitationWrapper(props: P) {
-    const processed = processChildren(props.children, citations);
-    if (typeof Component === "string") {
-      return React.createElement(Component, { ...props, children: undefined } as any, processed);
-    }
-    return <Component {...props}>{processed}</Component>;
-  };
+/** Detect if content is a document/draft (heading + long content) */
+function detectDocument(content: string): { title: string } | null {
+  const match = content.match(/^#\s+(.+)/m) || content.match(/^##\s+(.+)/m);
+  if (match && content.length > 500) return { title: match[1] };
+  return null;
 }
 
-export function MessageBubble({ message, isStreaming, onRegenerate }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  isStreaming,
+  onRegenerate,
+  onChoiceSelect,
+  onDocumentOpen,
+  isLastAssistant,
+}: MessageBubbleProps) {
   const isUser = message.role === "user";
   const citations = message.citations || [];
+
+  // Detect choice patterns in assistant messages (only for last assistant, not streaming)
+  const choiceData = !isUser && !isStreaming && isLastAssistant && onChoiceSelect
+    ? parseChoices(message.content)
+    : null;
+
+  // Detect document patterns
+  const docInfo = !isUser && !isStreaming ? detectDocument(message.content) : null;
 
   // Build custom components that inject inline citation popovers
   const citeComponents = React.useMemo(() => {
@@ -99,6 +113,88 @@ export function MessageBubble({ message, isStreaming, onRegenerate }: MessageBub
       ),
     };
   }, [citations]);
+
+  // Render document as compact card instead of full content
+  if (docInfo && onDocumentOpen) {
+    return (
+      <div className="group">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground text-[10px] font-bold shrink-0">
+            LK
+          </div>
+          <span className="text-xs font-semibold text-foreground">LawKit AI</span>
+        </div>
+
+        <div className="pl-8 space-y-3">
+          {/* Brief intro text before the document */}
+          {(() => {
+            const firstHeadingIdx = message.content.search(/^#{1,2}\s+/m);
+            const intro = firstHeadingIdx > 0 ? message.content.slice(0, firstHeadingIdx).trim() : null;
+            return intro ? (
+              <p className="text-sm text-foreground/90 leading-relaxed">{intro}</p>
+            ) : null;
+          })()}
+
+          {/* Compact document card */}
+          <Card
+            className="cursor-pointer border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-all duration-200 p-0"
+            onClick={() => onDocumentOpen(docInfo.title, message.content)}
+          >
+            <div className="flex items-center gap-3 p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <FileText className="h-4 w-4 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{docInfo.title}</p>
+                <p className="text-xs text-muted-foreground">Click to open in editor</p>
+              </div>
+            </div>
+          </Card>
+
+          {!isStreaming && message.content && (
+            <ResponseActions
+              content={message.content}
+              messageId={message.id}
+              onRegenerate={onRegenerate}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Render choice cards for multiple-choice responses
+  if (choiceData && onChoiceSelect) {
+    return (
+      <div className="group">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground text-[10px] font-bold shrink-0">
+            LK
+          </div>
+          <span className="text-xs font-semibold text-foreground">LawKit AI</span>
+        </div>
+
+        <div className="pl-8">
+          <ChoiceCards
+            choices={choiceData.choices}
+            preamble={choiceData.preamble}
+            onSelect={onChoiceSelect}
+            disabled={isStreaming}
+          />
+
+          {!isStreaming && message.content && (
+            <div className="mt-2">
+              <ResponseActions
+                content={message.content}
+                messageId={message.id}
+                onRegenerate={onRegenerate}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="group">

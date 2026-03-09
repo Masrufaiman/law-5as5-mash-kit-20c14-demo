@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,7 +23,6 @@ import {
   PanelRightOpen,
   PanelRightClose,
   StopCircle,
-  FileText,
 } from "lucide-react";
 
 export default function Chat() {
@@ -33,6 +32,7 @@ export default function Chat() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const initialMessageSentRef = useRef(false);
 
   const {
     messages,
@@ -103,17 +103,26 @@ export default function Chat() {
     }
   };
 
-  // Handle initial message from Home page
+  // Handle initial message from Home page — with ref guard to prevent double-fire
   useEffect(() => {
     const state = location.state as any;
-    if (state?.initialMessage && profile?.organization_id) {
+    if (state?.initialMessage && profile?.organization_id && !initialMessageSentRef.current) {
+      initialMessageSentRef.current = true;
       const msg = state.initialMessage;
-      setVaultId(state.selectedVault?.id);
-      setDeepResearch(state.deepResearch || false);
-      setActiveSources(state.activeSources || []);
-      setPromptMode(state.promptMode);
+      const vault = state.selectedVault?.id;
+      const deep = state.deepResearch || false;
+      const srcs = state.activeSources || [];
+      const pMode = state.promptMode;
+
+      setVaultId(vault);
+      setDeepResearch(deep);
+      setActiveSources(srcs);
+      setPromptMode(pMode);
+
+      // Clear state AFTER capturing values
       navigate("/chat", { replace: true, state: {} });
-      createConversationAndSend(msg, state.selectedVault?.id, state.deepResearch, state.activeSources, state.promptMode);
+
+      createConversationAndSend(msg, vault, deep, srcs, pMode);
     }
   }, [location.state, profile?.organization_id]);
 
@@ -171,10 +180,10 @@ export default function Chat() {
     sendMessage(msg, opts);
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isStreaming || !profile?.organization_id) return;
-    const msg = input.trim();
-    setInput("");
+  const handleSend = async (text?: string) => {
+    const msg = (text || input).trim();
+    if (!msg || isStreaming || !profile?.organization_id) return;
+    if (!text) setInput("");
 
     if (!conversationId) {
       await createConversationAndSend(msg, vaultId, deepResearch, activeSources, promptMode);
@@ -192,6 +201,16 @@ export default function Chat() {
     }
   };
 
+  const handleChoiceSelect = useCallback((text: string) => {
+    handleSend(text);
+  }, [conversationId, profile?.organization_id, vaultId, deepResearch, activeSources, promptMode, isStreaming]);
+
+  const handleDocumentOpen = useCallback((title: string, content: string) => {
+    setEditorDoc(
+      editorDoc?.title === title ? null : { title, content }
+    );
+  }, [editorDoc]);
+
   const handleRegenerate = () => {
     if (!lastStreamOptions.current || isStreaming) return;
     regenerateLastMessage(lastStreamOptions.current);
@@ -202,6 +221,7 @@ export default function Chat() {
     setConversationTitle("New Conversation");
     setPromptMode(undefined);
     setEditorDoc(null);
+    initialMessageSentRef.current = false;
     clearMessages();
     navigate("/chat", { replace: true });
   };
@@ -211,21 +231,14 @@ export default function Chat() {
     .filter((m) => m.role === "assistant" && m.citations)
     .flatMap((m) => m.citations || []);
 
-  // Find last user message index for step placement (steps go AFTER last user msg, BEFORE assistant response)
+  // Find last user/assistant message indices
   const lastUserIdx = messages.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
+  const lastAssistantIdx = messages.reduce((acc, m, i) => m.role === "assistant" ? i : acc, -1);
 
   // Check if assistant has started content (for skeleton)
   const lastMsg = messages[messages.length - 1];
   const showSkeleton = isStreaming && lastMsg?.role === "user" && steps.length === 0;
   const showStepsBeforeResponse = steps.length > 0;
-
-  // Detect document titles in assistant messages (lines starting with "## " or "# " could be docs)
-  const extractDocTitle = (content: string): string | null => {
-    // Look for a draft/document pattern
-    const match = content.match(/^#\s+(.+)/m) || content.match(/^##\s+(.+)/m);
-    if (match && content.length > 500) return match[1];
-    return null;
-  };
 
   const rightPanel = editorDoc ? (
     <DocumentEditor
@@ -289,7 +302,6 @@ export default function Chat() {
           </div>
 
           {/* Messages */}
-          {/* Skeleton while loading a past conversation */}
           {isLoadingConversation ? (
             <div className="flex-1">
               <div className="mx-auto max-w-3xl px-6 py-6 space-y-8">
@@ -357,7 +369,7 @@ export default function Chat() {
               <div className="mx-auto max-w-3xl px-6 py-6 space-y-6">
                 {messages.map((msg, i) => {
                   const isLastUser = msg.role === "user" && i === lastUserIdx;
-                  const docTitle = msg.role === "assistant" ? extractDocTitle(msg.content) : null;
+                  const isLastAssistant = msg.role === "assistant" && i === lastAssistantIdx;
 
                   return (
                     <div key={msg.id}>
@@ -369,24 +381,10 @@ export default function Chat() {
                           i === messages.length - 1
                         }
                         onRegenerate={msg.role === "assistant" ? handleRegenerate : undefined}
+                        onChoiceSelect={handleChoiceSelect}
+                        onDocumentOpen={handleDocumentOpen}
+                        isLastAssistant={isLastAssistant}
                       />
-
-                      {/* Document link under assistant message */}
-                      {docTitle && !isStreaming && (
-                        <button
-                          onClick={() =>
-                            setEditorDoc(
-                              editorDoc?.title === docTitle
-                                ? null
-                                : { title: docTitle, content: msg.content }
-                            )
-                          }
-                          className="flex items-center gap-2 mt-2 pl-8 text-xs text-primary hover:underline transition-colors"
-                        >
-                          <FileText className="h-3 w-3" />
-                          <span>Open "{docTitle}" in editor</span>
-                        </button>
-                      )}
 
                       {/* Steps AFTER last user message, BEFORE the assistant response */}
                       {isLastUser && showStepsBeforeResponse && (

@@ -307,6 +307,8 @@ serve(async (req) => {
 ## Guidelines
 - Be thorough but concise
 - Cite sources using [1], [2] notation when referencing documents
+- When drafting documents, start with a clear "# Document Title" heading followed by the full document content
+- When you need user clarification between multiple options, format as a numbered list with **bold option titles** and brief descriptions: "1. **Option Title** — Description of what this does"
 - When drafting, use professional legal language
 - Always note jurisdictional considerations
 - If you reference uploaded documents, cite them with their document number
