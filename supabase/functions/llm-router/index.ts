@@ -321,15 +321,16 @@ ${vaultContext}
 ${chunkContext}
 ${perplexityContext}`;
 
-    // Determine AI provider
+    // Determine AI provider - use org's configured LLM
     let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
     let aiKey = Deno.env.get("LOVABLE_API_KEY") || "";
-    let modelId = "google/gemini-3-flash-preview";
+    let modelId = "google/gemini-2.5-flash"; // default fallback
     let headers: Record<string, string> = {
       Authorization: `Bearer ${aiKey}`,
       "Content-Type": "application/json",
     };
 
+    // Load user-configured LLM from admin panel
     const { data: llmConfigs } = await adminClient
       .from("llm_configs")
       .select("*")
@@ -339,8 +340,22 @@ ${perplexityContext}`;
       .order("is_default", { ascending: false })
       .limit(1);
 
-    if (llmConfigs?.[0]?.model_id) {
-      modelId = llmConfigs[0].model_id;
+    if (llmConfigs?.[0]) {
+      const cfg = llmConfigs[0];
+      let configuredModel = cfg.model_id;
+      
+      // Ensure model has provider prefix for Lovable AI gateway
+      if (configuredModel && !configuredModel.includes("/")) {
+        // Map common model names to gateway format
+        if (configuredModel.startsWith("gemini")) {
+          configuredModel = `google/${configuredModel}`;
+        } else if (configuredModel.startsWith("gpt")) {
+          configuredModel = `openai/${configuredModel}`;
+        }
+      }
+      
+      modelId = configuredModel || modelId;
+      console.log("Using configured model:", modelId);
     }
 
     // Build messages array
