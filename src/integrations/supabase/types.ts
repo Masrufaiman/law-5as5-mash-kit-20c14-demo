@@ -266,6 +266,8 @@ export type Database = {
       }
       file_chunks: {
         Row: {
+          char_end: number | null
+          char_start: number | null
           chunk_index: number
           content: string
           created_at: string
@@ -274,9 +276,12 @@ export type Database = {
           id: string
           organization_id: string
           page_number: number | null
+          qdrant_point_id: string | null
           token_count: number | null
         }
         Insert: {
+          char_end?: number | null
+          char_start?: number | null
           chunk_index: number
           content: string
           created_at?: string
@@ -285,9 +290,12 @@ export type Database = {
           id?: string
           organization_id: string
           page_number?: number | null
+          qdrant_point_id?: string | null
           token_count?: number | null
         }
         Update: {
+          char_end?: number | null
+          char_start?: number | null
           chunk_index?: number
           content?: string
           created_at?: string
@@ -296,6 +304,7 @@ export type Database = {
           id?: string
           organization_id?: string
           page_number?: number | null
+          qdrant_point_id?: string | null
           token_count?: number | null
         }
         Relationships: [
@@ -317,12 +326,15 @@ export type Database = {
       }
       files: {
         Row: {
+          chunk_count: number | null
           created_at: string
           error_message: string | null
           extracted_text: string | null
+          extracted_text_r2_key: string | null
           id: string
           mime_type: string
           name: string
+          ocr_used: boolean | null
           organization_id: string
           original_name: string
           page_count: number | null
@@ -335,12 +347,15 @@ export type Database = {
           vault_id: string
         }
         Insert: {
+          chunk_count?: number | null
           created_at?: string
           error_message?: string | null
           extracted_text?: string | null
+          extracted_text_r2_key?: string | null
           id?: string
           mime_type: string
           name: string
+          ocr_used?: boolean | null
           organization_id: string
           original_name: string
           page_count?: number | null
@@ -353,12 +368,15 @@ export type Database = {
           vault_id: string
         }
         Update: {
+          chunk_count?: number | null
           created_at?: string
           error_message?: string | null
           extracted_text?: string | null
+          extracted_text_r2_key?: string | null
           id?: string
           mime_type?: string
           name?: string
+          ocr_used?: boolean | null
           organization_id?: string
           original_name?: string
           page_count?: number | null

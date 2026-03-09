@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Send, ChevronRight, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface QuestionStep {
   number: number;
@@ -16,12 +17,11 @@ interface MultiStepQuestionnaireProps {
   questions: QuestionStep[];
   onComplete: (combinedAnswer: string) => void;
   disabled?: boolean;
+  selectedValue?: string | null;
 }
 
 /**
  * Parse multi-question patterns from AI content.
- * Detects numbered questions (e.g., "1. What type of...?" or "1. **Question**?")
- * with optional sub-options (a), b), c) or - option lines).
  */
 export function parseMultiStepQuestions(content: string): { preamble: string; questions: QuestionStep[] } | null {
   const lines = content.split("\n");
@@ -29,22 +29,18 @@ export function parseMultiStepQuestions(content: string): { preamble: string; qu
   let preamble = "";
   let questionStartIdx = -1;
 
-  // Detect question patterns: numbered items ending with "?"
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    // Match: 1. Question text? or 1. **Question text**?
     const qMatch = line.match(/^(\d+)\.\s+(?:\*\*(.+?)\*\*|(.+))\s*$/);
     if (qMatch) {
       const num = parseInt(qMatch[1]);
       const questionText = (qMatch[2] || qMatch[3] || "").trim();
-      // Only count as question if it ends with "?" or contains question words
       const isQuestion = questionText.endsWith("?") || 
         /\b(what|which|how|where|when|who|specify|describe|provide)\b/i.test(questionText);
       
       if (isQuestion) {
         if (questionStartIdx === -1) questionStartIdx = i;
         
-        // Collect sub-options (lines starting with -, a), b), etc.)
         const options: string[] = [];
         for (let j = i + 1; j < lines.length; j++) {
           const subLine = lines[j].trim();
@@ -63,7 +59,6 @@ export function parseMultiStepQuestions(content: string): { preamble: string; qu
     }
   }
 
-  // Need at least 2 questions
   if (questions.length < 2) return null;
 
   if (questionStartIdx > 0) {
@@ -73,23 +68,35 @@ export function parseMultiStepQuestions(content: string): { preamble: string; qu
   return { preamble, questions };
 }
 
-export function MultiStepQuestionnaire({ preamble, questions, onComplete, disabled }: MultiStepQuestionnaireProps) {
+export function MultiStepQuestionnaire({ preamble, questions, onComplete, disabled, selectedValue }: MultiStepQuestionnaireProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<string[]>(new Array(questions.length).fill(""));
   const [customInput, setCustomInput] = useState("");
+  const [completed, setCompleted] = useState(false);
+
+  // If there's a selectedValue, this questionnaire was already answered
+  const alreadyAnswered = !!selectedValue;
+
+  // If already answered, show a completed state
+  useEffect(() => {
+    if (alreadyAnswered) {
+      setCompleted(true);
+    }
+  }, [alreadyAnswered]);
 
   const current = questions[currentStep];
-  const progress = ((currentStep) / questions.length) * 100;
+  const progress = completed ? 100 : ((currentStep) / questions.length) * 100;
   const isLast = currentStep === questions.length - 1;
 
   const selectOption = (option: string) => {
+    if (disabled || completed) return;
     const newAnswers = [...answers];
     newAnswers[currentStep] = option;
     setAnswers(newAnswers);
     setCustomInput("");
 
     if (isLast) {
-      // Auto-submit combined answer
+      setCompleted(true);
       const combined = questions.map((q, i) => `${q.question}\n→ ${newAnswers[i]}`).join("\n\n");
       onComplete(combined);
     } else {
@@ -102,6 +109,34 @@ export function MultiStepQuestionnaire({ preamble, questions, onComplete, disabl
     selectOption(customInput.trim());
     setCustomInput("");
   };
+
+  // Completed state (already answered or just finished)
+  if (completed) {
+    return (
+      <div className="space-y-3">
+        {preamble && (
+          <p className="text-sm text-foreground/90 leading-relaxed">{preamble}</p>
+        )}
+        <div className="flex items-center gap-3">
+          <Progress value={100} className="h-1.5 flex-1" />
+          <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap flex items-center gap-1">
+            <Check className="h-3 w-3 text-primary" />
+            Completed
+          </span>
+        </div>
+        {/* Show answered questions */}
+        <div className="space-y-1">
+          {questions.map((q, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <Check className="h-3 w-3 text-primary shrink-0" />
+              <span className="truncate">{q.question}</span>
+              {answers[i] && <span className="text-foreground/70">→ {answers[i]}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">

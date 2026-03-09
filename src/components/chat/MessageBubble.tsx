@@ -12,6 +12,7 @@ import type { ChatMessage, Citation, AgentStep } from "@/hooks/useStreamChat";
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  nextMessage?: ChatMessage;
   isStreaming?: boolean;
   onRegenerate?: () => void;
   onChoiceSelect?: (text: string) => void;
@@ -66,11 +67,9 @@ function stripCitationsBlock(content: string): string {
 
 /** Detect if content is a document/draft (heading + long content, or bold ALL-CAPS title) */
 function detectDocument(content: string): { title: string } | null {
-  // Standard heading pattern
   const headingMatch = content.match(/^#\s+(.+)/m) || content.match(/^##\s+(.+)/m);
   if (headingMatch && content.length > 500) return { title: headingMatch[1] };
 
-  // Bold ALL-CAPS title pattern like **MUTUAL NON-DISCLOSURE AGREEMENT**
   const boldMatch = content.match(/^\*\*([A-Z][A-Z\s\-–—,]+[A-Z])\*\*/m);
   if (boldMatch && content.length > 500) return { title: boldMatch[1] };
 
@@ -95,6 +94,7 @@ function AgentAvatar({ isUser }: { isUser: boolean }) {
 
 export function MessageBubble({
   message,
+  nextMessage,
   isStreaming,
   onRegenerate,
   onChoiceSelect,
@@ -109,15 +109,21 @@ export function MessageBubble({
   // Clean content: strip trailing citations block from AI text
   const cleanContent = !isUser ? stripCitationsBlock(message.content) : message.content;
 
-  // Detect multi-step questionnaire pattern (only for last assistant, not streaming)
-  const questionnaireData = !isUser && !isStreaming && isLastAssistant && onChoiceSelect
+  // Determine if a choice was already selected (next message is the user's selection)
+  const alreadySelected = nextMessage?.role === "user" ? nextMessage.content : null;
+
+  // Detect multi-step questionnaire pattern (for any assistant message, not just last)
+  const questionnaireData = !isUser && !isStreaming && onChoiceSelect
     ? parseMultiStepQuestions(cleanContent)
     : null;
 
-  // Detect choice patterns in assistant messages (only for last assistant, not streaming)
-  const choiceData = !isUser && !isStreaming && isLastAssistant && onChoiceSelect && !questionnaireData
+  // Detect choice patterns in assistant messages
+  const choiceData = !isUser && !isStreaming && onChoiceSelect && !questionnaireData
     ? parseChoices(cleanContent)
     : null;
+
+  // Whether this gen UI is interactive (only for last assistant with no follow-up yet)
+  const isInteractive = isLastAssistant && !alreadySelected;
 
   // Detect document patterns
   const docInfo = !isUser && !isStreaming ? detectDocument(cleanContent) : null;
@@ -228,7 +234,8 @@ export function MessageBubble({
             preamble={questionnaireData.preamble}
             questions={questionnaireData.questions}
             onComplete={onChoiceSelect}
-            disabled={isStreaming}
+            disabled={isStreaming || !isInteractive}
+            selectedValue={alreadySelected}
           />
 
           {!isStreaming && cleanContent && (
@@ -260,7 +267,8 @@ export function MessageBubble({
             choices={choiceData.choices}
             preamble={choiceData.preamble}
             onSelect={onChoiceSelect}
-            disabled={isStreaming}
+            disabled={isStreaming || !isInteractive}
+            selectedValue={alreadySelected}
           />
 
           {!isStreaming && cleanContent && (

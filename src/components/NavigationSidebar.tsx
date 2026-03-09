@@ -49,6 +49,7 @@ export function NavigationSidebar() {
   const isAdmin = profile?.role === "admin" || profile?.role === "superadmin";
 
   const [vaultsOpen, setVaultsOpen] = useState(true);
+  const [recentsOpen, setRecentsOpen] = useState(true);
   const [vaults, setVaults] = useState<VaultItem[]>([]);
   const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -89,10 +90,6 @@ export function NavigationSidebar() {
   }, []);
 
   const orgName = profile?.full_name?.split(" ")[0] || "LawKit";
-
-  const mainNav = [
-    { icon: MessageSquare, label: "Assistant", path: "/" },
-  ];
 
   const bottomNav = [
     { icon: Table2, label: "Review", path: "/review" },
@@ -142,21 +139,63 @@ export function NavigationSidebar() {
 
         {/* Main nav */}
         <nav className="flex-1 overflow-y-auto px-2 space-y-0.5">
-          {mainNav.map((item) => (
+          {/* Assistant with Recent nested underneath */}
+          <div>
             <button
-              key={item.path}
-              onClick={() => navigate(item.path)}
+              onClick={() => navigate("/")}
               className={cn(
                 "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-                isActive(item.path)
+                isActive("/")
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
             >
-              <item.icon className="h-4 w-4 shrink-0" />
-              {item.label}
+              <MessageSquare className="h-4 w-4 shrink-0" />
+              <span className="flex-1 text-left">Assistant</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRecentsOpen(!recentsOpen);
+                }}
+                className="text-sidebar-foreground/40 hover:text-sidebar-foreground"
+              >
+                {recentsOpen ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+              </button>
             </button>
-          ))}
+            {recentsOpen && (
+              <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
+                {isLoadingChats ? (
+                  <>
+                    <Skeleton className="h-3 w-20 mx-2 my-1 bg-sidebar-accent/30" />
+                    <Skeleton className="h-3 w-24 mx-2 my-1 bg-sidebar-accent/30" />
+                    <Skeleton className="h-3 w-16 mx-2 my-1 bg-sidebar-accent/30" />
+                  </>
+                ) : recentChats.length > 0 ? (
+                  recentChats.map((chat) => (
+                    <button
+                      key={chat.id}
+                      onClick={() => navigate(`/chat?id=${chat.id}`)}
+                      className={cn(
+                        "flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors truncate",
+                        location.search.includes(chat.id)
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                      )}
+                    >
+                      <MessageSquare className="h-2.5 w-2.5 shrink-0 opacity-50" />
+                      <span className="truncate">{chat.title}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="px-2 py-1 text-xs text-sidebar-foreground/40">No conversations yet</p>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Vault section with collapsible sub-items */}
           <div>
@@ -184,9 +223,9 @@ export function NavigationSidebar() {
               <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
                 {isLoadingVaults ? (
                   <>
-                    <Skeleton className="h-3 w-20 mx-2 my-1.5 bg-sidebar-accent/40" />
-                    <Skeleton className="h-3 w-16 mx-2 my-1.5 bg-sidebar-accent/40" />
-                    <Skeleton className="h-3 w-24 mx-2 my-1.5 bg-sidebar-accent/40" />
+                    <Skeleton className="h-3 w-20 mx-2 my-1 bg-sidebar-accent/30" />
+                    <Skeleton className="h-3 w-16 mx-2 my-1 bg-sidebar-accent/30" />
+                    <Skeleton className="h-3 w-24 mx-2 my-1 bg-sidebar-accent/30" />
                   </>
                 ) : vaults.length > 0 ? (
                   vaults.map((vault) => (
@@ -204,44 +243,6 @@ export function NavigationSidebar() {
               </div>
             )}
           </div>
-
-          {/* Recent Chats */}
-          <>
-            <div className="my-2 h-px bg-sidebar-border" />
-            <p className="text-[10px] font-medium text-sidebar-foreground/40 px-2.5 py-1 uppercase tracking-wider">
-              Recent
-            </p>
-            <div className="space-y-0.5">
-              {isLoadingChats ? (
-                <>
-                  {[112, 96, 128, 80].map((w, i) => (
-                    <div key={i} className="flex items-center gap-2 px-2.5 py-1.5">
-                      <Skeleton className="h-3 w-3 rounded shrink-0 bg-sidebar-accent/40" />
-                      <Skeleton className="h-3 bg-sidebar-accent/40" style={{ width: `${w}px` }} />
-                    </div>
-                  ))}
-                </>
-              ) : recentChats.length > 0 ? (
-                recentChats.map((chat) => (
-                  <button
-                    key={chat.id}
-                    onClick={() => navigate(`/chat?id=${chat.id}`)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors truncate",
-                      location.search.includes(chat.id)
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                        : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                    )}
-                  >
-                    <MessageSquare className="h-3 w-3 shrink-0 opacity-50" />
-                    <span className="truncate">{chat.title}</span>
-                  </button>
-                ))
-              ) : (
-                <p className="px-2.5 py-1.5 text-xs text-sidebar-foreground/40">No conversations yet</p>
-              )}
-            </div>
-          </>
 
           {/* Separator */}
           <div className="my-2 h-px bg-sidebar-border" />

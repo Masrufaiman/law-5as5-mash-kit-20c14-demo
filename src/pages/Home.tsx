@@ -28,6 +28,7 @@ import {
   BookOpen,
   Loader2,
   Zap,
+  AlertTriangle,
 } from "lucide-react";
 
 interface VaultItem {
@@ -47,7 +48,7 @@ interface PromptTemplate {
   prompt: string;
 }
 
-// Jurisdiction sources — these are passed to Perplexity as domain filters
+// Jurisdiction sources
 const JURISDICTION_SOURCES = [
   { name: "Web Search", icon: Globe },
   { name: "EDGAR (SEC)", icon: Scale },
@@ -111,6 +112,18 @@ const JURISDICTION_SOURCES = [
   { name: "Whitford Lane", icon: Scale },
 ];
 
+// Icon mapping for workflow configs
+const ICON_MAP: Record<string, React.ElementType> = {
+  FileText,
+  Clock,
+  ListChecks,
+  Scale,
+  Search,
+  BookOpen,
+  Zap,
+  AlertTriangle,
+};
+
 interface WorkflowCard {
   title: string;
   description: string;
@@ -119,7 +132,7 @@ interface WorkflowCard {
   icon: React.ElementType;
 }
 
-const WORKFLOWS: WorkflowCard[] = [
+const DEFAULT_WORKFLOWS: WorkflowCard[] = [
   {
     title: "Draft a client alert",
     description: "Generate a structured legal alert based on recent developments",
@@ -167,11 +180,11 @@ export default function Home() {
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [searchFilter, setSearchFilter] = useState("");
   const [promptMode, setPromptMode] = useState<string | undefined>();
+  const [workflows, setWorkflows] = useState<WorkflowCard[]>(DEFAULT_WORKFLOWS);
 
   useEffect(() => {
     if (!profile?.organization_id) return;
     
-    // Load vaults
     supabase
       .from("vaults")
       .select("id, name")
@@ -179,7 +192,6 @@ export default function Home() {
       .order("created_at")
       .then(({ data }) => setVaults(data || []));
 
-    // Load knowledge base entries as sources
     supabase
       .from("knowledge_entries")
       .select("id, title, category")
@@ -187,7 +199,7 @@ export default function Home() {
       .order("title")
       .then(({ data }) => setKbSources(data || []));
 
-    // Load prompt templates from agent_config
+    // Load agent config (prompts + workflows)
     supabase
       .from("api_integrations")
       .select("config")
@@ -202,6 +214,17 @@ export default function Home() {
           if (c.prompts?.red_flags) templates.push({ id: "red_flags", label: "Red Flag Detection", prompt: c.prompts.red_flags });
           if (c.prompts?.drafting) templates.push({ id: "drafting", label: "Document Drafting", prompt: c.prompts.drafting });
           setPromptTemplates(templates);
+
+          // Load workflows from config
+          if (c.workflows && c.workflows.length > 0) {
+            setWorkflows(c.workflows.map((wf: any) => ({
+              title: wf.title,
+              description: wf.description,
+              type: wf.type || "Workflow",
+              steps: wf.steps || 3,
+              icon: ICON_MAP[wf.icon] || FileText,
+            })));
+          }
         }
       });
   }, [profile?.organization_id]);
@@ -316,7 +339,6 @@ export default function Home() {
     ? JURISDICTION_SOURCES.filter(j => j.name.toLowerCase().includes(searchFilter.toLowerCase()))
     : JURISDICTION_SOURCES;
 
-  // Chips that go inside the prompt box
   const hasChips = selectedVault || deepResearch || activeSources.length > 0 || attachedFiles.length > 0 || promptMode;
 
   return (
@@ -335,7 +357,6 @@ export default function Home() {
 
           {/* Main prompt box */}
           <div className="border border-border rounded-lg overflow-hidden">
-            {/* Tags inside prompt box */}
             {hasChips && (
               <div className="flex flex-wrap gap-1.5 px-3 pt-3 bg-muted/30">
                 {selectedVault && (
@@ -398,7 +419,6 @@ export default function Home() {
 
             {/* Bottom toolbar */}
             <div className="flex items-center gap-1 px-3 py-2.5 border-t border-border bg-muted/30">
-              {/* Files and sources */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
@@ -409,7 +429,6 @@ export default function Home() {
                 <PopoverContent className="w-72 p-0" align="start">
                   <ScrollArea className="max-h-[400px]">
                     <div className="p-2">
-                      {/* Upload */}
                       <button
                         onClick={handleFileSelect}
                         className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
@@ -418,7 +437,6 @@ export default function Home() {
                         Upload files
                       </button>
 
-                      {/* Vaults */}
                       {vaults.length > 0 && (
                         <>
                           <div className="my-1 h-px bg-border" />
@@ -443,7 +461,6 @@ export default function Home() {
                         </>
                       )}
 
-                      {/* Knowledge Base */}
                       {kbSources.length > 0 && (
                         <>
                           <div className="my-1 h-px bg-border" />
@@ -468,7 +485,6 @@ export default function Home() {
                         </>
                       )}
 
-                      {/* Jurisdictions & Databases */}
                       <div className="my-1 h-px bg-border" />
                       <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
                         Jurisdictions & Databases
@@ -588,7 +604,7 @@ export default function Home() {
               Recommended workflows
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {WORKFLOWS.map((wf) => (
+              {workflows.map((wf) => (
                 <button
                   key={wf.title}
                   className="flex items-start gap-3 rounded-lg border border-border p-3.5 text-left hover:bg-muted/50 transition-colors group"

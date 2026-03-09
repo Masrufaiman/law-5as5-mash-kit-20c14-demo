@@ -103,7 +103,7 @@ export default function Chat() {
     }
   };
 
-  // Handle initial message from Home page — with ref guard to prevent double-fire
+  // Handle initial message from Home page
   useEffect(() => {
     const state = location.state as any;
     if (state?.initialMessage && profile?.organization_id && !initialMessageSentRef.current) {
@@ -119,9 +119,7 @@ export default function Chat() {
       setActiveSources(srcs);
       setPromptMode(pMode);
 
-      // Clear state AFTER capturing values
       navigate("/chat", { replace: true, state: {} });
-
       createConversationAndSend(msg, vault, deep, srcs, pMode);
     }
   }, [location.state, profile?.organization_id]);
@@ -231,9 +229,9 @@ export default function Chat() {
     .filter((m) => m.role === "assistant" && m.citations)
     .flatMap((m) => m.citations || []);
 
-  // Find last user/assistant message indices
-  const lastUserIdx = messages.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
+  // Find last assistant message index
   const lastAssistantIdx = messages.reduce((acc, m, i) => m.role === "assistant" ? i : acc, -1);
+  const lastUserIdx = messages.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
 
   // Check if assistant has started content (for skeleton)
   const lastMsg = messages[messages.length - 1];
@@ -304,7 +302,6 @@ export default function Chat() {
           {isLoadingConversation ? (
             <div className="flex-1">
               <div className="mx-auto max-w-3xl px-6 py-6 space-y-8">
-                {/* User message skeleton */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 mb-2">
                     <Skeleton className="h-6 w-6 rounded-full" />
@@ -314,7 +311,6 @@ export default function Chat() {
                     <Skeleton className="h-4 w-2/3" />
                   </div>
                 </div>
-                {/* Assistant message skeleton */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 mb-2">
                     <Skeleton className="h-6 w-6 rounded-full" />
@@ -348,11 +344,13 @@ export default function Chat() {
                 {messages.map((msg, i) => {
                   const isLastAssistant = msg.role === "assistant" && i === lastAssistantIdx;
                   const isLastUser = msg.role === "user" && i === lastUserIdx;
+                  const nextMsg = messages[i + 1] || undefined;
 
                   return (
                     <div key={msg.id}>
                       <MessageBubble
                         message={msg}
+                        nextMessage={nextMsg}
                         isStreaming={
                           isStreaming &&
                           msg.role === "assistant" &&
