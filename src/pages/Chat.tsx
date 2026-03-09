@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useStreamChat } from "@/hooks/useStreamChat";
-import type { ChatMessage, Citation } from "@/hooks/useStreamChat";
+import type { Citation } from "@/hooks/useStreamChat";
 import {
   Plus,
   Share,
@@ -21,7 +21,8 @@ import {
   PanelRightClose,
   StopCircle,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+
+const INTERNAL_PROVIDERS = ["cloudflare_r2", "agent_config", "knowledge_document"];
 
 export default function Chat() {
   const { profile } = useAuth();
@@ -38,7 +39,6 @@ export default function Chat() {
     sendMessage,
     cancelStream,
     clearMessages,
-    loadHistory,
   } = useStreamChat();
 
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -56,16 +56,12 @@ export default function Chat() {
       const msg = state.initialMessage;
       setVaultId(state.selectedVault?.id);
       setDeepResearch(state.deepResearch || false);
-
-      // Clear state to prevent re-send
       navigate("/chat", { replace: true, state: {} });
-
-      // Create conversation and send
       createConversationAndSend(msg, state.selectedVault?.id, state.deepResearch);
     }
   }, [location.state, profile?.organization_id]);
 
-  // Load integrations
+  // Load integrations (filter out internal ones)
   useEffect(() => {
     if (!profile?.organization_id) return;
     supabase
@@ -73,7 +69,12 @@ export default function Chat() {
       .select("name, provider")
       .eq("organization_id", profile.organization_id!)
       .eq("is_active", true)
-      .then(({ data }) => setIntegrations(data || []));
+      .then(({ data }) => {
+        const filtered = (data || []).filter(
+          (i) => !INTERNAL_PROVIDERS.includes(i.provider)
+        );
+        setIntegrations(filtered);
+      });
   }, [profile?.organization_id]);
 
   // Auto-scroll
@@ -145,7 +146,7 @@ export default function Chat() {
     clearMessages();
   };
 
-  // Collect all citations from messages
+  // Collect all citations
   const allCitations: Citation[] = messages
     .filter((m) => m.role === "assistant" && m.citations)
     .flatMap((m) => m.citations || []);
@@ -156,7 +157,7 @@ export default function Chat() {
         {/* Main chat area */}
         <div className="flex flex-1 flex-col min-w-0">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-3 border-b border-border">
+          <div className="flex items-center justify-between px-6 py-3 border-b border-border/50">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-xs text-muted-foreground">Assistant /</span>
               <h2 className="text-sm font-semibold text-foreground truncate">
@@ -201,36 +202,58 @@ export default function Chat() {
           {/* Messages */}
           {messages.length === 0 && !isStreaming ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center px-6">
-              <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
+                <MessageSquare className="h-6 w-6 text-muted-foreground" />
+              </div>
               <h2 className="font-heading text-xl font-semibold text-foreground">
                 LawKit AI Assistant
               </h2>
               <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                Ask questions about your documents, research legal topics, or draft
-                content.
+                Ask questions about your documents, research legal topics, or draft content.
               </p>
             </div>
           ) : (
             <ScrollArea className="flex-1">
-              <div className="mx-auto max-w-3xl px-6 py-6 space-y-6">
+              <div className="mx-auto max-w-3xl px-6 py-6 space-y-8">
                 {messages.map((msg, i) => (
-                  <MessageBubble
-                    key={msg.id}
-                    message={msg}
-                    isStreaming={
-                      isStreaming &&
-                      msg.role === "assistant" &&
-                      i === messages.length - 1
-                    }
-                  />
+                  <div key={msg.id}>
+                    <MessageBubble
+                      message={msg}
+                      isStreaming={
+                        isStreaming &&
+                        msg.role === "assistant" &&
+                        i === messages.length - 1
+                      }
+                    />
+                    {/* Show step tracker after user message, before assistant response */}
+                    {msg.role === "user" &&
+                      i === messages.length - 1 &&
+                      steps.length > 0 && (
+                        <div className="pl-8 mt-4">
+                          <StepTracker steps={steps} isStreaming={isStreaming} />
+                        </div>
+                      )}
+                    {msg.role === "user" &&
+                      i < messages.length - 1 &&
+                      messages[i + 1]?.role === "assistant" &&
+                      steps.length > 0 &&
+                      i === messages.length - 2 && (
+                        <div className="pl-8 mt-4 mb-4">
+                          <StepTracker steps={steps} isStreaming={isStreaming} />
+                        </div>
+                      )}
+                  </div>
                 ))}
 
-                {/* Step tracker */}
-                {steps.length > 0 && (
-                  <div className="ml-8">
-                    <StepTracker steps={steps} isStreaming={isStreaming} />
-                  </div>
-                )}
+                {/* Step tracker when no assistant message yet */}
+                {steps.length > 0 &&
+                  messages.length > 0 &&
+                  messages[messages.length - 1].role === "user" &&
+                  isStreaming && (
+                    <div className="pl-8">
+                      <StepTracker steps={steps} isStreaming={isStreaming} />
+                    </div>
+                  )}
 
                 <div ref={scrollRef} />
               </div>
@@ -252,8 +275,8 @@ export default function Chat() {
             </div>
           )}
 
-          {/* Input */}
-          <div className="border-t border-border px-6 py-4">
+          {/* Input — clean floating style */}
+          <div className="px-6 py-4">
             <div className="mx-auto max-w-3xl">
               <ChatInput
                 value={input}

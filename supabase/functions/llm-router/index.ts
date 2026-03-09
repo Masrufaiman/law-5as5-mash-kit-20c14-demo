@@ -35,21 +35,21 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify user
+    // Verify user with getUser
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: userData, error: userError } = await userClient.auth.getUser();
+    if (userError || !userData?.user) {
+      console.error("Auth error:", userError?.message);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const userId = claimsData.claims.sub as string;
+    const userId = userData.user.id;
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     // Get user profile for org_id
@@ -83,11 +83,13 @@ serve(async (req) => {
     if (knowledgeEntries?.length) {
       knowledgeContext = "\n\n## Knowledge Base\n" +
         knowledgeEntries.map((e) => `### ${e.title} (${e.category || "general"})\n${e.content}`).join("\n\n");
+      steps.push({ name: `Loaded ${knowledgeEntries.length} knowledge base entries`, status: "done" });
     }
 
     // Collect vault file context if vault is selected
     let vaultContext = "";
     if (vaultId || attachedFileIds?.length) {
+      steps.push({ name: "Searching vault documents", status: "working" });
       const fileQuery = adminClient.from("files").select("id, name, extracted_text").eq("organization_id", orgId);
       if (vaultId) fileQuery.eq("vault_id", vaultId);
       if (attachedFileIds?.length) fileQuery.in("id", attachedFileIds);
@@ -99,7 +101,25 @@ serve(async (req) => {
             .filter((f) => f.extracted_text)
             .map((f, i) => `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, 3000)}`)
             .join("\n\n");
-        steps.push({ name: `Searched ${files.length} documents in vault`, status: "done" });
+        // Update step
+        steps[steps.length - 1] = { name: `Searched ${files.length} documents in vault`, status: "done" };
+      } else {
+        steps[steps.length - 1] = { name: "No matching documents found", status: "done" };
+      }
+    }
+
+    // Check for file chunks (RAG)
+    let chunkContext = "";
+    if (vaultId) {
+      const { data: chunks } = await adminClient
+        .from("file_chunks")
+        .select("content, file_id, chunk_index")
+        .eq("organization_id", orgId)
+        .limit(20);
+      
+      if (chunks?.length) {
+        chunkContext = "\n\n## Document Chunks (RAG)\n" +
+          chunks.map((c) => c.content).join("\n---\n");
       }
     }
 
@@ -114,11 +134,12 @@ serve(async (req) => {
 - If you reference uploaded documents, cite them with their document number
 - Format responses with markdown: headers, lists, bold for key terms
 - When creating tables, use proper markdown table syntax
+- Always structure your analysis clearly with sections
 ${knowledgeContext}
-${vaultContext}`;
+${vaultContext}
+${chunkContext}`;
 
     // Determine which AI provider to use
-    // First check if org has configured LLM
     const { data: llmConfigs } = await adminClient
       .from("llm_configs")
       .select("*")
@@ -139,8 +160,6 @@ ${vaultContext}`;
 
     if (llmConfigs?.[0]) {
       const config = llmConfigs[0];
-      // For now use Lovable gateway but with configured model preferences
-      // In production, decrypt API keys and route to providers
       if (config.model_id) modelId = config.model_id;
     }
 
@@ -165,24 +184,20 @@ ${vaultContext}`;
       });
     }
 
-    // Create SSE response with agentic steps
+    // Create SSE response
     const encoder = new TextEncoder();
 
-    // Send steps first, then stream AI response
     const stream = new ReadableStream({
       async start(controller) {
         try {
           // Send agentic steps
-          if (steps.length > 0 || vaultContext || knowledgeContext) {
-            const allSteps = [
-              ...(knowledgeContext ? [{ name: "Loaded knowledge base context", status: "done" as const }] : []),
-              ...steps,
-              { name: "Generating response", status: "working" as const },
-            ];
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: "steps", steps: allSteps })}\n\n`)
-            );
-          }
+          const allSteps = [
+            ...steps,
+            { name: "Generating response", status: "working" as const },
+          ];
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: "steps", steps: allSteps })}\n\n`)
+          );
 
           // Call AI
           const aiResponse = await fetch(aiUrl, {
@@ -199,30 +214,21 @@ ${vaultContext}`;
 
           if (!aiResponse.ok) {
             const status = aiResponse.status;
-            if (status === 429) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ type: "error", error: "Rate limit exceeded. Please try again in a moment." })}\n\n`)
-              );
-              controller.close();
-              return;
-            }
-            if (status === 402) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ type: "error", error: "Usage limit reached. Please add credits to continue." })}\n\n`)
-              );
-              controller.close();
-              return;
-            }
             const errText = await aiResponse.text();
             console.error("AI gateway error:", status, errText);
+            
+            let errorMsg = "AI service temporarily unavailable. Please try again.";
+            if (status === 429) errorMsg = "Rate limit exceeded. Please try again in a moment.";
+            if (status === 402) errorMsg = "Usage limit reached. Please add credits to continue.";
+            
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: "error", error: "AI service unavailable" })}\n\n`)
+              encoder.encode(`data: ${JSON.stringify({ type: "error", error: errorMsg })}\n\n`)
             );
             controller.close();
             return;
           }
 
-          // Stream the AI response through
+          // Stream the AI response
           const reader = aiResponse.body!.getReader();
           const decoder = new TextDecoder();
           let fullContent = "";
@@ -283,7 +289,7 @@ ${vaultContext}`;
               .eq("conversation_id", conversationId);
 
             if (count && count <= 2) {
-              const title = message.slice(0, 60) + (message.length > 60 ? "..." : "");
+              const title = fullContent.substring(0, 60).replace(/[#*\n]/g, '').trim() + (fullContent.length > 60 ? "..." : "");
               await adminClient
                 .from("conversations")
                 .update({ title })
@@ -330,7 +336,6 @@ function extractCitations(content: string, vaultContext: string): { index: numbe
     if (seen.has(idx)) continue;
     seen.add(idx);
 
-    // Try to find the source document
     const docMatch = vaultContext.match(new RegExp(`### \\[${idx}\\] (.+?)\\n([\\s\\S]*?)(?=### \\[|$)`));
     citations.push({
       index: idx,
