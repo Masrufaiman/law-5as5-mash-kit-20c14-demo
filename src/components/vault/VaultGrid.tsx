@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderOpen, BookOpen, Search, Plus } from "lucide-react";
+import { FolderOpen, BookOpen, Search, Plus, Shield, FileText, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,11 +11,11 @@ import type { Tables } from "@/integrations/supabase/types";
 
 type VaultRow = Tables<"vaults">;
 
-const VAULT_COLORS = [
-  "bg-primary",
-  "bg-accent",
-  "bg-secondary",
-  "bg-muted",
+const VAULT_GRADIENTS = [
+  "from-primary/20 to-primary/5",
+  "from-accent/30 to-accent/10",
+  "from-secondary/40 to-secondary/10",
+  "from-muted to-muted/50",
 ];
 
 interface VaultGridProps {
@@ -150,20 +150,29 @@ export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault }: 
                 className="border border-border hover:border-primary/30 cursor-pointer transition-all group overflow-hidden"
                 onClick={() => onSelectVault(vault.id)}
               >
-                {/* Color strip */}
-                <div className={`h-1.5 ${VAULT_COLORS[i % VAULT_COLORS.length]}`} />
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <FolderOpen className="h-5 w-5 text-muted-foreground" />
-                    <Badge variant="outline" className="text-[10px]">Vault</Badge>
-                  </div>
+                {/* Gradient header area */}
+                <div className={`h-20 bg-gradient-to-br ${VAULT_GRADIENTS[i % VAULT_GRADIENTS.length]} flex items-center justify-center`}>
+                  <FolderOpen className="h-8 w-8 text-muted-foreground/40" />
+                </div>
+                <CardContent className="pt-3 pb-3 px-3">
                   <p className="font-medium text-foreground text-sm truncate">{vault.name}</p>
                   {vault.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{vault.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{vault.description}</p>
                   )}
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {fileCounts[vault.id] ?? 0} files
-                  </p>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <FileText className="h-3 w-3" />
+                      {fileCounts[vault.id] ?? 0} files
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <MessageSquare className="h-3 w-3" />
+                      0 queries
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 mt-2">
+                    <Shield className="h-2.5 w-2.5 text-primary" />
+                    <span className="text-[9px] text-primary font-medium">Secured by LawKit Vault</span>
+                  </div>
                 </CardContent>
               </Card>
             ))}
