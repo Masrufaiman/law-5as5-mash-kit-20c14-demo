@@ -108,6 +108,7 @@ export function useStreamChat() {
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let assistantContent = "";
+        let assistantReasoning = "";
         let assistantId = crypto.randomUUID();
         let buffer = "";
         let streamDone = false;
