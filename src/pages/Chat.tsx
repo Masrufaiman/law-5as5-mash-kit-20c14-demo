@@ -66,35 +66,40 @@ export default function Chat() {
   }, [searchParams, profile?.organization_id]);
 
   const loadConversation = async (convId: string) => {
-    const { data: conv } = await supabase
-      .from("conversations")
-      .select("id, title, vault_id")
-      .eq("id", convId)
-      .single();
+    setIsLoadingConversation(true);
+    try {
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("id, title, vault_id")
+        .eq("id", convId)
+        .single();
 
-    if (!conv) return;
+      if (!conv) return;
 
-    setConversationId(conv.id);
-    setConversationTitle(conv.title);
-    if (conv.vault_id) setVaultId(conv.vault_id);
+      setConversationId(conv.id);
+      setConversationTitle(conv.title);
+      if (conv.vault_id) setVaultId(conv.vault_id);
 
-    const { data: msgs } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("conversation_id", convId)
-      .order("created_at", { ascending: true });
+      const { data: msgs } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", convId)
+        .order("created_at", { ascending: true });
 
-    if (msgs?.length) {
-      loadHistory(
-        msgs.map((m) => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content,
-          citations: (m.citations as any) || undefined,
-          model: m.model_used || undefined,
-          createdAt: new Date(m.created_at),
-        }))
-      );
+      if (msgs?.length) {
+        loadHistory(
+          msgs.map((m) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            citations: (m.citations as any) || undefined,
+            model: m.model_used || undefined,
+            createdAt: new Date(m.created_at),
+          }))
+        );
+      }
+    } finally {
+      setIsLoadingConversation(false);
     }
   };
 
