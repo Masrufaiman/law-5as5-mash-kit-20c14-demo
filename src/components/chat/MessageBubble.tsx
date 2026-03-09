@@ -425,7 +425,11 @@ export function MessageBubble({
         {!isUser && stepsSection}
 
         {isUser ? (
-          <p className="text-sm text-foreground whitespace-pre-wrap">{message.content}</p>
+          <div>
+            <p className="text-sm text-foreground whitespace-pre-wrap">{message.content}</p>
+            <AttachmentBadges attachments={message.attachments} />
+            <UserMessageActions content={message.content} />
+          </div>
         ) : (
           <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/90 prose-strong:text-foreground prose-li:text-foreground/90 prose-td:text-foreground prose-th:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted prose-pre:border prose-pre:border-border">
             <ReactMarkdown

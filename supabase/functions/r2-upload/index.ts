@@ -121,7 +121,8 @@ Deno.serve(async (req) => {
     }
 
     const fileBytes = new Uint8Array(await file.arrayBuffer());
-    const putUrl = `${endpoint}/${config.bucket_name}/${r2Key}`;
+    const encodedR2Key = r2Key.split("/").map((s: string) => encodeURIComponent(s)).join("/");
+    const putUrl = `${endpoint}/${config.bucket_name}/${encodedR2Key}`;
 
     const putResp = await signedR2Request("PUT", putUrl, config, fileBytes, file.type);
 

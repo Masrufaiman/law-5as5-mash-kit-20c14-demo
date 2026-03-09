@@ -122,7 +122,7 @@ serve(async (req) => {
 
     const orgId = profile.organization_id;
     const body: ChatRequest = await req.json();
-    const { conversationId, message, vaultId, deepResearch, attachedFileIds, sources, history, useCase } = body;
+    const { conversationId, message, vaultId, deepResearch, attachedFileIds, attachedFileNames, sources, history, useCase, vaultName: clientVaultName } = body;
 
     // Load org info for personalization
     const { data: orgData } = await adminClient
