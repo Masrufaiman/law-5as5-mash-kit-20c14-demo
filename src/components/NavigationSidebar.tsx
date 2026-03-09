@@ -384,28 +384,34 @@ export function NavigationSidebar() {
         </nav>
 
         {/* Bottom section */}
-        <div className="border-t border-sidebar-border px-2 py-2 space-y-0.5">
+        <div className={cn("border-t border-sidebar-border py-2 space-y-0.5", collapsed ? "px-1" : "px-2")}>
           {settingsNav.map((item) => (
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
               className={cn(
-                "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                "flex w-full items-center rounded-md py-1.5 text-sm transition-colors",
+                collapsed ? "justify-center px-1" : "gap-2.5 px-2.5",
                 isActive(item.path)
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
+              title={collapsed ? item.label : undefined}
             >
               <item.icon className="h-4 w-4 shrink-0" />
-              {item.label}
+              {!collapsed && item.label}
             </button>
           ))}
           <button
             onClick={signOut}
-            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-sidebar-foreground/70 hover:bg-destructive/20 hover:text-destructive transition-colors"
+            className={cn(
+              "flex w-full items-center rounded-md py-1.5 text-sm text-sidebar-foreground/70 hover:bg-destructive/20 hover:text-destructive transition-colors",
+              collapsed ? "justify-center px-1" : "gap-2.5 px-2.5"
+            )}
+            title={collapsed ? "Sign Out" : undefined}
           >
             <LogOut className="h-4 w-4 shrink-0" />
-            Sign Out
+            {!collapsed && "Sign Out"}
           </button>
         </div>
       </div>
