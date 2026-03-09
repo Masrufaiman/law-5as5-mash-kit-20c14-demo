@@ -227,35 +227,39 @@ export function NavigationSidebar() {
         </div>
 
         {/* Main nav */}
-        <nav className="flex-1 overflow-y-auto px-2 space-y-0.5">
-          {/* Assistant with Recent nested underneath */}
+        <nav className={cn("flex-1 overflow-y-auto space-y-0.5", collapsed ? "px-1" : "px-2")}>
+          {/* Assistant */}
           <div>
             <button
               onClick={() => navigate("/")}
               className={cn(
-                "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                "flex w-full items-center rounded-md py-1.5 text-sm transition-colors",
+                collapsed ? "justify-center px-1" : "gap-2.5 px-2.5",
                 isActive("/")
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
+              title={collapsed ? "Assistant" : undefined}
             >
               <MessageSquare className="h-4 w-4 shrink-0" />
-              <span className="flex-1 text-left">Assistant</span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setRecentsOpen(!recentsOpen);
-                }}
-                className="text-sidebar-foreground/40 hover:text-sidebar-foreground"
-              >
-                {recentsOpen ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
-                )}
-              </button>
+              {!collapsed && <span className="flex-1 text-left">Assistant</span>}
+              {!collapsed && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRecentsOpen(!recentsOpen);
+                  }}
+                  className="text-sidebar-foreground/40 hover:text-sidebar-foreground"
+                >
+                  {recentsOpen ? (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              )}
             </button>
-            {recentsOpen && (
+            {!collapsed && recentsOpen && (
               <ScrollArea className="max-h-52">
                 <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
                   {isLoadingChats ? (
@@ -313,24 +317,26 @@ export function NavigationSidebar() {
             <button
               onClick={() => {
                 navigate("/vault");
-                setVaultsOpen(!vaultsOpen);
+                if (!collapsed) setVaultsOpen(!vaultsOpen);
               }}
               className={cn(
-                "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                "flex w-full items-center rounded-md py-1.5 text-sm transition-colors",
+                collapsed ? "justify-center px-1" : "gap-2.5 px-2.5",
                 isActive("/vault")
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
+              title={collapsed ? "Vault" : undefined}
             >
               <FolderOpen className="h-4 w-4 shrink-0" />
-              <span className="flex-1 text-left">Vault</span>
-              {vaultsOpen ? (
+              {!collapsed && <span className="flex-1 text-left">Vault</span>}
+              {!collapsed && (vaultsOpen ? (
                 <ChevronDown className="h-3.5 w-3.5 opacity-50" />
               ) : (
                 <ChevronRight className="h-3.5 w-3.5 opacity-50" />
-              )}
+              ))}
             </button>
-            {vaultsOpen && (
+            {!collapsed && vaultsOpen && (
               <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
                 {isLoadingVaults ? (
                   <>
@@ -363,14 +369,16 @@ export function NavigationSidebar() {
               key={item.path}
               onClick={() => navigate(item.path)}
               className={cn(
-                "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                "flex w-full items-center rounded-md py-1.5 text-sm transition-colors",
+                collapsed ? "justify-center px-1" : "gap-2.5 px-2.5",
                 isActive(item.path)
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
+              title={collapsed ? item.label : undefined}
             >
               <item.icon className="h-4 w-4 shrink-0" />
-              {item.label}
+              {!collapsed && item.label}
             </button>
           ))}
         </nav>
