@@ -20,6 +20,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    console.log(`[document-processor] Starting processing for file: ${fileId}`);
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
@@ -32,11 +34,14 @@ Deno.serve(async (req) => {
       .single();
 
     if (fileError || !file) {
+      console.error(`[document-processor] File not found: ${fileId}`, fileError);
       return new Response(
         JSON.stringify({ error: "File not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log(`[document-processor] File found: ${file.original_name} (${file.mime_type}, ${file.size_bytes} bytes)`);
 
     // Update status to processing
     await supabase
@@ -61,6 +66,8 @@ Deno.serve(async (req) => {
     const chunkOverlap = docConf.chunk_overlap || 200;
     const embeddingModel = docConf.embedding_model || "text-embedding-3-small";
 
+    console.log(`[document-processor] Config loaded. OCR: ${!!ocrConf.aws_access_key}, OpenAI: ${!!openaiConf.api_key}, Qdrant: ${!!qdrantConf.url}`);
+
     // Load R2 config
     const { data: r2Config } = await supabase
       .from("api_integrations")
@@ -71,31 +78,36 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const r2Conf = (r2Config?.config as any) || {};
+    console.log(`[document-processor] R2 config: ${r2Conf.access_key_id ? "configured" : "not configured"}`);
 
     // --- STEP 1: Download file from R2 ---
     let fileBuffer: Uint8Array;
     const r2Key = file.storage_path;
 
     if (r2Conf.access_key_id && r2Conf.bucket_name) {
+      console.log(`[document-processor] Downloading from R2: ${r2Key}`);
       const endpoint = r2Conf.endpoint_url || `https://${r2Conf.account_id}.r2.cloudflarestorage.com`;
       const downloadUrl = `${endpoint}/${r2Conf.bucket_name}/${r2Key}`;
       const downloadResp = await signedR2Request("GET", downloadUrl, r2Conf, new Uint8Array());
       if (!downloadResp.ok) {
-        // Fallback to Supabase Storage
+        console.warn(`[document-processor] R2 download failed (${downloadResp.status}), trying Supabase Storage fallback`);
         const { data: storageData, error: dlErr } = await supabase.storage.from("vault-files").download(r2Key);
         if (dlErr || !storageData) {
-          await supabase.from("files").update({ status: "error", error_message: "Failed to download file" }).eq("id", fileId);
+          console.error(`[document-processor] Supabase Storage fallback also failed:`, dlErr);
+          await supabase.from("files").update({ status: "error", error_message: "Failed to download file from storage" }).eq("id", fileId);
           return new Response(JSON.stringify({ error: "Download failed" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
         fileBuffer = new Uint8Array(await storageData.arrayBuffer());
       } else {
         fileBuffer = new Uint8Array(await downloadResp.arrayBuffer());
+        console.log(`[document-processor] Downloaded ${fileBuffer.length} bytes from R2`);
       }
     } else {
-      // No R2 config, try Supabase storage fallback
+      console.log(`[document-processor] No R2 config, trying Supabase Storage: ${r2Key}`);
       const { data: storageData, error: dlErr } = await supabase.storage.from("vault-files").download(r2Key);
       if (dlErr || !storageData) {
-        await supabase.from("files").update({ status: "error", error_message: "Failed to download file" }).eq("id", fileId);
+        console.error(`[document-processor] Supabase Storage download failed:`, dlErr);
+        await supabase.from("files").update({ status: "error", error_message: "Failed to download file — no storage configured" }).eq("id", fileId);
         return new Response(JSON.stringify({ error: "Download failed" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       fileBuffer = new Uint8Array(await storageData.arrayBuffer());
@@ -106,38 +118,40 @@ Deno.serve(async (req) => {
     let ocrUsed = false;
     let pageCount = 1;
 
+    console.log(`[document-processor] Extracting text from ${file.mime_type}`);
+
     if (file.mime_type === "text/plain" || file.mime_type === "text/markdown") {
       extractedText = new TextDecoder().decode(fileBuffer);
     } else if (file.mime_type === "application/pdf") {
-      // Try native text extraction first
       const textContent = new TextDecoder("utf-8", { fatal: false }).decode(fileBuffer);
-      // Rough heuristic: if we can find readable text streams in the PDF
       const textMatches = textContent.match(/\(([^)]{2,})\)/g);
       const roughText = textMatches ? textMatches.map(m => m.slice(1, -1)).join(" ") : "";
 
       if (roughText.length > 100) {
-        // Native PDF with extractable text
         extractedText = roughText;
+        console.log(`[document-processor] Native PDF text extracted: ${extractedText.length} chars`);
       } else if (ocrConf.aws_access_key && ocrConf.aws_secret_key) {
-        // Scanned PDF — use AWS Textract
         try {
+          console.log(`[document-processor] Using AWS Textract for OCR`);
           const textractResult = await callTextract(fileBuffer, ocrConf);
           extractedText = textractResult;
           ocrUsed = true;
+          console.log(`[document-processor] OCR complete: ${extractedText.length} chars`);
         } catch (ocrErr: any) {
-          console.error("Textract error:", ocrErr.message);
+          console.error("[document-processor] Textract error:", ocrErr.message);
           extractedText = `[PDF document: ${file.original_name}] — OCR failed: ${ocrErr.message}`;
         }
       } else {
+        console.warn(`[document-processor] No OCR configured for scanned PDF`);
         extractedText = `[PDF document: ${file.original_name}] — No OCR configured. Configure AWS Textract in Admin → Infrastructure.`;
       }
     } else if (
       file.mime_type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
       file.mime_type === "application/msword"
     ) {
-      // Basic DOCX text extraction (XML parsing)
       try {
         extractedText = await extractDocxText(fileBuffer);
+        console.log(`[document-processor] DOCX text extracted: ${extractedText.length} chars`);
       } catch {
         extractedText = `[Word document: ${file.original_name}] — Text extraction failed.`;
       }
@@ -146,7 +160,6 @@ Deno.serve(async (req) => {
     ) {
       extractedText = `[Spreadsheet: ${file.original_name}] — Text extraction pending.`;
     } else if (file.mime_type?.startsWith("image/")) {
-      // Image — try OCR
       if (ocrConf.aws_access_key && ocrConf.aws_secret_key) {
         try {
           extractedText = await callTextract(fileBuffer, ocrConf);
@@ -169,6 +182,7 @@ Deno.serve(async (req) => {
       const putUrl = `${endpoint}/${r2Conf.bucket_name}/${extractedTextR2Key}`;
       const textBytes = new TextEncoder().encode(extractedText);
       await signedR2Request("PUT", putUrl, r2Conf, textBytes, "text/plain");
+      console.log(`[document-processor] Saved extracted text to R2: ${extractedTextR2Key}`);
     }
 
     // --- STEP 4: Chunk text ---
@@ -193,18 +207,24 @@ Deno.serve(async (req) => {
       }
     }
 
+    console.log(`[document-processor] Created ${chunks.length} chunks`);
+
     // --- STEP 5: Embed chunks via OpenAI ---
     let embeddings: number[][] = [];
     if (openaiConf.api_key && chunks.length > 0) {
       try {
+        console.log(`[document-processor] Embedding ${chunks.length} chunks with ${embeddingModel}`);
         embeddings = await embedChunks(
           chunks.map(c => c.content),
           openaiConf.api_key,
           embeddingModel
         );
+        console.log(`[document-processor] Embeddings generated: ${embeddings.length}`);
       } catch (embErr: any) {
-        console.error("Embedding error:", embErr.message);
+        console.error("[document-processor] Embedding error:", embErr.message);
       }
+    } else if (!openaiConf.api_key) {
+      console.warn("[document-processor] No OpenAI API key configured — skipping embeddings");
     }
 
     // --- STEP 6: Upsert to Qdrant ---
@@ -212,10 +232,9 @@ Deno.serve(async (req) => {
     if (qdrantConf.url && qdrantConf.api_key && embeddings.length > 0) {
       const collectionName = `${qdrantConf.collection_prefix || "org_"}${file.organization_id}`;
 
-      // Ensure collection exists
+      console.log(`[document-processor] Upserting to Qdrant collection: ${collectionName}`);
       await ensureQdrantCollection(qdrantConf.url, qdrantConf.api_key, collectionName, embeddings[0].length);
 
-      // Upsert points
       const points = chunks.map((c, i) => {
         const pointId = crypto.randomUUID();
         qdrantPointIds.push(pointId);
@@ -237,10 +256,9 @@ Deno.serve(async (req) => {
         };
       });
 
-      // Batch upsert (max 100 per batch)
       for (let i = 0; i < points.length; i += 100) {
         const batch = points.slice(i, i + 100);
-        await fetch(`${qdrantConf.url}/collections/${collectionName}/points`, {
+        const upsertResp = await fetch(`${qdrantConf.url}/collections/${collectionName}/points`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -248,7 +266,13 @@ Deno.serve(async (req) => {
           },
           body: JSON.stringify({ points: batch }),
         });
+        if (!upsertResp.ok) {
+          console.error(`[document-processor] Qdrant upsert failed:`, await upsertResp.text());
+        }
       }
+      console.log(`[document-processor] Upserted ${points.length} points to Qdrant`);
+    } else if (!qdrantConf.url) {
+      console.warn("[document-processor] No Qdrant configured — skipping vector upsert");
     }
 
     // --- STEP 7: Save chunks to Supabase ---
@@ -265,9 +289,11 @@ Deno.serve(async (req) => {
         qdrant_point_id: qdrantPointIds[i] || null,
       }));
 
-      // Delete old chunks first
       await supabase.from("file_chunks").delete().eq("file_id", fileId);
-      await supabase.from("file_chunks").insert(chunkRows);
+      const { error: chunkInsertErr } = await supabase.from("file_chunks").insert(chunkRows);
+      if (chunkInsertErr) {
+        console.error("[document-processor] Chunk insert error:", chunkInsertErr);
+      }
     }
 
     // --- STEP 8: Update file record ---
@@ -283,12 +309,26 @@ Deno.serve(async (req) => {
       })
       .eq("id", fileId);
 
+    console.log(`[document-processor] ✅ Complete: ${chunks.length} chunks, ${embeddings.length} embeddings, OCR: ${ocrUsed}`);
+
     return new Response(
       JSON.stringify({ success: true, chunks: chunks.length, ocrUsed, embeddings: embeddings.length }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
-    console.error("document-processor error:", err);
+    console.error("[document-processor] Fatal error:", err);
+    
+    // Try to update file status to error
+    try {
+      const { fileId } = await req.clone().json().catch(() => ({ fileId: null }));
+      if (fileId) {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const supabase = createClient(supabaseUrl, serviceKey);
+        await supabase.from("files").update({ status: "error", error_message: err.message }).eq("id", fileId);
+      }
+    } catch { /* best effort */ }
+
     return new Response(
       JSON.stringify({ error: err.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -305,7 +345,7 @@ async function callTextract(fileBytes: Uint8Array, ocrConf: any): Promise<string
 
   const body = JSON.stringify({
     Document: {
-      Bytes: btoa(String.fromCharCode(...fileBytes.slice(0, 5 * 1024 * 1024))), // max 5MB for sync
+      Bytes: btoa(String.fromCharCode(...fileBytes.slice(0, 5 * 1024 * 1024))),
     },
   });
 
@@ -401,13 +441,11 @@ async function embedChunks(texts: string[], apiKey: string, model: string): Prom
 
 // --- Qdrant helpers ---
 async function ensureQdrantCollection(url: string, apiKey: string, name: string, vectorSize: number) {
-  // Check if collection exists
   const checkResp = await fetch(`${url}/collections/${name}`, {
     headers: { "api-key": apiKey },
   });
 
   if (checkResp.status === 404) {
-    // Create collection
     await fetch(`${url}/collections/${name}`, {
       method: "PUT",
       headers: {
@@ -423,8 +461,6 @@ async function ensureQdrantCollection(url: string, apiKey: string, name: string,
 
 // --- DOCX extraction (basic XML parsing) ---
 async function extractDocxText(buffer: Uint8Array): Promise<string> {
-  // DOCX is a ZIP file. We need to find document.xml inside it.
-  // Simple approach: look for text between <w:t> tags
   const text = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
   const matches = text.match(/<w:t[^>]*>([^<]*)<\/w:t>/g);
   if (!matches) return "";
@@ -479,10 +515,22 @@ async function signedR2Request(method: string, url: string, config: any, body: U
   const signedHeaders = signedHeaderKeys.join(";");
   const canonicalHeaders = signedHeaderKeys.map(k => `${k}:${headers[k]}\n`).join("");
 
-  const canonicalRequest = [method, parsedUrl.pathname, parsedUrl.search.replace("?", ""), canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const canonicalRequest = [
+    method,
+    parsedUrl.pathname,
+    "",
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join("\n");
 
   const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
-  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, await sha256Hex(new TextEncoder().encode(canonicalRequest))].join("\n");
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
+    credentialScope,
+    await sha256Hex(new TextEncoder().encode(canonicalRequest)),
+  ].join("\n");
 
   const signingKey = await getSignatureKey(config.secret_access_key, dateStamp, region, service);
   const signature = await hmacHex(signingKey, stringToSign);
@@ -492,6 +540,6 @@ async function signedR2Request(method: string, url: string, config: any, body: U
   return fetch(url, {
     method,
     headers: { ...headers, Authorization: authorization },
-    body: method === "PUT" ? body : undefined,
+    body: method !== "GET" ? body : undefined,
   });
 }

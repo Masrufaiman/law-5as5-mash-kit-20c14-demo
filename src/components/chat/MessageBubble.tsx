@@ -6,6 +6,8 @@ import { CitationPopover } from "./CitationPopover";
 import { ChoiceCards, parseChoices } from "./ChoiceCards";
 import { MultiStepQuestionnaire, parseMultiStepQuestions } from "./MultiStepQuestionnaire";
 import { StepTracker } from "./StepTracker";
+import { SourcesFooter } from "./SourcesFooter";
+import { FollowUpSuggestions } from "./FollowUpSuggestions";
 import { Card } from "@/components/ui/card";
 import { FileText, Bot } from "lucide-react";
 import type { ChatMessage, Citation, AgentStep } from "@/hooks/useStreamChat";
@@ -20,10 +22,22 @@ interface MessageBubbleProps {
   isLastAssistant?: boolean;
   steps?: AgentStep[];
   isStreamingSteps?: boolean;
+  onFollowUp?: (text: string) => void;
+}
+
+// Map Unicode superscript digits to normal digits
+const SUPERSCRIPT_MAP: Record<string, string> = {
+  "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
+  "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+};
+
+function superscriptToNumber(s: string): number {
+  const digits = s.split("").map((c) => SUPERSCRIPT_MAP[c] || c).join("");
+  return parseInt(digits, 10);
 }
 
 /**
- * Recursively process React children to replace [N] patterns with CitationPopover components.
+ * Recursively process React children to replace citation patterns with CitationPopover components.
  */
 function processChildren(
   children: React.ReactNode,
@@ -43,28 +57,56 @@ function processChildren(
   });
 }
 
+// Match [N], [¹], [², ³], superscript groups like ¹²³, and standalone superscripts
+const CITATION_PATTERN = /(\[\d+\]|\[[\u2070\u00b9\u00b2\u00b3\u2074-\u2079][,\s\u2070\u00b9\u00b2\u00b3\u2074-\u2079]*\]|[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+)/g;
+
 function injectCitations(text: string, citations: Citation[]): React.ReactNode[] {
-  const parts = text.split(/(\[\d+\])/g);
+  const parts = text.split(CITATION_PATTERN);
   if (parts.length === 1) return [text];
 
   return parts.map((part, i) => {
-    const match = part.match(/^\[(\d+)\]$/);
-    if (match) {
-      const idx = parseInt(match[1], 10);
+    // Try [N] format
+    const bracketMatch = part.match(/^\[(\d+)\]$/);
+    if (bracketMatch) {
+      const idx = parseInt(bracketMatch[1], 10);
       const citation = citations.find((c) => c.index === idx);
-      if (citation) {
-        return <CitationPopover key={`cite-${idx}-${i}`} citation={citation} />;
-      }
+      if (citation) return <CitationPopover key={`cite-${idx}-${i}`} citation={citation} />;
     }
+
+    // Try [superscript] format like [², ⁴] or standalone superscripts
+    const superscriptChars = part.replace(/[\[\],\s]/g, "");
+    if (/^[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+$/.test(superscriptChars)) {
+      // Split into individual superscript numbers
+      const nums = part.replace(/[\[\]]/g, "").split(/[,\s]+/).filter(Boolean);
+      const elements: React.ReactNode[] = [];
+      nums.forEach((num, j) => {
+        const trimmed = num.trim();
+        if (!trimmed) return;
+        const idx = superscriptToNumber(trimmed);
+        // Perplexity citations start at index 100+
+        const citation = citations.find((c) => c.index === idx || c.index === idx + 99);
+        if (citation) {
+          elements.push(<CitationPopover key={`cite-s-${idx}-${i}-${j}`} citation={{ ...citation, index: idx }} />);
+        } else {
+          elements.push(<CitationPopover key={`cite-s-${idx}-${i}-${j}`} citation={{ index: idx, source: `Source ${idx}`, excerpt: "" }} />);
+        }
+      });
+      if (elements.length > 0) return <>{elements}</>;
+    }
+
     return part;
   });
 }
 
-/** Strip trailing "Citations:" or "Sources:" block from content */
+/** Strip trailing "Citations:", "Sources:", "References:" blocks and --- separators from content */
 function stripCitationsBlock(content: string): string {
   return content
-    .replace(/\n{0,3}---+\s*\n{0,3}(?:(?:Citations|Sources|References)\s*:?\s*\n(?:\[\d+\][^\n]*\n?)*)?$/i, "")
-    .replace(/\n{1,2}(?:Citations|Sources|References)\s*:?\s*\n(?:\[\d+\][^\n]*\n?)+$/i, "")
+    // Strip --- followed by Sources/Citations/References block
+    .replace(/\n{0,3}---+\s*\n{0,3}(?:(?:Citations|Sources|References)\s*:?\s*\n[\s\S]*)?$/i, "")
+    // Strip standalone Sources/Citations/References block at end
+    .replace(/\n{1,2}(?:Citations|Sources|References)\s*:?\s*\n[\s\S]*$/i, "")
+    // Strip "Sources:" lines with superscript refs
+    .replace(/\n{1,2}Sources?\s*:?\s*\n(?:\[?[\u2070\u00b9\u00b2\u00b3\u2074-\u2079\d][\s\S]*)?$/i, "")
     .trim();
 }
 
@@ -105,9 +147,11 @@ export function MessageBubble({
   isLastAssistant,
   steps,
   isStreamingSteps,
+  onFollowUp,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const citations = message.citations || [];
+  const followUps = message.followUps || [];
 
   // Clean content: strip trailing citations block from AI text
   const cleanContent = !isUser ? stripCitationsBlock(message.content) : message.content;
@@ -115,7 +159,7 @@ export function MessageBubble({
   // Determine if a choice was already selected (next message is the user's selection)
   const alreadySelected = nextMessage?.role === "user" ? nextMessage.content : null;
 
-  // Detect multi-step questionnaire pattern (for any assistant message, not just last)
+  // Detect multi-step questionnaire pattern
   const questionnaireData = !isUser && !isStreaming && onChoiceSelect
     ? parseMultiStepQuestions(cleanContent)
     : null;
@@ -125,7 +169,7 @@ export function MessageBubble({
     ? parseChoices(cleanContent)
     : null;
 
-  // Whether this gen UI is interactive (only for last assistant with no follow-up yet)
+  // Whether this gen UI is interactive
   const isInteractive = isLastAssistant && !alreadySelected;
 
   // Detect document patterns
@@ -164,11 +208,21 @@ export function MessageBubble({
     };
   }, [citations]);
 
-  // Steps section (collapsed by default, under assistant header)
+  // Steps section
   const stepsSection = !isUser && steps && steps.length > 0 ? (
     <div className="mb-2">
       <StepTracker steps={steps} isStreaming={isStreamingSteps} />
     </div>
+  ) : null;
+
+  // Sources footer (only for non-streaming assistant messages with citations)
+  const sourcesFooter = !isUser && !isStreaming && citations.length > 0 ? (
+    <SourcesFooter citations={citations} />
+  ) : null;
+
+  // Follow-up suggestions
+  const followUpSection = !isUser && !isStreaming && followUps.length > 0 && isLastAssistant && onFollowUp ? (
+    <FollowUpSuggestions suggestions={followUps} onSelect={onFollowUp} />
   ) : null;
 
   // Render document as compact card instead of full content
@@ -183,7 +237,6 @@ export function MessageBubble({
         <div className="pl-8 space-y-3">
           {stepsSection}
 
-          {/* Brief intro text before the document */}
           {(() => {
             const firstHeadingIdx = cleanContent.search(/^(?:#{1,2}\s+|\*\*[A-Z])/m);
             const intro = firstHeadingIdx > 0 ? cleanContent.slice(0, firstHeadingIdx).trim() : null;
@@ -194,7 +247,6 @@ export function MessageBubble({
             ) : null;
           })()}
 
-          {/* Compact document card */}
           <Card
             className="cursor-pointer border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-all duration-200 p-0"
             onClick={() => onDocumentOpen(docInfo.title, cleanContent)}
@@ -209,6 +261,9 @@ export function MessageBubble({
               </div>
             </div>
           </Card>
+
+          {sourcesFooter}
+          {followUpSection}
 
           {!isStreaming && cleanContent && (
             <ResponseActions
@@ -241,6 +296,9 @@ export function MessageBubble({
             selectedValue={alreadySelected}
           />
 
+          {sourcesFooter}
+          {followUpSection}
+
           {!isStreaming && cleanContent && (
             <div className="mt-2">
               <ResponseActions
@@ -255,7 +313,7 @@ export function MessageBubble({
     );
   }
 
-  // Render choice cards for multiple-choice responses
+  // Render choice cards
   if (choiceData && onChoiceSelect) {
     return (
       <div className="group">
@@ -274,6 +332,9 @@ export function MessageBubble({
             selectedValue={alreadySelected}
           />
 
+          {sourcesFooter}
+          {followUpSection}
+
           {!isStreaming && cleanContent && (
             <div className="mt-2">
               <ResponseActions
@@ -290,7 +351,6 @@ export function MessageBubble({
 
   return (
     <div className="group">
-      {/* Avatar + role header */}
       <div className="flex items-center gap-2 mb-2">
         <AgentAvatar isUser={isUser} />
         <span className="text-xs font-semibold text-foreground">
@@ -298,7 +358,6 @@ export function MessageBubble({
         </span>
       </div>
 
-      {/* Content */}
       <div className="pl-8">
         {!isUser && stepsSection}
 
@@ -357,7 +416,6 @@ export function MessageBubble({
                     {children}
                   </pre>
                 ),
-                // Override text-containing elements with citation injection
                 ...citeComponents,
               }}
             >
@@ -366,12 +424,13 @@ export function MessageBubble({
           </div>
         )}
 
-        {/* Streaming cursor */}
         {isStreaming && !isUser && (
           <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom rounded-full" />
         )}
 
-        {/* Actions for assistant messages */}
+        {!isUser && !isStreaming && sourcesFooter}
+        {!isUser && !isStreaming && followUpSection}
+
         {!isUser && !isStreaming && cleanContent && (
           <ResponseActions
             content={cleanContent}
