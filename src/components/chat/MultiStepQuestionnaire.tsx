@@ -116,7 +116,9 @@ export function MultiStepQuestionnaire({ preamble, questions, onComplete, disabl
     return (
       <div className="space-y-3">
         {preamble && (
-          <p className="text-sm text-foreground/90 leading-relaxed">{preamble}</p>
+          <div className="text-sm text-foreground/90 leading-relaxed prose prose-sm max-w-none">
+            <ReactMarkdown>{preamble}</ReactMarkdown>
+          </div>
         )}
         <div className="flex items-center gap-3">
           <Progress value={100} className="h-1.5 flex-1" />
