@@ -125,27 +125,22 @@ Deno.serve(async (req) => {
     if (file.mime_type === "text/plain" || file.mime_type === "text/markdown") {
       extractedText = new TextDecoder().decode(fileBuffer);
     } else if (file.mime_type === "application/pdf") {
-      const textContent = new TextDecoder("utf-8", { fatal: false }).decode(fileBuffer);
-      const textMatches = textContent.match(/\(([^)]{2,})\)/g);
-      const roughText = textMatches ? textMatches.map(m => m.slice(1, -1)).join(" ") : "";
-
-      if (roughText.length > 100) {
-        extractedText = roughText;
-        console.log(`[document-processor] Native PDF text extracted: ${extractedText.length} chars`);
-      } else if (ocrConf.aws_access_key && ocrConf.aws_secret_key) {
+      // Always use Mistral OCR for PDFs — native regex extraction is unreliable
+      if (ocrConf.mistral_api_key) {
         try {
-          console.log(`[document-processor] Using AWS Textract for OCR`);
-          const textractResult = await callTextract(fileBuffer, ocrConf);
-          extractedText = textractResult;
+          console.log(`[document-processor] Using Mistral OCR for PDF`);
+          const ocrResult = await callMistralOCR(fileBuffer, file.mime_type, ocrConf.mistral_api_key);
+          extractedText = ocrResult.text;
+          pageCount = ocrResult.pageCount;
           ocrUsed = true;
-          console.log(`[document-processor] OCR complete: ${extractedText.length} chars`);
+          console.log(`[document-processor] Mistral OCR complete: ${extractedText.length} chars, ${pageCount} pages`);
         } catch (ocrErr: any) {
-          console.error("[document-processor] Textract error:", ocrErr.message);
+          console.error("[document-processor] Mistral OCR error:", ocrErr.message);
           extractedText = `[PDF document: ${file.original_name}] — OCR failed: ${ocrErr.message}`;
         }
       } else {
-        console.warn(`[document-processor] No OCR configured for scanned PDF`);
-        extractedText = `[PDF document: ${file.original_name}] — No OCR configured. Configure AWS Textract in Admin → Infrastructure.`;
+        console.warn(`[document-processor] No Mistral API key configured for PDF OCR`);
+        extractedText = `[PDF document: ${file.original_name}] — No OCR configured. Add Mistral API key in Admin → Infrastructure.`;
       }
     } else if (
       file.mime_type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
