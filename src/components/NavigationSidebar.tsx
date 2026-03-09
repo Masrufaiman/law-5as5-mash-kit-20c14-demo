@@ -205,14 +205,33 @@ export function NavigationSidebar() {
           </div>
 
           {/* Recent Chats */}
-          {recentChats.length > 0 && (
-            <>
-              <div className="my-2 h-px bg-sidebar-border" />
-              <p className="text-[10px] font-medium text-sidebar-foreground/40 px-2.5 py-1 uppercase tracking-wider">
-                Recent
-              </p>
-              <div className="space-y-0.5">
-                {recentChats.map((chat) => (
+          <>
+            <div className="my-2 h-px bg-sidebar-border" />
+            <p className="text-[10px] font-medium text-sidebar-foreground/40 px-2.5 py-1 uppercase tracking-wider">
+              Recent
+            </p>
+            <div className="space-y-0.5">
+              {isLoadingChats ? (
+                <>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5">
+                    <Skeleton className="h-3 w-3 rounded shrink-0" />
+                    <Skeleton className="h-3 w-28" />
+                  </div>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5">
+                    <Skeleton className="h-3 w-3 rounded shrink-0" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5">
+                    <Skeleton className="h-3 w-3 rounded shrink-0" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5">
+                    <Skeleton className="h-3 w-3 rounded shrink-0" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                </>
+              ) : recentChats.length > 0 ? (
+                recentChats.map((chat) => (
                   <button
                     key={chat.id}
                     onClick={() => navigate(`/chat?id=${chat.id}`)}
@@ -226,10 +245,12 @@ export function NavigationSidebar() {
                     <MessageSquare className="h-3 w-3 shrink-0 opacity-50" />
                     <span className="truncate">{chat.title}</span>
                   </button>
-                ))}
-              </div>
-            </>
-          )}
+                ))
+              ) : (
+                <p className="px-2.5 py-1.5 text-xs text-sidebar-foreground/40">No conversations yet</p>
+              )}
+            </div>
+          </>
 
           {/* Separator */}
           <div className="my-2 h-px bg-sidebar-border" />

@@ -289,7 +289,58 @@ export default function Chat() {
           </div>
 
           {/* Messages */}
-          {messages.length === 0 && !isStreaming ? (
+          {/* Skeleton while loading a past conversation */}
+          {isLoadingConversation ? (
+            <div className="flex-1">
+              <div className="mx-auto max-w-3xl px-6 py-6 space-y-8">
+                {/* User message skeleton */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Skeleton className="h-6 w-6 rounded-full" />
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                  <div className="pl-8 space-y-2">
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                </div>
+                {/* Assistant message skeleton */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Skeleton className="h-6 w-6 rounded-full" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                  <div className="pl-8 space-y-2.5">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-5/6" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                </div>
+                {/* Another exchange skeleton */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Skeleton className="h-6 w-6 rounded-full" />
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                  <div className="pl-8 space-y-2">
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Skeleton className="h-6 w-6 rounded-full" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                  <div className="pl-8 space-y-2.5">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-4/5" />
+                    <Skeleton className="h-4 w-3/4" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : messages.length === 0 && !isStreaming ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center px-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
                 <MessageSquare className="h-6 w-6 text-muted-foreground" />
