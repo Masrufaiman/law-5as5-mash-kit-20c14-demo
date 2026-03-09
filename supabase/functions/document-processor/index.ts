@@ -87,7 +87,9 @@ Deno.serve(async (req) => {
     if (r2Conf.access_key_id && r2Conf.bucket_name) {
       console.log(`[document-processor] Downloading from R2: ${r2Key}`);
       const endpoint = r2Conf.endpoint_url || `https://${r2Conf.account_id}.r2.cloudflarestorage.com`;
-      const downloadUrl = `${endpoint}/${r2Conf.bucket_name}/${r2Key}`;
+      // URI-encode each path segment to handle spaces/special chars in filenames
+      const encodedR2Key = r2Key.split("/").map((seg: string) => encodeURIComponent(seg)).join("/");
+      const downloadUrl = `${endpoint}/${r2Conf.bucket_name}/${encodedR2Key}`;
       const downloadResp = await signedR2Request("GET", downloadUrl, r2Conf, new Uint8Array());
       if (!downloadResp.ok) {
         console.warn(`[document-processor] R2 download failed (${downloadResp.status}), trying Supabase Storage fallback`);
@@ -497,8 +499,34 @@ async function getSignatureKey(key: string, dateStamp: string, region: string, s
   return hmacSha256(kService, "aws4_request");
 }
 
+// URI-encode per AWS SigV4 rules
+function uriEncode(str: string, encodeSlash = true): string {
+  let encoded = "";
+  for (const ch of str) {
+    if (
+      (ch >= "A" && ch <= "Z") ||
+      (ch >= "a" && ch <= "z") ||
+      (ch >= "0" && ch <= "9") ||
+      ch === "_" || ch === "-" || ch === "~" || ch === "."
+    ) {
+      encoded += ch;
+    } else if (ch === "/" && !encodeSlash) {
+      encoded += ch;
+    } else {
+      const bytes = new TextEncoder().encode(ch);
+      for (const b of bytes) {
+        encoded += "%" + b.toString(16).toUpperCase().padStart(2, "0");
+      }
+    }
+  }
+  return encoded;
+}
+
 // --- R2 signed request ---
 async function signedR2Request(method: string, url: string, config: any, body: Uint8Array, contentType?: string): Promise<Response> {
+  const accessKeyId = (config.access_key_id || "").trim();
+  const secretAccessKey = (config.secret_access_key || "").trim();
+
   const parsedUrl = new URL(url);
   const region = config.region === "auto" ? "auto" : config.region || "auto";
   const service = "s3";
@@ -518,9 +546,11 @@ async function signedR2Request(method: string, url: string, config: any, body: U
   const signedHeaders = signedHeaderKeys.join(";");
   const canonicalHeaders = signedHeaderKeys.map(k => `${k}:${headers[k]}\n`).join("");
 
+  const canonicalUri = uriEncode(decodeURIComponent(parsedUrl.pathname), false) || "/";
+
   const canonicalRequest = [
     method,
-    parsedUrl.pathname,
+    canonicalUri,
     "",
     canonicalHeaders,
     signedHeaders,
@@ -535,10 +565,10 @@ async function signedR2Request(method: string, url: string, config: any, body: U
     await sha256Hex(new TextEncoder().encode(canonicalRequest)),
   ].join("\n");
 
-  const signingKey = await getSignatureKey(config.secret_access_key, dateStamp, region, service);
+  const signingKey = await getSignatureKey(secretAccessKey, dateStamp, region, service);
   const signature = await hmacHex(signingKey, stringToSign);
 
-  const authorization = `AWS4-HMAC-SHA256 Credential=${config.access_key_id}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
   return fetch(url, {
     method,
