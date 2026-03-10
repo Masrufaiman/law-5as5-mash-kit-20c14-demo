@@ -466,8 +466,8 @@ export function NavigationSidebar() {
             </CommandGroup>
           )}
           {recentChats.length > 0 && !searchQuery && (
-            <CommandGroup heading="Recent">
-              {recentChats.slice(0, 5).map((r) => (
+            <CommandGroup heading="Recent Conversations">
+              {recentChats.map((r) => (
                 <CommandItem
                   key={r.id}
                   onSelect={() => {

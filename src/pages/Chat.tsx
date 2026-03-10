@@ -280,6 +280,7 @@ export default function Chat() {
       useCase: pMode,
       currentSheetState: sheetDoc,
       workflowSystemPrompt: workflowSystemPrompt || workflowTag?.systemPrompt,
+      currentDocumentContent: editorDoc?.content,
     };
     lastStreamOptions.current = opts;
     sendMessage(msg, opts);
@@ -303,6 +304,7 @@ export default function Chat() {
         useCase: promptMode,
         currentSheetState: sheetDoc,
         workflowSystemPrompt: workflowTag?.systemPrompt,
+        currentDocumentContent: editorDoc?.content,
       };
       lastStreamOptions.current = opts;
       sendMessage(msg, opts);
@@ -611,31 +613,34 @@ export default function Chat() {
                   const isLastUser = msg.role === "user" && i === lastUserIdx;
                   const nextMsg = messages[i + 1] || undefined;
 
-                  const showSteps = msg.role === "assistant" && i === messages.length - 1;
-                  const showSearchSources = showSteps ? searchSources : undefined;
+                  const isCurrentlyStreaming = isStreaming && msg.role === "assistant" && i === messages.length - 1;
+                  
+                  // For the currently streaming message, use live steps. For older messages, use frozen steps.
+                  const msgSteps = isCurrentlyStreaming ? steps : msg.frozenSteps;
+                  const msgPlan = isCurrentlyStreaming ? plan : msg.frozenPlan;
+                  const msgThinking = isCurrentlyStreaming ? thinkingText : msg.frozenThinkingText;
+                  const msgFileRefs = isCurrentlyStreaming ? fileRefs : msg.frozenFileRefs;
+                  const msgSearchSources = isCurrentlyStreaming ? searchSources : msg.frozenSearchSources;
 
                   return (
                     <div key={msg.id}>
                       <MessageBubble
                         message={msg}
                         nextMessage={nextMsg}
-                        isStreaming={
-                          isStreaming &&
-                          msg.role === "assistant" &&
-                          i === messages.length - 1
-                        }
+                        isStreaming={isCurrentlyStreaming}
                         onRegenerate={msg.role === "assistant" ? handleRegenerate : undefined}
                         onChoiceSelect={handleChoiceSelect}
                         onDocumentOpen={handleDocumentOpen}
                         onSheetOpen={handleSheetOpen}
                         isLastAssistant={isLastAssistant}
-                        steps={showSteps ? steps : undefined}
-                        isStreamingSteps={isStreaming}
-                        searchSources={showSearchSources}
+                        steps={msgSteps}
+                        isStreamingSteps={isCurrentlyStreaming}
+                        searchSources={msgSearchSources}
                         onFollowUp={handleChoiceSelect}
-                        plan={showSteps ? plan : undefined}
-                        thinkingText={showSteps ? thinkingText : undefined}
-                        fileRefs={showSteps ? fileRefs : undefined}
+                        plan={msgPlan}
+                        thinkingText={msgThinking}
+                        fileRefs={msgFileRefs}
+                        conversationId={conversationId || undefined}
                       />
 
                       {isLastUser && showStreamingIndicator && (

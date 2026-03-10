@@ -6,7 +6,8 @@ import { SearchTab } from "@/components/admin/SearchTab";
 import { StorageTab } from "@/components/admin/StorageTab";
 import { KnowledgeTab } from "@/components/admin/KnowledgeTab";
 import { AgentTab } from "@/components/admin/AgentTab";
-import { Shield, Brain, Search, HardDrive, BookOpen, Bot } from "lucide-react";
+import { FeedbackTab } from "@/components/admin/FeedbackTab";
+import { Shield, Brain, Search, HardDrive, BookOpen, Bot, ThumbsUp } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 export default function Admin() {
@@ -47,6 +48,9 @@ export default function Admin() {
               <TabsTrigger value="agent" className="text-xs gap-1.5 data-[state=active]:bg-background">
                 <Bot className="h-3.5 w-3.5" /> Agentic AI
               </TabsTrigger>
+              <TabsTrigger value="feedback" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <ThumbsUp className="h-3.5 w-3.5" /> Feedback
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="llm"><LlmTab orgId={orgId} /></TabsContent>
@@ -54,6 +58,7 @@ export default function Admin() {
             <TabsContent value="storage"><StorageTab orgId={orgId} /></TabsContent>
             <TabsContent value="knowledge"><KnowledgeTab orgId={orgId} /></TabsContent>
             <TabsContent value="agent"><AgentTab orgId={orgId} /></TabsContent>
+            <TabsContent value="feedback"><FeedbackTab orgId={orgId} /></TabsContent>
           </Tabs>
         </div>
       </div>

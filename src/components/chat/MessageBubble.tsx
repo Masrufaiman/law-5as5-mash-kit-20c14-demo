@@ -34,6 +34,7 @@ interface MessageBubbleProps {
   plan?: string[];
   thinkingText?: string;
   fileRefs?: FileRef[];
+  conversationId?: string;
 }
 
 /** User message action bar (edit, copy) */
@@ -225,6 +226,7 @@ export function MessageBubble({
   plan,
   thinkingText,
   fileRefs,
+  conversationId,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const citations = message.citations || [];
@@ -402,7 +404,7 @@ export function MessageBubble({
           {sourcesFooter}
           {followUpSection}
           {!isStreaming && cleanContent && (
-            <ResponseActions content={cleanContent} messageId={message.id} onRegenerate={onRegenerate} />
+             <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
           )}
         </div>
       </div>
@@ -445,7 +447,7 @@ export function MessageBubble({
           {sourcesFooter}
           {followUpSection}
           {!isStreaming && cleanContent && (
-            <ResponseActions content={cleanContent} messageId={message.id} onRegenerate={onRegenerate} />
+             <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
           )}
         </div>
       </div>
@@ -473,7 +475,7 @@ export function MessageBubble({
           {followUpSection}
           {!isStreaming && cleanContent && (
             <div className="mt-2">
-              <ResponseActions content={cleanContent} messageId={message.id} onRegenerate={onRegenerate} />
+               <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
             </div>
           )}
         </div>
@@ -502,7 +504,7 @@ export function MessageBubble({
           {followUpSection}
           {!isStreaming && cleanContent && (
             <div className="mt-2">
-              <ResponseActions content={cleanContent} messageId={message.id} onRegenerate={onRegenerate} />
+              <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
             </div>
           )}
         </div>
@@ -548,6 +550,7 @@ export function MessageBubble({
           <ResponseActions
             content={cleanContent}
             messageId={message.id}
+            conversationId={conversationId}
             onRegenerate={onRegenerate}
           />
         )}

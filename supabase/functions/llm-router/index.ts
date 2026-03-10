@@ -20,6 +20,8 @@ interface ChatRequest {
   vaultName?: string;
   promptMode?: string;
   currentSheetState?: any;
+  workflowSystemPrompt?: string;
+  currentDocumentContent?: string;
   // Column fill specific
   columnMeta?: { name: string; type: string; query: string };
   fileNames?: string[];
@@ -173,7 +175,7 @@ serve(async (req) => {
 
     const orgId = profile.organization_id;
     const body: ChatRequest = await req.json();
-    const { conversationId, message, vaultId, deepResearch, attachedFileIds, attachedFileNames, sources, history, useCase, vaultName: clientVaultName, promptMode, currentSheetState, columnMeta, fileNames, existingSheet } = body;
+    const { conversationId, message, vaultId, deepResearch, attachedFileIds, attachedFileNames, sources, history, useCase, vaultName: clientVaultName, promptMode, currentSheetState, columnMeta, fileNames, existingSheet, workflowSystemPrompt, currentDocumentContent } = body;
 
     // ---------- COLUMN FILL USE CASE (non-streaming) ----------
     if (useCase === "column_fill" && columnMeta) {
@@ -449,11 +451,26 @@ If you cannot determine a value, use "N/A". Be concise but accurate.`;
             }
           }
 
-          // Load vault name for context
+          // Load vault name and file inventory for context
           let vaultName = "";
+          let vaultInventory = "";
           if (vaultId) {
             const { data: vaultData } = await adminClient.from("vaults").select("name").eq("id", vaultId).single();
             vaultName = vaultData?.name || "";
+            
+            // Always load file listing so AI knows what's available
+            const { data: vaultFiles } = await adminClient
+              .from("files")
+              .select("name, status, size_bytes, mime_type")
+              .eq("vault_id", vaultId)
+              .eq("organization_id", orgId)
+              .order("created_at", { ascending: false })
+              .limit(50);
+            
+            if (vaultFiles?.length) {
+              vaultInventory = `\n\n## Available Documents in Vault "${vaultName}"\n` +
+                vaultFiles.map((f: any) => `- ${f.name} (${f.status}, ${Math.round(f.size_bytes / 1024)}KB)`).join("\n");
+            }
           }
 
           // Fallback: direct file text
@@ -693,11 +710,25 @@ IMPORTANT: Output ONLY the <!-- SHEET: --> format. NEVER use markdown tables. Th
 - Do not include "---" horizontal rules or "References:" sections at the end
 - At the end of your response, suggest 3 follow-up questions the user might want to ask, each on its own line starting with ">>FOLLOWUP: "`;
 
-          const systemPrompt = `${reviewModePrompt || basePrompt}
+          // Document editing context
+          let documentEditingContext = "";
+          if (currentDocumentContent) {
+            documentEditingContext = `\n\n## Currently Open Document\nThe user has a document open in the editor. When they ask for changes, modifications, or edits, modify ONLY the changed parts and output the COMPLETE updated document. Do NOT create a new document from scratch.\n\nCurrent document content:\n${currentDocumentContent.substring(0, 10000)}`;
+          }
+
+          // Workflow system prompt override
+          let effectiveBasePrompt = reviewModePrompt || basePrompt;
+          if (workflowSystemPrompt) {
+            effectiveBasePrompt = workflowSystemPrompt + "\n\n" + effectiveBasePrompt;
+          }
+
+          const systemPrompt = `${effectiveBasePrompt}
 ${personalizationContext}
 ${knowledgeContext}
+${vaultInventory}
 ${ragContext || vaultContext}
-${perplexityContext}`;
+${perplexityContext}
+${documentEditingContext}`;
 
           // Determine AI provider
           let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
