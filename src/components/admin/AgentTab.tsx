@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Bot, Wrench, FileText, Gauge, Brain, AlertTriangle, PenTool, Workflow, Database, Eye, Plus, Trash2 } from "lucide-react";
+import { Bot, Wrench, FileText, Gauge, Brain, AlertTriangle, PenTool, Workflow, Database, Eye, Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
 
 const JURISDICTIONS = ["United States", "United Kingdom", "European Union", "Australia", "Canada", "India", "Singapore", "Hong Kong"];
 const CITATION_STYLES = ["Bluebook", "OSCOLA", "AGLC", "McGill", "APA Legal", "Chicago"];
