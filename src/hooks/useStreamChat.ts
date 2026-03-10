@@ -56,6 +56,7 @@ interface StreamChatOptions {
   useCase?: string;
   promptMode?: string;
   currentSheetState?: any;
+  workflowSystemPrompt?: string;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`;
@@ -130,6 +131,7 @@ export function useStreamChat() {
             useCase: options.useCase,
             promptMode: options.promptMode,
             currentSheetState: options.currentSheetState,
+            workflowSystemPrompt: options.workflowSystemPrompt,
             history,
           }),
           signal: controller.signal,

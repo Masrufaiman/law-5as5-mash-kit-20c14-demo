@@ -13,6 +13,11 @@ import type { Tables } from "@/integrations/supabase/types";
 type FileRow = Tables<"files">;
 type VaultRow = Tables<"vaults">;
 
+interface UploadProgress {
+  fileName: string;
+  status: "uploading" | "processing" | "done" | "error";
+}
+
 export default function Vault() {
   const { profile } = useAuth();
   const { toast } = useToast();
@@ -24,6 +29,7 @@ export default function Vault() {
   const [files, setFiles] = useState<FileRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
 
   const selectedVault = vaults.find((v) => v.id === selectedVaultId);
 
@@ -125,7 +131,6 @@ export default function Vault() {
   const handleDeleteVault = async (id: string) => {
     if (!profile?.organization_id) return;
     
-    // Delete file_chunks (vectors references) for all files in this vault
     const { data: vaultFiles } = await supabase
       .from("files")
       .select("id")
@@ -137,10 +142,8 @@ export default function Vault() {
       await supabase.from("files").delete().eq("vault_id", id);
     }
 
-    // Delete conversations linked to this vault
     await supabase.from("conversations").delete().eq("vault_id", id);
 
-    // Delete the vault itself
     const { error } = await supabase.from("vaults").delete().eq("id", id);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -154,62 +157,85 @@ export default function Vault() {
     }
   };
 
+  const uploadSingleFile = async (file: File): Promise<void> => {
+    if (!profile?.organization_id || !selectedVaultId) return;
+    
+    const fileId = crypto.randomUUID();
+    const sanitizedName = file.name.replace(/\s+/g, "_").replace(/[()]/g, "");
+    const r2Key = `${profile.organization_id}/${selectedVaultId}/${fileId}-${sanitizedName}`;
+
+    // Update progress: uploading
+    setUploadProgress(prev => [...prev, { fileName: file.name, status: "uploading" }]);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("orgId", profile.organization_id);
+      formData.append("r2Key", r2Key);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/r2-upload`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Upload failed");
+      }
+
+      const result = await response.json();
+
+      const { error: dbError } = await supabase.from("files").insert({
+        id: fileId,
+        name: file.name,
+        original_name: file.name,
+        mime_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+        storage_path: result.r2_key || r2Key,
+        vault_id: selectedVaultId,
+        organization_id: profile.organization_id!,
+        uploaded_by: profile.id,
+        status: "processing",
+      });
+      if (dbError) throw dbError;
+
+      // Update progress: processing
+      setUploadProgress(prev => prev.map(p => p.fileName === file.name ? { ...p, status: "processing" } : p));
+
+      supabase.functions.invoke("document-processor", {
+        body: { fileId },
+      }).catch((err) => console.warn("Processing trigger failed:", err));
+
+      // Update progress: done
+      setUploadProgress(prev => prev.map(p => p.fileName === file.name ? { ...p, status: "done" } : p));
+    } catch (err: any) {
+      setUploadProgress(prev => prev.map(p => p.fileName === file.name ? { ...p, status: "error" } : p));
+      toast({ title: "Upload failed", description: `${file.name}: ${err.message}`, variant: "destructive" });
+    }
+  };
+
   const handleUpload = async (fileList: File[]) => {
     if (!profile?.organization_id || !selectedVaultId) return;
     setUploading(true);
-    for (const file of fileList) {
-      const fileId = crypto.randomUUID();
-      const sanitizedName = file.name.replace(/\s+/g, "_").replace(/[()]/g, "");
-      const r2Key = `${profile.organization_id}/${selectedVaultId}/${fileId}-${sanitizedName}`;
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("orgId", profile.organization_id);
-        formData.append("r2Key", r2Key);
+    setUploadProgress([]);
 
-        const { data: { session } } = await supabase.auth.getSession();
-        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-        const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/r2-upload`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${session?.access_token}`,
-            },
-            body: formData,
-          }
-        );
-
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || "Upload failed");
-        }
-
-        const result = await response.json();
-
-        const { error: dbError } = await supabase.from("files").insert({
-          id: fileId,
-          name: file.name,
-          original_name: file.name,
-          mime_type: file.type || "application/octet-stream",
-          size_bytes: file.size,
-          storage_path: result.r2_key || r2Key,
-          vault_id: selectedVaultId,
-          organization_id: profile.organization_id!,
-          uploaded_by: profile.id,
-          status: "processing",
-        });
-        if (dbError) throw dbError;
-
-        supabase.functions.invoke("document-processor", {
-          body: { fileId },
-        }).catch((err) => console.warn("Processing trigger failed:", err));
-
-        toast({ title: "Uploaded", description: `${file.name} uploaded successfully.` });
-      } catch (err: any) {
-        toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-      }
+    // Upload files in parallel (batches of 3)
+    const batchSize = 3;
+    for (let i = 0; i < fileList.length; i += batchSize) {
+      const batch = fileList.slice(i, i + batchSize);
+      await Promise.allSettled(batch.map(f => uploadSingleFile(f)));
     }
+
+    toast({ title: "Upload complete", description: `${fileList.length} file(s) uploaded` });
+    
+    // Clear progress after a delay
+    setTimeout(() => setUploadProgress([]), 3000);
     setUploading(false);
   };
 

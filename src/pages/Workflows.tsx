@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
@@ -24,6 +23,9 @@ import {
   ChevronRight,
   Loader2,
   Sparkles,
+  Pencil,
+  Trash2,
+  User,
 } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -40,6 +42,7 @@ interface WorkflowItem {
   icon: string;
   category?: string;
   systemPrompt?: string;
+  created_by?: string;
 }
 
 const DEFAULT_WORKFLOWS: WorkflowItem[] = [
@@ -63,9 +66,12 @@ export default function Workflows() {
   const [searchQuery, setSearchQuery] = useState("");
   const [outputFilter, setOutputFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
   const [showCreate, setShowCreate] = useState(false);
   const [createDesc, setCreateDesc] = useState("");
   const [isBuilding, setIsBuilding] = useState(false);
+  const [editingWorkflow, setEditingWorkflow] = useState<WorkflowItem | null>(null);
+  const [editPrompt, setEditPrompt] = useState("");
 
   // Load workflows from agent_config
   useEffect(() => {
@@ -87,7 +93,30 @@ export default function Workflows() {
   }, [profile?.organization_id]);
 
   const handleWorkflowClick = (wf: WorkflowItem) => {
-    navigate("/", { state: { fillPrompt: wf.description } });
+    // Navigate to Home with workflow as tag (not description text)
+    navigate("/", { state: { workflowTag: { title: wf.title, systemPrompt: wf.systemPrompt } } });
+  };
+
+  const saveWorkflows = async (newWorkflows: WorkflowItem[]) => {
+    if (!profile?.organization_id) return;
+    const { data: existing } = await supabase
+      .from("api_integrations")
+      .select("id, config")
+      .eq("organization_id", profile.organization_id)
+      .eq("provider", "agent_config")
+      .maybeSingle();
+
+    const config = { ...((existing?.config as any) || {}), workflows: newWorkflows };
+    if (existing) {
+      await supabase.from("api_integrations").update({ config }).eq("id", existing.id);
+    } else {
+      await supabase.from("api_integrations").insert({
+        organization_id: profile.organization_id,
+        provider: "agent_config",
+        name: "Agent Configuration",
+        config,
+      });
+    }
   };
 
   const handleCreateWorkflow = async () => {
@@ -141,33 +170,14 @@ export default function Workflows() {
         }
       }
 
-      // Extract JSON from result
       const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("Invalid response");
       const wf: WorkflowItem = JSON.parse(jsonMatch[0]);
+      wf.created_by = profile.id; // Tag with user id
 
       const newWorkflows = [...workflows, wf];
       setWorkflows(newWorkflows);
-
-      // Save to agent_config
-      const { data: existing } = await supabase
-        .from("api_integrations")
-        .select("id, config")
-        .eq("organization_id", profile.organization_id)
-        .eq("provider", "agent_config")
-        .maybeSingle();
-
-      const config = { ...((existing?.config as any) || {}), workflows: newWorkflows };
-      if (existing) {
-        await supabase.from("api_integrations").update({ config }).eq("id", existing.id);
-      } else {
-        await supabase.from("api_integrations").insert({
-          organization_id: profile.organization_id,
-          provider: "agent_config",
-          name: "Agent Configuration",
-          config,
-        });
-      }
+      await saveWorkflows(newWorkflows);
 
       toast({ title: "Workflow created", description: wf.title });
       setShowCreate(false);
@@ -179,9 +189,28 @@ export default function Workflows() {
     }
   };
 
+  const handleDeleteWorkflow = async (wf: WorkflowItem) => {
+    const newWorkflows = workflows.filter(w => w.title !== wf.title);
+    setWorkflows(newWorkflows);
+    await saveWorkflows(newWorkflows);
+    toast({ title: "Deleted", description: `"${wf.title}" removed` });
+  };
+
+  const handleSavePrompt = async () => {
+    if (!editingWorkflow) return;
+    const newWorkflows = workflows.map(w =>
+      w.title === editingWorkflow.title ? { ...w, systemPrompt: editPrompt } : w
+    );
+    setWorkflows(newWorkflows);
+    await saveWorkflows(newWorkflows);
+    setEditingWorkflow(null);
+    toast({ title: "Saved", description: "System prompt updated" });
+  };
+
   const filtered = workflows.filter((wf) => {
     if (outputFilter !== "All" && wf.type !== outputFilter) return false;
     if (categoryFilter !== "All" && wf.category !== categoryFilter) return false;
+    if (ownerFilter === "mine" && wf.created_by !== profile?.id) return false;
     if (searchQuery && !wf.title.toLowerCase().includes(searchQuery.toLowerCase()) && !wf.description.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
@@ -202,7 +231,7 @@ export default function Workflows() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-3 px-6 py-3 border-b border-border/30">
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-border/30 flex-wrap">
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
@@ -212,6 +241,28 @@ export default function Workflows() {
               className="h-8 text-xs pl-8"
             />
           </div>
+          {/* Owner filter */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setOwnerFilter("all")}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-xs transition-colors",
+                ownerFilter === "all" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+              )}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setOwnerFilter("mine")}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-xs transition-colors",
+                ownerFilter === "mine" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+              )}
+            >
+              My Workflows
+            </button>
+          </div>
+          <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-1.5">
             {OUTPUT_TYPES.map((t) => (
               <button
@@ -248,13 +299,16 @@ export default function Workflows() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((wf, i) => {
               const Icon = ICON_MAP[wf.icon] || FileText;
+              const isOwn = wf.created_by === profile?.id;
               return (
-                <button
+                <div
                   key={`${wf.title}-${i}`}
-                  className="flex flex-col items-start gap-3 rounded-lg border border-border p-4 text-left hover:bg-muted/50 hover:border-primary/30 transition-all group"
-                  onClick={() => handleWorkflowClick(wf)}
+                  className="flex flex-col items-start gap-3 rounded-lg border border-border p-4 text-left hover:bg-muted/50 hover:border-primary/30 transition-all group relative"
                 >
-                  <div className="flex items-center gap-3 w-full">
+                  <button
+                    className="flex items-center gap-3 w-full"
+                    onClick={() => handleWorkflowClick(wf)}
+                  >
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary text-primary shrink-0">
                       <Icon className="h-4 w-4" />
                     </div>
@@ -265,13 +319,39 @@ export default function Workflows() {
                       )}
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                  </div>
+                  </button>
                   <p className="text-xs text-muted-foreground line-clamp-2">{wf.description}</p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full">
                     <Badge variant="outline" className="text-[9px] py-0 px-1.5">{wf.type}</Badge>
                     <span className="text-[10px] text-muted-foreground">{wf.steps} steps</span>
+                    {wf.created_by && (
+                      <Badge variant="secondary" className="text-[9px] py-0 px-1.5 gap-0.5">
+                        <User className="h-2 w-2" />
+                        {isOwn ? "You" : "User"}
+                      </Badge>
+                    )}
+                    <div className="flex-1" />
+                    {/* Edit/Delete for own workflows */}
+                    {isOwn && (
+                      <div className="hidden group-hover:flex items-center gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditingWorkflow(wf); setEditPrompt(wf.systemPrompt || ""); }}
+                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title="Edit system prompt"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteWorkflow(wf); }}
+                          className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -319,6 +399,36 @@ export default function Workflows() {
                   Build Workflow
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit system prompt dialog */}
+      <Dialog open={!!editingWorkflow} onOpenChange={(open) => !open && setEditingWorkflow(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4 text-primary" />
+              Edit System Prompt — {editingWorkflow?.title}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              This system prompt is used when this workflow is selected as context for a chat.
+            </p>
+            <Textarea
+              value={editPrompt}
+              onChange={(e) => setEditPrompt(e.target.value)}
+              placeholder="Enter the system prompt for this workflow..."
+              className="min-h-[200px] text-sm font-mono"
+              rows={8}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setEditingWorkflow(null)}>Cancel</Button>
+            <Button size="sm" onClick={handleSavePrompt}>
+              Save Prompt
             </Button>
           </DialogFooter>
         </DialogContent>

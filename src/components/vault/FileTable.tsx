@@ -40,9 +40,10 @@ const statusColors: Record<string, string> = {
 
 interface FileTableProps {
   files: FileRow[];
+  onFileClick?: (file: FileRow) => void;
 }
 
-export function FileTable({ files }: FileTableProps) {
+export function FileTable({ files, onFileClick }: FileTableProps) {
   const { toast } = useToast();
 
   const handleRetry = async (fileId: string, e: React.MouseEvent) => {
@@ -75,7 +76,11 @@ export function FileTable({ files }: FileTableProps) {
       </TableHeader>
       <TableBody>
         {files.map((file) => (
-          <TableRow key={file.id} className="cursor-pointer">
+          <TableRow
+            key={file.id}
+            className="cursor-pointer"
+            onClick={() => onFileClick?.(file)}
+          >
             <TableCell>
               <div className="flex items-center gap-2.5">
                 {getFileIcon(file.mime_type)}

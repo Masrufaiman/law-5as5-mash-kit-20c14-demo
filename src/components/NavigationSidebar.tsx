@@ -9,10 +9,7 @@ import {
   MessageSquare,
   FolderOpen,
   Table2,
-  FileText,
   Clock,
-  BookOpen,
-  Compass,
   Settings,
   Shield,
   HelpCircle,
@@ -180,12 +177,10 @@ export function NavigationSidebar() {
 
   const orgName = profile?.full_name?.split(" ")[0] || "LawKit";
 
+  // Removed Documents and Library
   const bottomNav = [
-    { icon: FileText, label: "Documents", path: "/documents" },
     { icon: Table2, label: "Workflows", path: "/workflows" },
     { icon: Clock, label: "History", path: "/history" },
-    { icon: BookOpen, label: "Library", path: "/library" },
-    { icon: Compass, label: "Guidance", path: "/guidance" },
   ];
 
   const settingsNav = [
@@ -195,6 +190,9 @@ export function NavigationSidebar() {
   ];
 
   const isActive = (path: string) => location.pathname === path;
+
+  // Show only first 10 chats, rest via scroll
+  const displayedChats = recentChats.slice(0, 10);
 
   return (
     <>
@@ -279,7 +277,7 @@ export function NavigationSidebar() {
               )}
             </button>
             {!collapsed && recentsOpen && (
-              <ScrollArea className="max-h-[320px]">
+              <ScrollArea className="max-h-[280px]">
                 <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
                   {isLoadingChats ? (
                     <>
@@ -287,8 +285,8 @@ export function NavigationSidebar() {
                       <Skeleton className="h-3 w-24 mx-2 my-1 bg-sidebar-accent/30" />
                       <Skeleton className="h-3 w-16 mx-2 my-1 bg-sidebar-accent/30" />
                     </>
-                  ) : recentChats.length > 0 ? (
-                    recentChats.map((chat) => (
+                  ) : displayedChats.length > 0 ? (
+                    displayedChats.map((chat) => (
                       <div
                         key={chat.id}
                         className={cn(
@@ -442,33 +440,51 @@ export function NavigationSidebar() {
         </div>
       </div>
 
-      {/* Rename dialog */}
-      <AlertDialog open={!!renameTarget} onOpenChange={(open) => !open && setRenameTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Rename conversation</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="pt-2">
-                <input
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleRenameChat(); }}
-                  className="w-full h-9 px-3 text-sm rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  autoFocus
-                />
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleRenameChat} disabled={!renameValue.trim()}>
-              Save
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Search dialog */}
+      <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <CommandInput
+          placeholder="Search conversations..."
+          value={searchQuery}
+          onValueChange={handleSearchChange}
+        />
+        <CommandList>
+          <CommandEmpty>No results found.</CommandEmpty>
+          {searchResults.length > 0 && (
+            <CommandGroup heading="Conversations">
+              {searchResults.map((r) => (
+                <CommandItem
+                  key={r.id}
+                  onSelect={() => {
+                    navigate(`/chat?id=${r.id}`);
+                    setSearchOpen(false);
+                  }}
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  {r.title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {recentChats.length > 0 && !searchQuery && (
+            <CommandGroup heading="Recent">
+              {recentChats.slice(0, 5).map((r) => (
+                <CommandItem
+                  key={r.id}
+                  onSelect={() => {
+                    navigate(`/chat?id=${r.id}`);
+                    setSearchOpen(false);
+                  }}
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  {r.title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+        </CommandList>
+      </CommandDialog>
 
-      {/* Delete confirmation dialog */}
+      {/* Delete confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -479,104 +495,35 @@ export function NavigationSidebar() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteChat} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={handleDeleteChat}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Global search command palette */}
-      <CommandDialog open={searchOpen} onOpenChange={(open) => { setSearchOpen(open); if (!open) { setSearchQuery(""); setSearchResults([]); } }}>
-        <CommandInput
-          placeholder="Search vaults, files, conversations..."
-          value={searchQuery}
-          onValueChange={handleSearchChange}
-        />
-        <CommandList>
-          <CommandEmpty>No results found.</CommandEmpty>
-
-          {searchResults.length > 0 && (
-            <CommandGroup heading="Search Results">
-              {searchResults.map((c) => (
-                <CommandItem
-                  key={c.id}
-                  onSelect={() => {
-                    setSearchOpen(false);
-                    navigate(`/chat?id=${c.id}`);
-                  }}
-                >
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  {c.title}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-
-          <CommandGroup heading="Quick Actions">
-            <CommandItem onSelect={() => { setSearchOpen(false); navigate("/"); }}>
-              <MessageSquare className="mr-2 h-4 w-4" />
-              New conversation
-            </CommandItem>
-            <CommandItem onSelect={() => { setSearchOpen(false); navigate("/vault"); }}>
-              <FolderOpen className="mr-2 h-4 w-4" />
-              Open vault
-            </CommandItem>
-          </CommandGroup>
-          {!searchQuery && recentChats.length > 0 && (
-            <CommandGroup heading="Recent Chats">
-              {recentChats.slice(0, 5).map((c) => (
-                <CommandItem
-                  key={c.id}
-                  onSelect={() => {
-                    setSearchOpen(false);
-                    navigate(`/chat?id=${c.id}`);
-                  }}
-                >
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  {c.title}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-          {vaults.length > 0 && (
-            <CommandGroup heading="Vaults">
-              {vaults.map((v) => (
-                <CommandItem
-                  key={v.id}
-                  onSelect={() => {
-                    setSearchOpen(false);
-                    navigate(`/vault?vault=${v.id}`);
-                  }}
-                >
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  {v.name}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-          <CommandGroup heading="Pages">
-            <CommandItem onSelect={() => { setSearchOpen(false); navigate("/review"); }}>
-              <Table2 className="mr-2 h-4 w-4" />
-              Review Tables
-            </CommandItem>
-            <CommandItem onSelect={() => { setSearchOpen(false); navigate("/documents"); }}>
-              <FileText className="mr-2 h-4 w-4" />
-              Documents
-            </CommandItem>
-            <CommandItem onSelect={() => { setSearchOpen(false); navigate("/settings"); }}>
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </CommandItem>
-            {isAdmin && (
-              <CommandItem onSelect={() => { setSearchOpen(false); navigate("/admin"); }}>
-                <Shield className="mr-2 h-4 w-4" />
-                Admin Panel
-              </CommandItem>
-            )}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
+      {/* Rename dialog */}
+      <AlertDialog open={!!renameTarget} onOpenChange={(open) => !open && setRenameTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rename conversation</AlertDialogTitle>
+          </AlertDialogHeader>
+          <input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleRenameChat()}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            autoFocus
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRenameChat}>Save</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

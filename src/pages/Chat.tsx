@@ -76,6 +76,7 @@ export default function Chat() {
   const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const [selectedVault, setSelectedVault] = useState<{ id: string; name: string } | null>(null);
   const [chatVaults, setChatVaults] = useState<{ id: string; name: string }[]>([]);
+  const [workflowTag, setWorkflowTag] = useState<{ title: string; systemPrompt?: string } | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Load vaults for sources dropdown
@@ -150,15 +151,17 @@ export default function Chat() {
       const deep = state.deepResearch || false;
       const srcs = state.activeSources || [];
       const pMode = state.promptMode;
+      const wfTag = state.workflowTag || null;
 
       setVaultId(vault);
       setVaultName(vName);
       setDeepResearch(deep);
       setActiveSources(srcs);
       setPromptMode(pMode);
+      setWorkflowTag(wfTag);
 
       navigate("/chat", { replace: true, state: {} });
-      createConversationAndSend(msg, vault, deep, srcs, pMode, vName);
+      createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
     }
   }, [location.state, profile?.organization_id]);
 
@@ -243,7 +246,8 @@ export default function Chat() {
     deep?: boolean,
     srcs?: string[],
     pMode?: string,
-    vName?: string
+    vName?: string,
+    workflowSystemPrompt?: string,
   ) => {
     if (!profile?.organization_id) return;
 
@@ -275,6 +279,7 @@ export default function Chat() {
       sources: srcs,
       useCase: pMode,
       currentSheetState: sheetDoc,
+      workflowSystemPrompt: workflowSystemPrompt || workflowTag?.systemPrompt,
     };
     lastStreamOptions.current = opts;
     sendMessage(msg, opts);
@@ -297,6 +302,7 @@ export default function Chat() {
         sources: activeSources,
         useCase: promptMode,
         currentSheetState: sheetDoc,
+        workflowSystemPrompt: workflowTag?.systemPrompt,
       };
       lastStreamOptions.current = opts;
       sendMessage(msg, opts);
@@ -703,6 +709,8 @@ export default function Chat() {
                 }}
                 activeSources={activeSources}
                 onSourceToggle={(s) => setActiveSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
+                workflowTag={workflowTag}
+                onWorkflowTagRemove={() => setWorkflowTag(null)}
               />
             </div>
           </div>
