@@ -178,6 +178,8 @@ function stripCitationsBlock(content: string): string {
 
 /** Detect if content is a document/draft (heading + long content, or bold ALL-CAPS title) */
 function detectDocument(content: string): { title: string } | null {
+  // Don't detect as document if it's a sheet
+  if (content.includes("<!-- SHEET:")) return null;
   const headingMatch = content.match(/^#\s+(.+)/m) || content.match(/^##\s+(.+)/m);
   if (headingMatch && content.length > 500) return { title: headingMatch[1] };
 
@@ -185,6 +187,22 @@ function detectDocument(content: string): { title: string } | null {
   if (boldMatch && content.length > 500) return { title: boldMatch[1] };
 
   return null;
+}
+
+/** Detect sheet pattern <!-- SHEET: Title --> followed by JSON block */
+function detectSheet(content: string): SheetData | null {
+  const match = content.match(/<!--\s*SHEET:\s*(.+?)\s*-->\s*```json\s*([\s\S]*?)```/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[2]);
+    return {
+      title: match[1].trim(),
+      columns: parsed.columns || [],
+      rows: parsed.rows || [],
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Agent avatar component */
