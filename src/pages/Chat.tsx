@@ -151,6 +151,7 @@ export default function Chat() {
       const deep = state.deepResearch || false;
       const srcs = state.activeSources || [];
       const pMode = state.promptMode;
+      const wfTag = state.workflowTag || null;
 
       setVaultId(vault);
       setVaultName(vName);
