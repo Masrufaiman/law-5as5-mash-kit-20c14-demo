@@ -209,8 +209,8 @@ export function useStreamChat() {
                 });
                 
                 // Update plan checkmarks
-                if (step.status === "done") {
-                  setPlan((prevPlan) => prevPlan); // trigger re-render for plan checklist
+                if (parsed.step?.status === "done") {
+                  setPlan((prevPlan) => [...prevPlan]); // trigger re-render for plan checklist
                 }
               } else if (parsed.type === "thinking") {
                 setThinkingText((prev) => prev + parsed.content);
