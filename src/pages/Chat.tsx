@@ -44,6 +44,7 @@ export default function Chat() {
   const {
     messages,
     steps,
+    searchSources,
     isStreaming,
     error,
     sendMessage,
@@ -413,7 +414,7 @@ export default function Chat() {
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-xs text-muted-foreground">Assistant /</span>
               {isEditingTitle ? (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-1 min-w-0">
                   <Input
                     value={editTitleValue}
                     onChange={(e) => setEditTitleValue(e.target.value)}
@@ -422,21 +423,22 @@ export default function Chat() {
                       if (e.key === "Escape") setIsEditingTitle(false);
                     }}
                     onBlur={saveTitle}
-                    className="h-6 text-sm font-semibold w-64 px-1 py-0"
+                    className="h-6 text-sm font-semibold flex-1 px-1.5 py-0"
                     autoFocus
+                    onFocus={(e) => e.target.select()}
                   />
                 </div>
               ) : (
                 <button
                   onClick={startEditTitle}
-                  className="flex items-center gap-1 group min-w-0"
-                  title="Click to rename"
+                  className="flex items-center gap-1.5 group min-w-0"
+                  title={conversationTitle}
                 >
-                  <h2 className="text-sm font-semibold text-foreground truncate">
+                  <h2 className="text-sm font-semibold text-foreground truncate max-w-[300px]">
                     {conversationTitle}
                   </h2>
                   {conversationId && (
-                    <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    <Pencil className="h-3 w-3 text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity shrink-0" />
                   )}
                 </button>
               )}
@@ -565,7 +567,8 @@ export default function Chat() {
                   const nextMsg = messages[i + 1] || undefined;
 
                   // Only pass steps to the last assistant message
-                  const showSteps = msg.role === "assistant" && i === messages.length - 1;
+                    const showSteps = msg.role === "assistant" && i === messages.length - 1;
+                    const showSearchSources = showSteps ? searchSources : undefined;
 
                   return (
                     <div key={msg.id}>
@@ -583,12 +586,13 @@ export default function Chat() {
                         isLastAssistant={isLastAssistant}
                         steps={showSteps ? steps : undefined}
                         isStreamingSteps={isStreaming}
+                        searchSources={showSearchSources}
                         onFollowUp={handleChoiceSelect}
                       />
 
                       {/* Streaming indicator: skeleton or steps, always shows LawKit AI branding */}
                       {isLastUser && showStreamingIndicator && (
-                        <div className="mt-4">
+                        <div className="mt-6">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
                               <Bot className="h-3.5 w-3.5 text-muted-foreground" />
@@ -597,7 +601,7 @@ export default function Chat() {
                           </div>
                           <div className="pl-8">
                             {steps.length > 0 ? (
-                              <StepTracker steps={steps} isStreaming={true} />
+                              <StepTracker steps={steps} isStreaming={true} searchSources={searchSources} />
                             ) : (
                               <div className="space-y-3">
                                 <Skeleton className="h-4 w-3/4" />
@@ -642,6 +646,8 @@ export default function Chat() {
                 disabled={isStreaming}
                 deepResearch={deepResearch}
                 onDeepResearchChange={setDeepResearch}
+                promptMode={promptMode}
+                onPromptModeChange={setPromptMode}
               />
             </div>
           </div>

@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { FileText, Bot, Copy, Pencil, Database, Paperclip } from "lucide-react";
-import type { ChatMessage, Citation, AgentStep } from "@/hooks/useStreamChat";
+import type { ChatMessage, Citation, AgentStep, SearchSource } from "@/hooks/useStreamChat";
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -25,6 +25,7 @@ interface MessageBubbleProps {
   isLastAssistant?: boolean;
   steps?: AgentStep[];
   isStreamingSteps?: boolean;
+  searchSources?: SearchSource | null;
   onFollowUp?: (text: string) => void;
   onEditMessage?: (messageId: string, content: string) => void;
 }
@@ -210,6 +211,7 @@ export function MessageBubble({
   isLastAssistant,
   steps,
   isStreamingSteps,
+  searchSources,
   onFollowUp,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
@@ -274,7 +276,7 @@ export function MessageBubble({
   // Steps section (with reasoning)
   const stepsSection = !isUser && (steps?.length || message.reasoning) ? (
     <div className="mb-2">
-      <StepTracker steps={steps || []} isStreaming={isStreamingSteps} reasoning={message.reasoning} />
+      <StepTracker steps={steps || []} isStreaming={isStreamingSteps} reasoning={message.reasoning} searchSources={searchSources} />
     </div>
   ) : null;
 

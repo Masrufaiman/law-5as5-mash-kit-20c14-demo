@@ -18,6 +18,7 @@ interface ChatRequest {
   history?: { role: string; content: string }[];
   useCase?: string;
   vaultName?: string;
+  promptMode?: string;
 }
 
 // ---------- Multi-model Perplexity selection ----------
@@ -74,6 +75,13 @@ const SOURCE_DOMAIN_MAP: Record<string, string[]> = {
   "Web Search": [],
 };
 
+// Helper to emit a single SSE step event
+function emitStep(controller: ReadableStreamDefaultController, encoder: TextEncoder, step: { name: string; status: string }) {
+  controller.enqueue(
+    encoder.encode(`data: ${JSON.stringify({ type: "step", step })}\n\n`)
+  );
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -122,7 +130,7 @@ serve(async (req) => {
 
     const orgId = profile.organization_id;
     const body: ChatRequest = await req.json();
-    const { conversationId, message, vaultId, deepResearch, attachedFileIds, attachedFileNames, sources, history, useCase, vaultName: clientVaultName } = body;
+    const { conversationId, message, vaultId, deepResearch, attachedFileIds, attachedFileNames, sources, history, useCase, vaultName: clientVaultName, promptMode } = body;
 
     // Load org info for personalization
     const { data: orgData } = await adminClient
@@ -130,8 +138,6 @@ serve(async (req) => {
       .select("name")
       .eq("id", orgId)
       .single();
-
-    const steps: { name: string; status: "done" | "working" }[] = [];
 
     // Load agent config
     const { data: agentConfig } = await adminClient
@@ -146,341 +152,390 @@ serve(async (req) => {
     const openaiConf = agentConf.openai || {};
     const embeddingModel = agentConf.document_analysis?.embedding_model || "text-embedding-3-small";
 
-    // Load knowledge base
-    const { data: knowledgeEntries } = await adminClient
-      .from("knowledge_entries")
-      .select("title, content, category")
-      .or(`organization_id.eq.${orgId},is_global.eq.true`);
-
-    let knowledgeContext = "";
-    if (knowledgeEntries?.length) {
-      knowledgeContext = "\n\n## Knowledge Base\n" +
-        knowledgeEntries.map((e) => `### ${e.title} (${e.category || "general"})\n${e.content}`).join("\n\n");
-      steps.push({ name: `Loaded ${knowledgeEntries.length} knowledge base entries`, status: "done" });
-    }
-
-    // --- RAG: Qdrant vector search ---
-    let ragContext = "";
-    let ragCitations: { index: number; source: string; excerpt: string }[] = [];
-
-    if ((vaultId || attachedFileIds?.length) && qdrantConf.url && qdrantConf.api_key && openaiConf.api_key) {
-      steps.push({ name: "Searching documents (vector)", status: "working" });
-
-      try {
-        const queryEmbedding = await embedQuery(message, openaiConf.api_key, embeddingModel);
-        const collectionName = `${qdrantConf.collection_prefix || "org_"}${orgId}`;
-
-        const mustFilters: any[] = [];
-        if (vaultId) {
-          const { data: vaultFiles } = await adminClient
-            .from("files")
-            .select("id")
-            .eq("vault_id", vaultId)
-            .eq("organization_id", orgId);
-
-          if (vaultFiles?.length) {
-            mustFilters.push({
-              key: "file_id",
-              match: { any: vaultFiles.map(f => f.id) },
-            });
-          }
-        }
-        if (attachedFileIds?.length) {
-          mustFilters.push({
-            key: "file_id",
-            match: { any: attachedFileIds },
-          });
-        }
-
-        const searchResp = await fetch(`${qdrantConf.url}/collections/${collectionName}/points/search`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "api-key": qdrantConf.api_key,
-          },
-          body: JSON.stringify({
-            vector: queryEmbedding,
-            limit: 8,
-            with_payload: true,
-            filter: { must: mustFilters },
-          }),
-        });
-
-        if (searchResp.ok) {
-          const searchData = await searchResp.json();
-          const results = searchData.result || [];
-
-          if (results.length > 0) {
-            ragContext = "\n\n## Relevant Document Chunks\n";
-            results.forEach((r: any, i: number) => {
-              const p = r.payload || {};
-              ragContext += `### [${i + 1}] ${p.file_name || "Unknown"} (chunk ${p.chunk_index})\n${p.content}\n\n`;
-              ragCitations.push({
-                index: i + 1,
-                source: p.file_name || "Document",
-                excerpt: (p.content || "").substring(0, 200),
-              });
-            });
-            steps[steps.length - 1] = { name: `Found ${results.length} relevant chunks`, status: "done" };
-          } else {
-            steps[steps.length - 1] = { name: "No matching chunks found", status: "done" };
-          }
-        } else {
-          console.error("Qdrant search failed:", await searchResp.text());
-          steps[steps.length - 1] = { name: "Vector search failed — using fallback", status: "done" };
-        }
-      } catch (ragErr: any) {
-        console.error("RAG error:", ragErr.message);
-        steps[steps.length - 1] = { name: "Vector search error — using fallback", status: "done" };
-      }
-    }
-
-    // Load vault name for context
-    let vaultName = "";
-    if (vaultId) {
-      const { data: vaultData } = await adminClient.from("vaults").select("name").eq("id", vaultId).single();
-      vaultName = vaultData?.name || "";
-    }
-
-    // Fallback: direct file text if no Qdrant results
-    let vaultContext = "";
-    if (!ragContext && (vaultId || attachedFileIds?.length)) {
-      steps.push({ name: "Searching vault documents", status: "working" });
-      const fileQuery = adminClient.from("files").select("id, name, extracted_text, extracted_text_r2_key, status").eq("organization_id", orgId);
-      if (vaultId) fileQuery.eq("vault_id", vaultId);
-      if (attachedFileIds?.length) fileQuery.in("id", attachedFileIds);
-      // Don't filter by status - include any file that has extracted text
-      const { data: files } = await fileQuery.not("extracted_text", "is", null).limit(10);
-
-      if (files?.length) {
-        vaultContext = "\n\n## Relevant Documents\n" +
-          files
-            .filter((f) => f.extracted_text)
-            .map((f, i) => `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, 15000)}`)
-            .join("\n\n");
-        steps[steps.length - 1] = { name: `Searched ${files.length} documents in vault`, status: "done" };
-      } else {
-        steps[steps.length - 1] = { name: "No matching documents found", status: "done" };
-      }
-    }
-
-    // ---- PERPLEXITY SEARCH ----
-    let perplexityContext = "";
-    let perplexityCitations: { index: number; source: string; excerpt: string; url?: string }[] = [];
-    const needsSearch = (sources && sources.length > 0) || deepResearch;
-
-    if (needsSearch) {
-      const pplxModel = selectPerplexityModel(message, !!deepResearch, useCase);
-      const pplxConfig = MODEL_CONFIG[pplxModel] || MODEL_CONFIG.sonar;
-      const searchType = deepResearch ? "deep research" : pplxModel === "sonar-reasoning" ? "risk analysis" : pplxModel === "sonar-pro" ? "detailed search" : "web search";
-      steps.push({ name: `Running ${searchType} (${pplxModel})`, status: "working" });
-
-      const { data: perplexityConfig } = await adminClient
-        .from("api_integrations")
-        .select("api_key_encrypted, config")
-        .eq("organization_id", orgId)
-        .eq("provider", "perplexity")
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (perplexityConfig?.api_key_encrypted) {
-        try {
-          const perplexityKey = atob(perplexityConfig.api_key_encrypted);
-
-          const domainFilter: string[] = [];
-          if (sources) {
-            for (const s of sources) {
-              const domains = SOURCE_DOMAIN_MAP[s];
-              if (domains && domains.length > 0) {
-                domainFilter.push(...domains);
-              }
-            }
-          }
-
-          let searchQuery = message;
-          if (sources && sources.length > 0) {
-            const jurisdictionNames = sources.filter(s => s !== "Web Search");
-            if (jurisdictionNames.length > 0) {
-              searchQuery = `${message}\n\nFocus on: ${jurisdictionNames.join(", ")}`;
-            }
-          }
-
-          const pplxBody: any = {
-            model: pplxModel,
-            messages: [
-              { role: "system", content: pplxConfig.systemPrompt },
-              { role: "user", content: searchQuery },
-            ],
-            max_tokens: pplxConfig.maxTokens,
-          };
-
-          if (domainFilter.length > 0) {
-            pplxBody.search_domain_filter = domainFilter.slice(0, 5);
-          }
-
-          const pplxResp = await fetch("https://api.perplexity.ai/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${perplexityKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(pplxBody),
-          });
-
-          if (pplxResp.ok) {
-            const pplxData = await pplxResp.json();
-            const pplxContent = pplxData.choices?.[0]?.message?.content || "";
-            const pplxCitationUrls: string[] = pplxData.citations || [];
-
-            perplexityContext = `\n\n## Web Research Results (via Perplexity)\n${pplxContent}`;
-
-            if (pplxCitationUrls.length > 0) {
-              perplexityContext += "\n\n### Sources:\n" +
-                pplxCitationUrls.map((url: string, i: number) => `[${i + 1}] ${url}`).join("\n");
-
-              perplexityCitations = pplxCitationUrls.map((url: string, i: number) => ({
-                index: i + 100,
-                source: new URL(url).hostname.replace("www.", ""),
-                excerpt: url,
-                url,
-              }));
-            }
-
-            steps[steps.length - 1] = {
-              name: `${searchType} complete — ${pplxCitationUrls.length} sources found`,
-              status: "done",
-            };
-          } else {
-            const errText = await pplxResp.text();
-            console.error("Perplexity error:", pplxResp.status, errText);
-            steps[steps.length - 1] = { name: `${searchType} failed — continuing without`, status: "done" };
-          }
-        } catch (pplxErr) {
-          console.error("Perplexity call failed:", pplxErr);
-          steps[steps.length - 1] = { name: "Search failed — continuing without", status: "done" };
-        }
-      } else {
-        steps[steps.length - 1] = { name: "No Perplexity API key configured — skipping search", status: "done" };
-      }
-    }
-
-    // Build system prompt with personalized context
-    const promptMode = (body as any).promptMode;
-    let customPrompt = "";
-    if (promptMode && agentConf.prompts?.[promptMode]) {
-      customPrompt = agentConf.prompts[promptMode];
-    } else {
-      customPrompt = agentConf.prompts?.chat || "";
-    }
-
-    const personalizationContext = `\n\n## User & Organization Context\n- Organization: ${orgData?.name || "Unknown"}\n- User: ${profile.full_name || profile.email || "Unknown"}\n- Email: ${profile.email || "Unknown"}\n`;
-
-    const basePrompt = customPrompt || `You are LawKit AI, an expert legal research and drafting assistant. You provide accurate, well-reasoned legal analysis with proper citations.
-
-## Guidelines
-- Be thorough but concise
-- Cite sources using [1], [2] notation when referencing documents
-- When drafting documents, start with a clear "# Document Title" heading followed by the full document content
-- When you need user clarification between a small number of genuinely distinct options (2-4 max), format as a numbered list with **bold option titles** and brief descriptions: "1. **Option Title** — Description of what this does". ONLY do this when you genuinely need the user to choose between different approaches or topics.
-- CRITICAL: Do NOT format analysis results, document summaries, financial breakdowns, or data listings as numbered bold lists. Present data and analysis as regular markdown text, tables, or bullet points. When listing document findings with amounts, dates, or extracted data, use plain text or tables — NEVER numbered bold items.
-- When drafting, use professional legal language
-- Always note jurisdictional considerations
-- If you reference uploaded documents, cite them with their document number [1], [2], etc.
-- If you reference web research results, cite them with their source URLs
-- Format responses with markdown: headers, lists, bold for key terms
-- When creating tables, use proper markdown table syntax
-- Always structure your analysis clearly with sections
-
-## Document Analysis Rules
-- When vault documents are provided, extract ALL relevant data including tables, amounts, dates, names, and structured information
-- When asked for summations, totals, or aggregations, calculate actual numerical totals with clear per-document breakdowns
-- When multiple documents are provided, analyze ALL of them comprehensively — do NOT ask the user to pick one
-- For financial documents (invoices, receipts, orders), extract exact amounts, currencies, quantities, and item descriptions
-- Present extracted data in markdown tables when appropriate
-- For complex queries involving calculations, comparisons, or multi-document analysis, use <think>...</think> tags to reason through your analysis step by step before presenting the final answer
-- If document text appears corrupted or unreadable, state clearly what you can and cannot extract rather than presenting garbage text
-
-## Formatting Rules
-- NEVER use placeholder text like [Firm Name], [Contact Person], [Email Address], [Phone Number], [Your Name], [Date]. Instead, use actual data from the user's organization and profile when available, or write realistic generic content.
-- Do not include "---" horizontal rules or "References:" sections at the end of drafted documents
-- At the end of your response, suggest 3 follow-up questions the user might want to ask, each on its own line starting with ">>FOLLOWUP: "`;
-
-    const systemPrompt = `${basePrompt}
-${personalizationContext}
-${knowledgeContext}
-${ragContext || vaultContext}
-${perplexityContext}`;
-
-    // Determine AI provider
-    let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-    let aiKey = Deno.env.get("LOVABLE_API_KEY") || "";
-    let modelId = "google/gemini-2.5-flash";
-    let headers: Record<string, string> = {
-      Authorization: `Bearer ${aiKey}`,
-      "Content-Type": "application/json",
-    };
-
-    const { data: llmConfigs } = await adminClient
-      .from("llm_configs")
-      .select("*")
-      .or(`organization_id.eq.${orgId},organization_id.is.null`)
-      .eq("is_active", true)
-      .eq("use_case", "chat")
-      .order("is_default", { ascending: false })
-      .limit(1);
-
-    if (llmConfigs?.[0]) {
-      const cfg = llmConfigs[0];
-      let configuredModel = cfg.model_id;
-      
-      if (configuredModel && !configuredModel.includes("/")) {
-        if (configuredModel.startsWith("gemini")) {
-          configuredModel = `google/${configuredModel}`;
-        } else if (configuredModel.startsWith("gpt")) {
-          configuredModel = `openai/${configuredModel}`;
-        }
-      }
-      
-      modelId = configuredModel || modelId;
-    }
-
-    // Build messages array
-    const messages = [
-      { role: "system", content: systemPrompt },
-      ...(history || []).map((m) => ({ role: m.role, content: m.content })),
-      { role: "user", content: message },
-    ];
-
-    // Save user message
+    // ---- SERVER-SIDE CONVERSATION HISTORY (Issue #2, #12) ----
+    let conversationHistory: { role: string; content: string }[] = [];
     if (conversationId) {
-      await adminClient.from("messages").insert({
-        conversation_id: conversationId,
-        organization_id: orgId,
-        role: "user",
-        content: message,
-      });
+      const { data: dbMessages } = await adminClient
+        .from("messages")
+        .select("role, content")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+        .limit(20);
+      if (dbMessages?.length) {
+        conversationHistory = dbMessages.map((m: any) => ({ role: m.role, content: m.content }));
+      }
+    }
+    // Fallback to client-sent history for new conversations
+    if (conversationHistory.length === 0 && history?.length) {
+      conversationHistory = history;
     }
 
-    // Create SSE response
+    // Create SSE response - we stream steps progressively
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          const allSteps = [
-            ...steps,
-            { name: "Generating response", status: "working" as const },
+          // ---- IMMEDIATE STEP: Analyzing query ----
+          emitStep(controller, encoder, { name: "Analyzing your query", status: "working" });
+
+          // Load knowledge base
+          const { data: knowledgeEntries } = await adminClient
+            .from("knowledge_entries")
+            .select("title, content, category")
+            .or(`organization_id.eq.${orgId},is_global.eq.true`);
+
+          let knowledgeContext = "";
+          if (knowledgeEntries?.length) {
+            knowledgeContext = "\n\n## Knowledge Base\n" +
+              knowledgeEntries.map((e: any) => `### ${e.title} (${e.category || "general"})\n${e.content}`).join("\n\n");
+            emitStep(controller, encoder, { name: "Analyzing your query", status: "done" });
+            emitStep(controller, encoder, { name: `Loaded ${knowledgeEntries.length} knowledge entries`, status: "done" });
+          } else {
+            emitStep(controller, encoder, { name: "Analyzing your query", status: "done" });
+          }
+
+          // --- RAG: Qdrant vector search ---
+          let ragContext = "";
+          let ragCitations: { index: number; source: string; excerpt: string }[] = [];
+
+          if ((vaultId || attachedFileIds?.length) && qdrantConf.url && qdrantConf.api_key && openaiConf.api_key) {
+            emitStep(controller, encoder, { name: "Searching your documents", status: "working" });
+
+            try {
+              const queryEmbedding = await embedQuery(message, openaiConf.api_key, embeddingModel);
+              const collectionName = `${qdrantConf.collection_prefix || "org_"}${orgId}`;
+
+              const mustFilters: any[] = [];
+              if (vaultId) {
+                const { data: vaultFiles } = await adminClient
+                  .from("files")
+                  .select("id")
+                  .eq("vault_id", vaultId)
+                  .eq("organization_id", orgId);
+
+                if (vaultFiles?.length) {
+                  mustFilters.push({
+                    key: "file_id",
+                    match: { any: vaultFiles.map((f: any) => f.id) },
+                  });
+                }
+              }
+              if (attachedFileIds?.length) {
+                mustFilters.push({
+                  key: "file_id",
+                  match: { any: attachedFileIds },
+                });
+              }
+
+              const searchResp = await fetch(`${qdrantConf.url}/collections/${collectionName}/points/search`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "api-key": qdrantConf.api_key,
+                },
+                body: JSON.stringify({
+                  vector: queryEmbedding,
+                  limit: 8,
+                  with_payload: true,
+                  filter: { must: mustFilters },
+                }),
+              });
+
+              if (searchResp.ok) {
+                const searchData = await searchResp.json();
+                const results = searchData.result || [];
+
+                if (results.length > 0) {
+                  ragContext = "\n\n## Relevant Document Chunks\n";
+                  results.forEach((r: any, i: number) => {
+                    const p = r.payload || {};
+                    ragContext += `### [${i + 1}] ${p.file_name || "Unknown"} (chunk ${p.chunk_index})\n${p.content}\n\n`;
+                    ragCitations.push({
+                      index: i + 1,
+                      source: p.file_name || "Document",
+                      excerpt: (p.content || "").substring(0, 200),
+                    });
+                  });
+                  emitStep(controller, encoder, { name: `Found ${results.length} relevant sections`, status: "done" });
+                } else {
+                  emitStep(controller, encoder, { name: "No matching sections found", status: "done" });
+                }
+              } else {
+                console.error("Qdrant search failed:", await searchResp.text());
+                emitStep(controller, encoder, { name: "Document search unavailable", status: "done" });
+              }
+            } catch (ragErr: any) {
+              console.error("RAG error:", ragErr.message);
+              emitStep(controller, encoder, { name: "Document search error", status: "done" });
+            }
+          }
+
+          // Load vault name for context
+          let vaultName = "";
+          if (vaultId) {
+            const { data: vaultData } = await adminClient.from("vaults").select("name").eq("id", vaultId).single();
+            vaultName = vaultData?.name || "";
+          }
+
+          // Fallback: direct file text if no Qdrant results
+          let vaultContext = "";
+          if (!ragContext && (vaultId || attachedFileIds?.length)) {
+            emitStep(controller, encoder, { name: "Reading vault documents", status: "working" });
+            const fileQuery = adminClient.from("files").select("id, name, extracted_text, extracted_text_r2_key, status").eq("organization_id", orgId);
+            if (vaultId) fileQuery.eq("vault_id", vaultId);
+            if (attachedFileIds?.length) fileQuery.in("id", attachedFileIds);
+            const { data: files } = await fileQuery.not("extracted_text", "is", null).limit(10);
+
+            if (files?.length) {
+              vaultContext = "\n\n## Relevant Documents\n" +
+                files
+                  .filter((f: any) => f.extracted_text)
+                  .map((f: any, i: number) => `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, 15000)}`)
+                  .join("\n\n");
+              emitStep(controller, encoder, { name: `Analyzed ${files.length} documents`, status: "done" });
+            } else {
+              emitStep(controller, encoder, { name: "No documents found", status: "done" });
+            }
+          }
+
+          // ---- PERPLEXITY SEARCH ----
+          let perplexityContext = "";
+          let perplexityCitations: { index: number; source: string; excerpt: string; url?: string }[] = [];
+          const needsSearch = (sources && sources.length > 0) || deepResearch;
+          let searchSourceDomains: string[] = [];
+
+          if (needsSearch) {
+            const pplxModel = selectPerplexityModel(message, !!deepResearch, useCase);
+
+            // User-friendly step labels — NEVER expose model names
+            const stepLabel = deepResearch
+              ? "Deep analysis across 25+ sources"
+              : "Researching relevant sources";
+            emitStep(controller, encoder, { name: stepLabel, status: "working" });
+
+            const pplxConfig = MODEL_CONFIG[pplxModel] || MODEL_CONFIG.sonar;
+
+            const { data: perplexityConfig } = await adminClient
+              .from("api_integrations")
+              .select("api_key_encrypted, config")
+              .eq("organization_id", orgId)
+              .eq("provider", "perplexity")
+              .eq("is_active", true)
+              .maybeSingle();
+
+            if (perplexityConfig?.api_key_encrypted) {
+              try {
+                const perplexityKey = atob(perplexityConfig.api_key_encrypted);
+
+                const domainFilter: string[] = [];
+                if (sources) {
+                  for (const s of sources) {
+                    const domains = SOURCE_DOMAIN_MAP[s];
+                    if (domains && domains.length > 0) {
+                      domainFilter.push(...domains);
+                    }
+                  }
+                }
+
+                let searchQuery = message;
+                if (sources && sources.length > 0) {
+                  const jurisdictionNames = sources.filter(s => s !== "Web Search");
+                  if (jurisdictionNames.length > 0) {
+                    searchQuery = `${message}\n\nFocus on: ${jurisdictionNames.join(", ")}`;
+                  }
+                }
+
+                const pplxBody: any = {
+                  model: pplxModel,
+                  messages: [
+                    { role: "system", content: pplxConfig.systemPrompt },
+                    { role: "user", content: searchQuery },
+                  ],
+                  max_tokens: pplxConfig.maxTokens,
+                };
+
+                if (domainFilter.length > 0) {
+                  pplxBody.search_domain_filter = domainFilter.slice(0, 5);
+                }
+
+                const pplxResp = await fetch("https://api.perplexity.ai/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${perplexityKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(pplxBody),
+                });
+
+                if (pplxResp.ok) {
+                  const pplxData = await pplxResp.json();
+                  const pplxContent = pplxData.choices?.[0]?.message?.content || "";
+                  const pplxCitationUrls: string[] = pplxData.citations || [];
+
+                  perplexityContext = `\n\n## Research Results\n${pplxContent}`;
+
+                  if (pplxCitationUrls.length > 0) {
+                    // Re-index starting AFTER ragCitations count (sequential: ragCount+1, ragCount+2, ...)
+                    const startIdx = ragCitations.length;
+                    perplexityContext += "\n\n### Sources:\n" +
+                      pplxCitationUrls.map((url: string, i: number) => `[${startIdx + i + 1}] ${url}`).join("\n");
+
+                    perplexityCitations = pplxCitationUrls.map((url: string, i: number) => {
+                      let domain = url;
+                      try { domain = new URL(url).hostname.replace("www.", ""); } catch {}
+                      return {
+                        index: startIdx + i + 1,
+                        source: domain,
+                        excerpt: url,
+                        url,
+                      };
+                    });
+
+                    // Collect domains for the "sources" SSE event
+                    searchSourceDomains = pplxCitationUrls.map((url: string) => {
+                      try { return new URL(url).hostname.replace("www.", ""); } catch { return url; }
+                    });
+                  }
+
+                  emitStep(controller, encoder, { name: `${stepLabel} — ${pplxCitationUrls.length} sources`, status: "done" });
+
+                  // Emit sources event for favicon pills in StepTracker
+                  if (searchSourceDomains.length > 0) {
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({
+                        type: "sources",
+                        urls: pplxCitationUrls,
+                        domains: [...new Set(searchSourceDomains)],
+                      })}\n\n`)
+                    );
+                  }
+                } else {
+                  const errText = await pplxResp.text();
+                  console.error("Perplexity error:", pplxResp.status, errText);
+                  emitStep(controller, encoder, { name: "Research unavailable — continuing", status: "done" });
+                }
+              } catch (pplxErr) {
+                console.error("Perplexity call failed:", pplxErr);
+                emitStep(controller, encoder, { name: "Research failed — continuing", status: "done" });
+              }
+            } else {
+              emitStep(controller, encoder, { name: "No search configured — skipping", status: "done" });
+            }
+          }
+
+          // Build system prompt with personalized context
+          const effectiveMode = promptMode || useCase;
+          let customPrompt = "";
+          if (effectiveMode && agentConf.prompts?.[effectiveMode]) {
+            customPrompt = agentConf.prompts[effectiveMode];
+          } else {
+            customPrompt = agentConf.prompts?.chat || "";
+          }
+
+          const personalizationContext = `\n\n## User & Organization Context\n- Organization: ${orgData?.name || "Unknown"}\n- User: ${profile.full_name || profile.email || "Unknown"}\n- Email: ${profile.email || "Unknown"}\n`;
+
+          const basePrompt = customPrompt || `You are LawKit AI, an expert legal research and drafting assistant. You provide accurate, well-reasoned legal analysis with proper citations.
+
+## Response Quality Rules
+- Always analyze the FULL content of ALL provided documents before responding
+- When asked about totals/sums, compute actual numbers with per-document breakdowns
+- Structure responses with clear sections, headers, and bullet points
+- Use markdown tables for comparative data
+- Be analytical and thorough — reason through complex questions step by step
+- For complex queries, use <think>...</think> tags to reason before answering
+
+## Document Generation Rules
+- You CAN generate documents in ANY mode (chat, research, red flag)
+- When the user's query implies document creation (draft, write, create, prepare, generate), produce the full document
+- Start documents with "# Document Title" heading followed by the full document content
+- Use actual organization data from the context — NEVER use placeholders like [Firm Name], [Your Name], etc.
+
+## Generative UI Rules
+- Only use numbered bold choices when you genuinely need user input between 2-4 distinct approaches
+- NEVER use choice formatting for: data listings, analysis results, document summaries, financial breakdowns
+- When you have sufficient context, proceed with analysis directly — don't ask unnecessary clarifying questions
+
+## Citation Rules
+- Use [1], [2], [3] notation — sequential integers only
+- NEVER use [Web] or any non-numeric citation markers
+- Cite every factual claim with its source number
+- If you reference uploaded documents, cite them with their document number [1], [2], etc.
+- If you reference research results, cite them with their source number
+
+## Formatting Rules
+- Format responses with markdown: headers, lists, bold for key terms
+- When creating tables, use proper markdown table syntax
+- Always structure your analysis clearly with sections
+- NEVER use placeholder text like [Firm Name], [Contact Person], etc.
+- Do not include "---" horizontal rules or "References:" sections at the end
+- At the end of your response, suggest 3 follow-up questions the user might want to ask, each on its own line starting with ">>FOLLOWUP: "`;
+
+          const systemPrompt = `${basePrompt}
+${personalizationContext}
+${knowledgeContext}
+${ragContext || vaultContext}
+${perplexityContext}`;
+
+          // Determine AI provider
+          let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+          let aiKey = Deno.env.get("LOVABLE_API_KEY") || "";
+          let modelId = "google/gemini-2.5-flash";
+          let headers: Record<string, string> = {
+            Authorization: `Bearer ${aiKey}`,
+            "Content-Type": "application/json",
+          };
+
+          const { data: llmConfigs } = await adminClient
+            .from("llm_configs")
+            .select("*")
+            .or(`organization_id.eq.${orgId},organization_id.is.null`)
+            .eq("is_active", true)
+            .eq("use_case", "chat")
+            .order("is_default", { ascending: false })
+            .limit(1);
+
+          if (llmConfigs?.[0]) {
+            const cfg = llmConfigs[0];
+            let configuredModel = cfg.model_id;
+            
+            if (configuredModel && !configuredModel.includes("/")) {
+              if (configuredModel.startsWith("gemini")) {
+                configuredModel = `google/${configuredModel}`;
+              } else if (configuredModel.startsWith("gpt")) {
+                configuredModel = `openai/${configuredModel}`;
+              }
+            }
+            
+            modelId = configuredModel || modelId;
+          }
+
+          // Build messages array with server-side history
+          const aiMessages = [
+            { role: "system", content: systemPrompt },
+            ...conversationHistory.map((m: any) => ({ role: m.role, content: m.content })),
+            { role: "user", content: message },
           ];
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "steps", steps: allSteps })}\n\n`)
-          );
+
+          // Save user message
+          if (conversationId) {
+            await adminClient.from("messages").insert({
+              conversation_id: conversationId,
+              organization_id: orgId,
+              role: "user",
+              content: message,
+            });
+          }
+
+          // ---- STEP: Synthesizing ----
+          emitStep(controller, encoder, { name: "Synthesizing response", status: "working" });
 
           const aiResponse = await fetch(aiUrl, {
             method: "POST",
             headers,
             body: JSON.stringify({
               model: modelId,
-              messages,
+              messages: aiMessages,
               stream: true,
               max_tokens: deepResearch ? 8192 : 4096,
               temperature: 0.3,
@@ -502,6 +557,8 @@ ${perplexityContext}`;
             controller.close();
             return;
           }
+
+          emitStep(controller, encoder, { name: "Synthesizing response", status: "done" });
 
           const reader = aiResponse.body!.getReader();
           const decoder = new TextDecoder();

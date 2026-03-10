@@ -518,43 +518,38 @@ export default function Home() {
                 </PopoverContent>
               </Popover>
 
-              {/* Prompts */}
+              {/* Mode selector */}
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
-                    <BookOpen className="h-3.5 w-3.5" />
-                    Prompts
+                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground">
+                    {promptMode === "red_flags" ? <AlertTriangle className="h-3.5 w-3.5" /> : promptMode === "drafting" ? <FileText className="h-3.5 w-3.5" /> : <Scale className="h-3.5 w-3.5" />}
+                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Draft Document" : "Chat / Research"}
+                    <ChevronRight className="h-2.5 w-2.5" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-64 p-2" align="start">
-                  {promptTemplates.length === 0 ? (
-                    <p className="text-xs text-muted-foreground px-2 py-3 text-center">
-                      No prompt templates configured. Add them in Admin → Agentic AI → Prompts.
-                    </p>
-                  ) : (
-                    promptTemplates.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => {
-                          setPromptMode(t.id);
-                          toast({ title: `Mode: ${t.label}`, description: "This mode will be used for your next message" });
-                        }}
-                        className={cn(
-                          "flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors",
-                          promptMode === t.id && "bg-muted ring-1 ring-primary/30"
-                        )}
-                      >
-                        <FileText className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                        <div className="text-left">
-                          <p className="font-medium">{t.label}</p>
-                          <p className="text-muted-foreground line-clamp-2 mt-0.5">{t.prompt.substring(0, 80)}...</p>
-                        </div>
-                        {promptMode === t.id && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary mt-1 shrink-0" />
-                        )}
-                      </button>
-                    ))
-                  )}
+                <PopoverContent className="w-72 p-1.5" align="start">
+                  {[
+                    { id: "chat", label: "Chat / Research", description: "Ask questions, analyze documents, research topics", icon: Scale },
+                    { id: "drafting", label: "Draft Document", description: "Generate contracts, memos, briefs, and legal documents", icon: FileText },
+                    { id: "red_flags", label: "Red Flag Detection", description: "Identify risks, compliance issues, and red flags", icon: AlertTriangle },
+                  ].map((mode) => (
+                    <button
+                      key={mode.id}
+                      onClick={() => {
+                        setPromptMode(mode.id === "chat" ? undefined : mode.id);
+                      }}
+                      className={cn(
+                        "flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors",
+                        (promptMode === mode.id || (!promptMode && mode.id === "chat")) && "bg-muted ring-1 ring-primary/20"
+                      )}
+                    >
+                      <mode.icon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="text-left">
+                        <p className="font-medium">{mode.label}</p>
+                        <p className="text-muted-foreground mt-0.5">{mode.description}</p>
+                      </div>
+                    </button>
+                  ))}
                 </PopoverContent>
               </Popover>
 
@@ -581,7 +576,7 @@ export default function Home() {
                   onCheckedChange={setDeepResearch}
                   className="scale-75"
                 />
-                <span className="text-[10px] text-muted-foreground">Deep</span>
+                <span className="text-[10px] text-muted-foreground">Deep research</span>
               </div>
 
               <div className="flex-1" />

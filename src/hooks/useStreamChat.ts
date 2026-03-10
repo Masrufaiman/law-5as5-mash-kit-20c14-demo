@@ -30,6 +30,11 @@ export interface Citation {
   url?: string;
 }
 
+export interface SearchSource {
+  urls: string[];
+  domains: string[];
+}
+
 interface StreamChatOptions {
   conversationId: string;
   organizationId: string;
@@ -48,6 +53,7 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`;
 export function useStreamChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [steps, setSteps] = useState<AgentStep[]>([]);
+  const [searchSources, setSearchSources] = useState<SearchSource | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -61,6 +67,7 @@ export function useStreamChat() {
     async (content: string, options: StreamChatOptions) => {
       setError(null);
       setSteps([]);
+      setSearchSources(null);
       setIsStreaming(true);
       lastUserMsgRef.current = content;
 
@@ -153,7 +160,22 @@ export function useStreamChat() {
               const parsed = JSON.parse(jsonStr);
 
               if (parsed.type === "steps") {
+                // Legacy batch steps format
                 setSteps(parsed.steps);
+              } else if (parsed.type === "step") {
+                // New progressive step format
+                setSteps((prev) => {
+                  const step = parsed.step as AgentStep;
+                  // If step with same name exists, update its status
+                  const existing = prev.findIndex((s) => s.name === step.name);
+                  if (existing !== -1) {
+                    return prev.map((s, i) => i === existing ? step : s);
+                  }
+                  return [...prev, step];
+                });
+              } else if (parsed.type === "sources") {
+                // Favicon sources from Perplexity
+                setSearchSources({ urls: parsed.urls, domains: parsed.domains });
               } else if (parsed.type === "reasoning") {
                 assistantReasoning += parsed.content;
                 setMessages((prev) => {
@@ -257,12 +279,14 @@ export function useStreamChat() {
   const clearMessages = useCallback(() => {
     setMessages([]);
     setSteps([]);
+    setSearchSources(null);
     setError(null);
   }, []);
 
   return {
     messages,
     steps,
+    searchSources,
     isStreaming,
     error,
     sendMessage,
