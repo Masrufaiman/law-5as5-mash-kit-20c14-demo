@@ -44,6 +44,7 @@ export default function Chat() {
   const {
     messages,
     steps,
+    searchSources,
     isStreaming,
     error,
     sendMessage,
