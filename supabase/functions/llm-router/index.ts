@@ -706,6 +706,8 @@ First write a brief 1-2 sentence intro, then output EXACTLY this structure:
 - NEVER use markdown table syntax (|---|). ALWAYS use <!-- SHEET: --> JSON format
 - Include 3-5 meaningful columns based on the user's request
 - If the user doesn't specify columns, infer appropriate ones from the document content
+- When adding new columns to an existing table, you MUST fill in the values for ALL rows using the document context provided. Extract the actual data from the document chunks/text — do NOT leave values empty or as "N/A" if the information exists in the provided documents.
+- Each row's "values" must include ALL column keys (both existing and new columns)
 
 IMPORTANT: Output ONLY the <!-- SHEET: --> format. NEVER use markdown tables. This is mandatory.
 ` : "";
