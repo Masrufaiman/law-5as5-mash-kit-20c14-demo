@@ -586,6 +586,7 @@ export default function Chat() {
                         isLastAssistant={isLastAssistant}
                         steps={showSteps ? steps : undefined}
                         isStreamingSteps={isStreaming}
+                        searchSources={showSearchSources}
                         onFollowUp={handleChoiceSelect}
                       />
 
