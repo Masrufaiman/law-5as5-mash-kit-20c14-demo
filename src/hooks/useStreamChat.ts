@@ -16,6 +16,12 @@ export interface ChatMessage {
   followUps?: string[];
   attachments?: MessageAttachments;
   createdAt: Date;
+  // Persisted per-message metadata (frozen after stream completes)
+  frozenSteps?: AgentStep[];
+  frozenPlan?: string[];
+  frozenThinkingText?: string;
+  frozenSearchSources?: SearchSource | null;
+  frozenFileRefs?: FileRef[];
 }
 
 export interface AgentStep {
@@ -57,6 +63,7 @@ interface StreamChatOptions {
   promptMode?: string;
   currentSheetState?: any;
   workflowSystemPrompt?: string;
+  currentDocumentContent?: string;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`;
@@ -107,6 +114,13 @@ export function useStreamChat() {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      // Refs to accumulate live state for freezing
+      let liveSteps: AgentStep[] = [];
+      let livePlan: string[] = [];
+      let liveThinkingText = "";
+      let liveSearchSources: SearchSource | null = null;
+      let liveFileRefs: FileRef[] = [];
+
       try {
         const { data: sessionData } = await (await import("@/integrations/supabase/client")).supabase.auth.getSession();
         const accessToken = sessionData.session?.access_token;
@@ -132,6 +146,7 @@ export function useStreamChat() {
             promptMode: options.promptMode,
             currentSheetState: options.currentSheetState,
             workflowSystemPrompt: options.workflowSystemPrompt,
+            currentDocumentContent: options.currentDocumentContent,
             history,
           }),
           signal: controller.signal,
@@ -181,9 +196,11 @@ export function useStreamChat() {
               const parsed = JSON.parse(jsonStr);
 
               if (parsed.type === "plan") {
-                setPlan(parsed.steps || []);
+                livePlan = parsed.steps || [];
+                setPlan(livePlan);
               } else if (parsed.type === "steps") {
-                setSteps(parsed.steps);
+                liveSteps = parsed.steps;
+                setSteps(liveSteps);
               } else if (parsed.type === "step") {
                 setSteps((prev) => {
                   const step = parsed.step as AgentStep;
@@ -191,7 +208,6 @@ export function useStreamChat() {
                   
                   const existing = prev.findIndex((s) => s.name === step.name);
                   if (existing !== -1) {
-                    // Calculate duration when step completes
                     let duration = step.duration;
                     if (step.status === "done" && !duration) {
                       const startTime = stepTimers.current.get(step.name);
@@ -200,26 +216,31 @@ export function useStreamChat() {
                         duration = `${elapsed}s`;
                       }
                     }
-                    return prev.map((s, i) => i === existing ? { ...step, duration, startedAt: s.startedAt } : s);
+                    const updated = prev.map((s, i) => i === existing ? { ...step, duration, startedAt: s.startedAt } : s);
+                    liveSteps = updated;
+                    return updated;
                   }
                   
-                  // Track start time for new steps
                   if (step.status === "working") {
                     stepTimers.current.set(step.name, now);
                   }
-                  return [...prev, { ...step, startedAt: now }];
+                  const updated = [...prev, { ...step, startedAt: now }];
+                  liveSteps = updated;
+                  return updated;
                 });
                 
-                // Update plan checkmarks
                 if (parsed.step?.status === "done") {
-                  setPlan((prevPlan) => [...prevPlan]); // trigger re-render for plan checklist
+                  setPlan((prevPlan) => [...prevPlan]);
                 }
               } else if (parsed.type === "thinking") {
-                setThinkingText((prev) => prev + parsed.content);
+                liveThinkingText += parsed.content;
+                setThinkingText(liveThinkingText);
               } else if (parsed.type === "file_refs") {
-                setFileRefs((prev) => [...prev, ...(parsed.files || [])]);
+                liveFileRefs = [...liveFileRefs, ...(parsed.files || [])];
+                setFileRefs(liveFileRefs);
               } else if (parsed.type === "sources") {
-                setSearchSources({ urls: parsed.urls, domains: parsed.domains });
+                liveSearchSources = { urls: parsed.urls, domains: parsed.domains };
+                setSearchSources(liveSearchSources);
               } else if (parsed.type === "reasoning") {
                 assistantReasoning += parsed.content;
                 setMessages((prev) => {
@@ -260,10 +281,20 @@ export function useStreamChat() {
                   ];
                 });
               } else if (parsed.type === "done") {
+                // Freeze steps/plan/thinking onto the assistant message
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantId
-                      ? { ...m, citations: parsed.citations, followUps: parsed.followUps }
+                      ? {
+                          ...m,
+                          citations: parsed.citations,
+                          followUps: parsed.followUps,
+                          frozenSteps: liveSteps.map(s => ({ ...s, status: "done" as const })),
+                          frozenPlan: livePlan,
+                          frozenThinkingText: liveThinkingText,
+                          frozenSearchSources: liveSearchSources,
+                          frozenFileRefs: liveFileRefs,
+                        }
                       : m
                   )
                 );

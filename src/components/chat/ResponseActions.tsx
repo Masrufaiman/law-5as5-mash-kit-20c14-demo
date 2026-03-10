@@ -2,16 +2,20 @@ import { useState } from "react";
 import { Copy, Download, RefreshCw, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 interface ResponseActionsProps {
   content: string;
   messageId?: string;
+  conversationId?: string;
   onRegenerate?: () => void;
 }
 
-export function ResponseActions({ content, messageId, onRegenerate }: ResponseActionsProps) {
+export function ResponseActions({ content, messageId, conversationId, onRegenerate }: ResponseActionsProps) {
   const { toast } = useToast();
+  const { profile } = useAuth();
   const [feedback, setFeedback] = useState<"up" | "down" | null>(() => {
     if (!messageId) return null;
     const stored = localStorage.getItem(`feedback-${messageId}`);
@@ -34,9 +38,11 @@ export function ResponseActions({ content, messageId, onRegenerate }: ResponseAc
     toast({ title: "Exported", description: "Downloaded as Markdown file" });
   };
 
-  const handleFeedback = (type: "up" | "down") => {
+  const handleFeedback = async (type: "up" | "down") => {
     const newFeedback = feedback === type ? null : type;
     setFeedback(newFeedback);
+
+    // Persist to localStorage
     if (messageId) {
       if (newFeedback) {
         localStorage.setItem(`feedback-${messageId}`, newFeedback);
@@ -44,6 +50,33 @@ export function ResponseActions({ content, messageId, onRegenerate }: ResponseAc
         localStorage.removeItem(`feedback-${messageId}`);
       }
     }
+
+    // Persist to Supabase
+    if (messageId && profile?.organization_id) {
+      try {
+        if (newFeedback) {
+          await supabase.from("message_feedback").upsert(
+            {
+              message_id: messageId,
+              conversation_id: conversationId || "",
+              organization_id: profile.organization_id,
+              user_id: profile.id,
+              feedback: newFeedback,
+            },
+            { onConflict: "message_id,user_id" }
+          );
+        } else {
+          await supabase
+            .from("message_feedback")
+            .delete()
+            .eq("message_id", messageId)
+            .eq("user_id", profile.id);
+        }
+      } catch {
+        // Silently fail — localStorage is the fallback
+      }
+    }
+
     if (newFeedback === "up") {
       toast({ title: "Thanks!", description: "Glad this was helpful" });
     } else if (newFeedback === "down") {

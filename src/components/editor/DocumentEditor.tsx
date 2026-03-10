@@ -1,11 +1,26 @@
 import { useState, useEffect, useMemo } from "react";
-import { X, Eye, EyeOff, Save, Clock, ChevronDown, ChevronsLeft, ChevronsRight, BookOpen } from "lucide-react";
+import { X, Eye, EyeOff, Save, Clock, ChevronDown, ChevronsLeft, ChevronsRight, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import ReactQuill from "react-quill-new";
+import ReactQuill, { Quill } from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
+
+// Register custom fonts
+const Font = Quill.import("formats/font") as any;
+Font.whitelist = [
+  false, // default
+  "serif",
+  "monospace",
+  "inter",
+  "georgia",
+  "times-new-roman",
+  "courier-new",
+  "garamond",
+  "palatino",
+];
+Quill.register(Font, true);
 
 interface DocumentEditorProps {
   title: string;
@@ -16,7 +31,7 @@ interface DocumentEditorProps {
 const modules = {
   toolbar: [
     [{ header: [1, 2, 3, false] }],
-    [{ font: [] }],
+    [{ font: [false, "serif", "monospace", "inter", "georgia", "times-new-roman", "courier-new", "garamond", "palatino"] }],
     [{ size: ["small", false, "large", "huge"] }],
     ["bold", "italic", "underline", "strike"],
     [{ color: [] }, { background: [] }],
@@ -81,7 +96,7 @@ function computeDiff(oldText: string, newText: string): string {
 
   for (const op of ops) {
     if (op.type === "keep") result.push(op.word);
-    else if (op.type === "del") result.push(`<span style="color: hsl(0, 84%, 60%); text-decoration: line-through;">${op.word}</span>`);
+    else if (op.type === "del") result.push(`<span style="color: hsl(0, 84%, 60%); text-decoration: line-through; background-color: hsl(0, 84%, 95%);">${op.word}</span>`);
     else result.push(`<span style="background-color: hsl(142, 76%, 90%); color: hsl(142, 76%, 25%);">${op.word}</span>`);
   }
   return result.join(" ");
@@ -117,13 +132,58 @@ export function DocumentEditor({ title, content, onClose }: DocumentEditorProps)
     setShowEdits(false);
   };
 
+  // Diff compares previous version vs current version — showing deletions (strikethrough red) + additions (green highlight)
   const diffHtml = useMemo(() => {
     if (!showEdits || currentVersion === 0) return null;
     return computeDiff(versions[currentVersion - 1], versions[currentVersion]);
   }, [showEdits, versions, currentVersion]);
 
+  const handleExportMarkdown = () => {
+    const text = editorContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const blob = new Blob([text], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title.replace(/[^a-zA-Z0-9]/g, "_")}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportHtml = () => {
+    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6;}</style></head><body>${editorContent}</body></html>`;
+    const blob = new Blob([fullHtml], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title.replace(/[^a-zA-Z0-9]/g, "_")}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex flex-col h-full bg-card">
+      {/* Font face CSS for custom fonts */}
+      <style>{`
+        .ql-font-inter { font-family: 'Inter', sans-serif; }
+        .ql-font-georgia { font-family: 'Georgia', serif; }
+        .ql-font-times-new-roman { font-family: 'Times New Roman', serif; }
+        .ql-font-courier-new { font-family: 'Courier New', monospace; }
+        .ql-font-garamond { font-family: 'Garamond', serif; }
+        .ql-font-palatino { font-family: 'Palatino Linotype', 'Palatino', serif; }
+        .ql-picker.ql-font .ql-picker-label[data-value="inter"]::before,
+        .ql-picker.ql-font .ql-picker-item[data-value="inter"]::before { content: 'Inter'; font-family: 'Inter', sans-serif; }
+        .ql-picker.ql-font .ql-picker-label[data-value="georgia"]::before,
+        .ql-picker.ql-font .ql-picker-item[data-value="georgia"]::before { content: 'Georgia'; font-family: 'Georgia', serif; }
+        .ql-picker.ql-font .ql-picker-label[data-value="times-new-roman"]::before,
+        .ql-picker.ql-font .ql-picker-item[data-value="times-new-roman"]::before { content: 'Times New Roman'; font-family: 'Times New Roman', serif; }
+        .ql-picker.ql-font .ql-picker-label[data-value="courier-new"]::before,
+        .ql-picker.ql-font .ql-picker-item[data-value="courier-new"]::before { content: 'Courier New'; font-family: 'Courier New', monospace; }
+        .ql-picker.ql-font .ql-picker-label[data-value="garamond"]::before,
+        .ql-picker.ql-font .ql-picker-item[data-value="garamond"]::before { content: 'Garamond'; font-family: 'Garamond', serif; }
+        .ql-picker.ql-font .ql-picker-label[data-value="palatino"]::before,
+        .ql-picker.ql-font .ql-picker-item[data-value="palatino"]::before { content: 'Palatino'; font-family: 'Palatino Linotype', serif; }
+      `}</style>
+
       {/* Compact header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -185,6 +245,31 @@ export function DocumentEditor({ title, content, onClose }: DocumentEditorProps)
             <Save className="h-3 w-3" />
             Save
           </Button>
+
+          {/* Export dropdown */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 px-2">
+                <Download className="h-3 w-3" />
+                Export
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-36 p-1" align="end">
+              <button
+                onClick={handleExportMarkdown}
+                className="flex w-full items-center rounded px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+              >
+                Export as .md
+              </button>
+              <button
+                onClick={handleExportHtml}
+                className="flex w-full items-center rounded px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+              >
+                Export as .html
+              </button>
+            </PopoverContent>
+          </Popover>
+
           <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}>
             <X className="h-3.5 w-3.5" />
           </Button>
