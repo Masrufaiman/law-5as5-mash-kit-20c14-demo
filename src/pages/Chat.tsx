@@ -259,7 +259,9 @@ export default function Chat() {
       const srcs = state.activeSources || [];
       const pMode = state.promptMode;
       const wfTag = state.workflowTag || null;
-      const pendingFiles: File[] = state.attachedFiles || [];
+      // Files are now pre-processed in Home.tsx — receive IDs, not File objects
+      const preProcessedFileIds: string[] = state.attachedFileIds || [];
+      const preProcessedFileNames: string[] = state.attachedFileNames || [];
 
       setVaultId(vault);
       setVaultName(vName);
@@ -270,22 +272,13 @@ export default function Chat() {
 
       navigate("/chat", { replace: true, state: {} });
 
-      // If there are attached files, process them first
-      if (pendingFiles.length > 0) {
-        setIsProcessingFiles(true);
-        processAttachedFiles(pendingFiles)
-          .then(({ fileIds, fileNames, vaultId: pVaultId }) => {
-            const effectiveVault = vault || pVaultId;
-            const effectiveVaultName = vName || "Uploads";
-            setVaultId(effectiveVault);
-            setVaultName(effectiveVaultName);
-            createConversationAndSend(msg, effectiveVault, deep, srcs, pMode, effectiveVaultName, wfTag?.systemPrompt, fileIds, fileNames);
-          })
-          .catch((err) => {
-            toast({ title: "File upload failed", description: err.message, variant: "destructive" });
-            createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
-          })
-          .finally(() => setIsProcessingFiles(false));
+      if (preProcessedFileIds.length > 0) {
+        // Files already uploaded in Home.tsx, just pass IDs
+        const effectiveVault = vault || (state.selectedVault?.id);
+        const effectiveVaultName = vName || "Uploads";
+        setVaultId(effectiveVault);
+        setVaultName(effectiveVaultName);
+        createConversationAndSend(msg, effectiveVault, deep, srcs, pMode, effectiveVaultName, wfTag?.systemPrompt, preProcessedFileIds, preProcessedFileNames);
       } else {
         createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
       }
