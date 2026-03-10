@@ -97,22 +97,34 @@ export default function Chat() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error("Not authenticated");
 
-    // Find or create a "Prompt Uploads" vault
+    // Find or create an "Uploads" vault
     let { data: pVault } = await supabase
       .from("vaults")
       .select("id")
       .eq("organization_id", profile.organization_id)
-      .eq("name", "Prompt Uploads")
+      .eq("name", "Uploads")
       .maybeSingle();
 
     if (!pVault) {
-      const { data: newVault, error: vErr } = await supabase
+      // Also check for legacy name
+      const { data: legacyVault } = await supabase
         .from("vaults")
-        .insert({ name: "Prompt Uploads", organization_id: profile.organization_id, created_by: profile.id, description: "Auto-created vault for prompt file attachments" })
-        .select()
-        .single();
-      if (vErr || !newVault) throw new Error("Failed to create upload vault");
-      pVault = newVault;
+        .select("id")
+        .eq("organization_id", profile.organization_id)
+        .eq("name", "Prompt Uploads")
+        .maybeSingle();
+      
+      if (legacyVault) {
+        pVault = legacyVault;
+      } else {
+        const { data: newVault, error: vErr } = await supabase
+          .from("vaults")
+          .insert({ name: "Uploads", organization_id: profile.organization_id, created_by: profile.id, description: "Default vault for uploaded documents" })
+          .select()
+          .single();
+        if (vErr || !newVault) throw new Error("Failed to create upload vault");
+        pVault = newVault;
+      }
     }
 
     const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
