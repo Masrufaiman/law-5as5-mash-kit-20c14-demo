@@ -112,6 +112,41 @@ export type Database = {
           },
         ]
       }
+      conversation_shares: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          id: string
+          permission: string
+          shared_by: string | null
+          shared_with_email: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          id?: string
+          permission?: string
+          shared_by?: string | null
+          shared_with_email: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          permission?: string
+          shared_by?: string | null
+          shared_with_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_shares_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           created_at: string
