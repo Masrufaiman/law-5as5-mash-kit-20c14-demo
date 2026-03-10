@@ -203,7 +203,26 @@ serve(async (req) => {
 
       const fileNamesList = fileNames || existingSheet?.rows?.map((r: any) => r.fileName) || [];
       
-      const colFillPrompt = `You are a data extraction AI. Given a column definition, extract the value for each file/document.
+      // Load actual file content for each file so AI has real data to extract from
+      let fileContentContext = "";
+      if (fileNamesList.length > 0) {
+        const { data: fileRecords } = await adminClient
+          .from("files")
+          .select("name, extracted_text")
+          .eq("organization_id", orgId)
+          .in("name", fileNamesList)
+          .not("extracted_text", "is", null)
+          .limit(50);
+        
+        if (fileRecords?.length) {
+          fileContentContext = "\n\n## Document Contents\n" +
+            fileRecords.map((f: any) => 
+              `### ${f.name}\n${(f.extracted_text || "").substring(0, 4000)}`
+            ).join("\n\n");
+        }
+      }
+      
+      const colFillPrompt = `You are a data extraction AI. Given a column definition, extract the value for each file/document using the actual document contents provided below.
 
 Column Name: ${columnMeta.name}
 Column Type: ${columnMeta.type}
@@ -211,6 +230,7 @@ Extraction Query: ${columnMeta.query}
 
 Files to extract from:
 ${fileNamesList.map((f: string, i: number) => `${i + 1}. ${f}`).join("\n")}
+${fileContentContext}
 
 Respond with ONLY a JSON object mapping file names to extracted values:
 {
@@ -218,7 +238,7 @@ Respond with ONLY a JSON object mapping file names to extracted values:
   "filename2.pdf": "extracted value 2"
 }
 
-If you cannot determine a value, use "N/A". Be concise but accurate.`;
+If you cannot determine a value from the document content, use "N/A". Be concise but accurate. Extract ONLY from the document text provided above.`;
 
       try {
         const resp = await fetch(aiUrl, {
