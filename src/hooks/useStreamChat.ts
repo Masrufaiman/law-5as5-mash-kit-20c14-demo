@@ -131,6 +131,7 @@ export function useStreamChat() {
             useCase: options.useCase,
             promptMode: options.promptMode,
             currentSheetState: options.currentSheetState,
+            workflowSystemPrompt: options.workflowSystemPrompt,
             history,
           }),
           signal: controller.signal,
