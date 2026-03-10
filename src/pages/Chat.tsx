@@ -67,6 +67,7 @@ export default function Chat() {
   const [activeSources, setActiveSources] = useState<string[]>([]);
   const [promptMode, setPromptMode] = useState<string | undefined>();
   const [editorDoc, setEditorDoc] = useState<{ title: string; content: string } | null>(null);
+  const [sheetDoc, setSheetDoc] = useState<SheetData | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState("");
   const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
