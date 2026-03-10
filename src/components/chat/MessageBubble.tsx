@@ -226,6 +226,7 @@ export function MessageBubble({
   plan,
   thinkingText,
   fileRefs,
+  conversationId,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const citations = message.citations || [];
