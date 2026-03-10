@@ -20,6 +20,8 @@ interface ChatRequest {
   vaultName?: string;
   promptMode?: string;
   currentSheetState?: any;
+  workflowSystemPrompt?: string;
+  currentDocumentContent?: string;
   // Column fill specific
   columnMeta?: { name: string; type: string; query: string };
   fileNames?: string[];
