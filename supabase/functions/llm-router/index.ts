@@ -175,7 +175,7 @@ serve(async (req) => {
 
     const orgId = profile.organization_id;
     const body: ChatRequest = await req.json();
-    const { conversationId, message, vaultId, deepResearch, attachedFileIds, attachedFileNames, sources, history, useCase, vaultName: clientVaultName, promptMode, currentSheetState, columnMeta, fileNames, existingSheet } = body;
+    const { conversationId, message, vaultId, deepResearch, attachedFileIds, attachedFileNames, sources, history, useCase, vaultName: clientVaultName, promptMode, currentSheetState, columnMeta, fileNames, existingSheet, workflowSystemPrompt, currentDocumentContent } = body;
 
     // ---------- COLUMN FILL USE CASE (non-streaming) ----------
     if (useCase === "column_fill" && columnMeta) {
