@@ -68,7 +68,20 @@ export default function Chat() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState("");
   const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [selectedVault, setSelectedVault] = useState<{ id: string; name: string } | null>(null);
+  const [chatVaults, setChatVaults] = useState<{ id: string; name: string }[]>([]);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Load vaults for sources dropdown
+  useEffect(() => {
+    if (!profile?.organization_id) return;
+    supabase
+      .from("vaults")
+      .select("id, name")
+      .eq("organization_id", profile.organization_id)
+      .order("created_at")
+      .then(({ data }) => setChatVaults(data || []));
+  }, [profile?.organization_id]);
 
   // Load conversation from URL ?id=
   useEffect(() => {
@@ -648,6 +661,15 @@ export default function Chat() {
                 onDeepResearchChange={setDeepResearch}
                 promptMode={promptMode}
                 onPromptModeChange={setPromptMode}
+                vaults={chatVaults}
+                selectedVault={selectedVault}
+                onVaultSelect={(v) => {
+                  setSelectedVault(v);
+                  if (v) { setVaultId(v.id); setVaultName(v.name); }
+                  else { setVaultId(undefined); setVaultName(undefined); }
+                }}
+                activeSources={activeSources}
+                onSourceToggle={(s) => setActiveSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
               />
             </div>
           </div>

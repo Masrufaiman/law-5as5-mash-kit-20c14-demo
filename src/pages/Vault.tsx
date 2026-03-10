@@ -112,6 +112,48 @@ export default function Vault() {
     }
   };
 
+  const handleRenameVault = async (id: string, name: string) => {
+    const { error } = await supabase.from("vaults").update({ name }).eq("id", id);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setVaults((prev) => prev.map((v) => v.id === id ? { ...v, name } : v));
+      toast({ title: "Renamed", description: `Vault renamed to "${name}".` });
+    }
+  };
+
+  const handleDeleteVault = async (id: string) => {
+    if (!profile?.organization_id) return;
+    
+    // Delete file_chunks (vectors references) for all files in this vault
+    const { data: vaultFiles } = await supabase
+      .from("files")
+      .select("id")
+      .eq("vault_id", id);
+
+    if (vaultFiles?.length) {
+      const fileIds = vaultFiles.map((f) => f.id);
+      await supabase.from("file_chunks").delete().in("file_id", fileIds);
+      await supabase.from("files").delete().eq("vault_id", id);
+    }
+
+    // Delete conversations linked to this vault
+    await supabase.from("conversations").delete().eq("vault_id", id);
+
+    // Delete the vault itself
+    const { error } = await supabase.from("vaults").delete().eq("id", id);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setVaults((prev) => prev.filter((v) => v.id !== id));
+      if (selectedVaultId === id) {
+        setSelectedVaultId(null);
+        setSearchParams({});
+      }
+      toast({ title: "Deleted", description: "Vault and all its data removed." });
+    }
+  };
+
   const handleUpload = async (fileList: File[]) => {
     if (!profile?.organization_id || !selectedVaultId) return;
     setUploading(true);
@@ -120,7 +162,6 @@ export default function Vault() {
       const sanitizedName = file.name.replace(/\s+/g, "_").replace(/[()]/g, "");
       const r2Key = `${profile.organization_id}/${selectedVaultId}/${fileId}-${sanitizedName}`;
       try {
-        // Upload to R2 via edge function
         const formData = new FormData();
         formData.append("file", file);
         formData.append("orgId", profile.organization_id);
@@ -146,7 +187,6 @@ export default function Vault() {
 
         const result = await response.json();
 
-        // Create file record in DB
         const { error: dbError } = await supabase.from("files").insert({
           id: fileId,
           name: file.name,
@@ -187,6 +227,8 @@ export default function Vault() {
             onBack={handleBack}
             onUpload={handleUpload}
             uploading={uploading}
+            onRename={handleRenameVault}
+            onDelete={handleDeleteVault}
           />
         ) : (
           <VaultGrid
@@ -194,6 +236,9 @@ export default function Vault() {
             fileCounts={fileCounts}
             onSelectVault={handleSelectVault}
             onCreateVault={handleCreateVault}
+            onDeleteVault={handleDeleteVault}
+            onRenameVault={handleRenameVault}
+            userId={profile?.id}
           />
         )}
       </FileUploadZone>

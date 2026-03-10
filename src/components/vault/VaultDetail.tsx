@@ -1,10 +1,11 @@
 import { useState, useRef } from "react";
-import { ArrowLeft, Search, Upload, FolderPlus, Filter, Sparkles, FileText, Table2, ChevronRight, MoreHorizontal, Plus } from "lucide-react";
+import { ArrowLeft, Search, Upload, FolderPlus, Filter, Sparkles, FileText, Table2, ChevronRight, MoreHorizontal, Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { FileTable } from "./FileTable";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -45,15 +46,27 @@ interface VaultDetailProps {
   onBack: () => void;
   onUpload: (files: File[]) => void;
   uploading: boolean;
+  onRename?: (id: string, name: string) => void;
+  onDelete?: (id: string) => void;
 }
 
-export function VaultDetail({ vault, files, onBack, onUpload, uploading }: VaultDetailProps) {
+export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRename, onDelete }: VaultDetailProps) {
   const [search, setSearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editName, setEditName] = useState(vault.name);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const filtered = files.filter((f) =>
     f.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleSaveName = () => {
+    if (editName.trim() && editName.trim() !== vault.name && onRename) {
+      onRename(vault.id, editName.trim());
+    }
+    setIsEditingName(false);
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -63,14 +76,85 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading }: Vault
           <button onClick={onBack} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <h1 className="font-heading text-xl font-semibold text-foreground">{vault.name}</h1>
+          {isEditingName ? (
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveName();
+                  if (e.key === "Escape") { setIsEditingName(false); setEditName(vault.name); }
+                }}
+                onBlur={handleSaveName}
+                className="h-7 text-xl font-semibold font-heading px-1.5 py-0 flex-1"
+                autoFocus
+                onFocus={(e) => e.target.select()}
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => onRename && setIsEditingName(true)}
+              className="flex items-center gap-1.5 group min-w-0"
+              title="Click to rename"
+            >
+              <h1 className="font-heading text-xl font-semibold text-foreground">{vault.name}</h1>
+              {onRename && (
+                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+              )}
+            </button>
+          )}
           <Badge variant="outline" className="text-[10px] ml-1">Vault</Badge>
+
+          {(onRename || onDelete) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 ml-auto">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {onRename && (
+                  <DropdownMenuItem onClick={() => { setEditName(vault.name); setIsEditingName(true); }}>
+                    <Pencil className="h-3.5 w-3.5 mr-2" />
+                    Rename vault
+                  </DropdownMenuItem>
+                )}
+                {onDelete && (
+                  <DropdownMenuItem className="text-destructive" onClick={() => setShowDeleteConfirm(true)}>
+                    <Trash2 className="h-3.5 w-3.5 mr-2" />
+                    Delete vault
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
         <p className="text-xs text-muted-foreground ml-7">
           {files.length} files · {formatTotalSize(files)}
           {vault.description && ` · ${vault.description}`}
         </p>
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete vault "{vault.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this vault, all its files, vector embeddings, and associated data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { onDelete?.(vault.id); setShowDeleteConfirm(false); }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete vault
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Create new query section */}
       <div className="px-6 py-4">

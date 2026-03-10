@@ -23,6 +23,7 @@ import {
   Search,
   Share,
   Trash2,
+  Pencil,
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
@@ -76,6 +77,8 @@ export function NavigationSidebar() {
   const [searchResults, setSearchResults] = useState<RecentChat[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<RecentChat | null>(null);
+  const [renameTarget, setRenameTarget] = useState<RecentChat | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   useEffect(() => {
     if (!profile?.organization_id) return;
@@ -157,6 +160,22 @@ export function NavigationSidebar() {
       }
     }
     setDeleteTarget(null);
+  };
+
+  const handleRenameChat = async () => {
+    if (!renameTarget || !renameValue.trim()) { setRenameTarget(null); return; }
+    const { error } = await supabase
+      .from("conversations")
+      .update({ title: renameValue.trim() })
+      .eq("id", renameTarget.id);
+    if (error) {
+      toast({ title: "Error", description: "Failed to rename", variant: "destructive" });
+    } else {
+      setRecentChats((prev) => prev.map((c) => c.id === renameTarget.id ? { ...c, title: renameValue.trim() } : c));
+      toast({ title: "Renamed" });
+    }
+    setRenameTarget(null);
+    setRenameValue("");
   };
 
   const orgName = profile?.full_name?.split(" ")[0] || "LawKit";
@@ -288,6 +307,13 @@ export function NavigationSidebar() {
                         </button>
                         <div className="hidden group-hover/chat:flex items-center gap-0.5 shrink-0">
                           <button
+                            onClick={(e) => { e.stopPropagation(); setRenameTarget(chat); setRenameValue(chat.title); }}
+                            className="p-0.5 rounded hover:bg-sidebar-accent text-sidebar-foreground/40 hover:text-sidebar-foreground transition-colors"
+                            title="Rename"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
                             onClick={(e) => handleShareChat(chat.id, e)}
                             className="p-0.5 rounded hover:bg-sidebar-accent text-sidebar-foreground/40 hover:text-sidebar-foreground transition-colors"
                             title="Share"
@@ -415,6 +441,32 @@ export function NavigationSidebar() {
           </button>
         </div>
       </div>
+
+      {/* Rename dialog */}
+      <AlertDialog open={!!renameTarget} onOpenChange={(open) => !open && setRenameTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rename conversation</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="pt-2">
+                <input
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleRenameChat(); }}
+                  className="w-full h-9 px-3 text-sm rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  autoFocus
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRenameChat} disabled={!renameValue.trim()}>
+              Save
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirmation dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
