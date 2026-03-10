@@ -623,6 +623,7 @@ export default function Chat() {
                         onRegenerate={msg.role === "assistant" ? handleRegenerate : undefined}
                         onChoiceSelect={handleChoiceSelect}
                         onDocumentOpen={handleDocumentOpen}
+                        onSheetOpen={handleSheetOpen}
                         isLastAssistant={isLastAssistant}
                         steps={showSteps ? steps : undefined}
                         isStreamingSteps={isStreaming}
