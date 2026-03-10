@@ -23,6 +23,7 @@ import {
   Search,
   Share,
   Trash2,
+  Pencil,
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
