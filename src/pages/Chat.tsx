@@ -72,6 +72,17 @@ export default function Chat() {
   const [chatVaults, setChatVaults] = useState<{ id: string; name: string }[]>([]);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
+  // Load vaults for sources dropdown
+  useEffect(() => {
+    if (!profile?.organization_id) return;
+    supabase
+      .from("vaults")
+      .select("id, name")
+      .eq("organization_id", profile.organization_id)
+      .order("created_at")
+      .then(({ data }) => setChatVaults(data || []));
+  }, [profile?.organization_id]);
+
   // Load conversation from URL ?id=
   useEffect(() => {
     const convId = searchParams.get("id");
