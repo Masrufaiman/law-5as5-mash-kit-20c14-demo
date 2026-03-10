@@ -56,6 +56,7 @@ interface StreamChatOptions {
   useCase?: string;
   promptMode?: string;
   currentSheetState?: any;
+  workflowSystemPrompt?: string;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`;
