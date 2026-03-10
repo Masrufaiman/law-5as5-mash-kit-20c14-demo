@@ -710,11 +710,25 @@ IMPORTANT: Output ONLY the <!-- SHEET: --> format. NEVER use markdown tables. Th
 - Do not include "---" horizontal rules or "References:" sections at the end
 - At the end of your response, suggest 3 follow-up questions the user might want to ask, each on its own line starting with ">>FOLLOWUP: "`;
 
-          const systemPrompt = `${reviewModePrompt || basePrompt}
+          // Document editing context
+          let documentEditingContext = "";
+          if (currentDocumentContent) {
+            documentEditingContext = `\n\n## Currently Open Document\nThe user has a document open in the editor. When they ask for changes, modifications, or edits, modify ONLY the changed parts and output the COMPLETE updated document. Do NOT create a new document from scratch.\n\nCurrent document content:\n${currentDocumentContent.substring(0, 10000)}`;
+          }
+
+          // Workflow system prompt override
+          let effectiveBasePrompt = reviewModePrompt || basePrompt;
+          if (workflowSystemPrompt) {
+            effectiveBasePrompt = workflowSystemPrompt + "\n\n" + effectiveBasePrompt;
+          }
+
+          const systemPrompt = `${effectiveBasePrompt}
 ${personalizationContext}
 ${knowledgeContext}
+${vaultInventory}
 ${ragContext || vaultContext}
-${perplexityContext}`;
+${perplexityContext}
+${documentEditingContext}`;
 
           // Determine AI provider
           let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
