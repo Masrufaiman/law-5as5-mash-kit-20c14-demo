@@ -279,6 +279,7 @@ export default function Chat() {
       sources: srcs,
       useCase: pMode,
       currentSheetState: sheetDoc,
+      workflowSystemPrompt: workflowSystemPrompt || workflowTag?.systemPrompt,
     };
     lastStreamOptions.current = opts;
     sendMessage(msg, opts);
