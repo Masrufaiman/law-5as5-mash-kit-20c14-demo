@@ -246,7 +246,8 @@ export default function Chat() {
     deep?: boolean,
     srcs?: string[],
     pMode?: string,
-    vName?: string
+    vName?: string,
+    workflowSystemPrompt?: string,
   ) => {
     if (!profile?.organization_id) return;
 
