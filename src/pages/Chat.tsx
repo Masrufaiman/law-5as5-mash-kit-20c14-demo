@@ -351,6 +351,8 @@ export default function Chat() {
     pMode?: string,
     vName?: string,
     workflowSystemPrompt?: string,
+    attachedFileIds?: string[],
+    attachedFileNames?: string[],
   ) => {
     if (!profile?.organization_id) return;
 
@@ -384,6 +386,8 @@ export default function Chat() {
       currentSheetState: sheetDoc,
       workflowSystemPrompt: workflowSystemPrompt || workflowTag?.systemPrompt,
       currentDocumentContent: editorDoc?.content,
+      attachedFileIds,
+      attachedFileNames,
     };
     lastStreamOptions.current = opts;
     sendMessage(msg, opts);
