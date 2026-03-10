@@ -71,23 +71,44 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
     if (!shareEmail.trim() || !profile?.id) return;
     setSharing(true);
     try {
-      const { error } = await supabase.from("vault_shares" as any).insert({
-        vault_id: vault.id,
-        shared_with_email: shareEmail.trim().toLowerCase(),
-        shared_by: profile.id,
-        permission: "view",
-      });
-      if (error) {
-        if (error.code === "23505") {
-          toast({ title: "Already shared", description: "This vault is already shared with that email." });
-        } else {
-          throw error;
-        }
-      } else {
-        toast({ title: "Shared!", description: `Vault shared with ${shareEmail.trim()}` });
-        setShareEmail("");
-        setShowShareDialog(false);
+      // Split by comma, newline, or semicolon to support multiple emails
+      const emails = shareEmail
+        .split(/[,;\n]+/)
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => e && e.includes("@"));
+
+      if (emails.length === 0) {
+        toast({ title: "Invalid email", description: "Please enter valid email addresses.", variant: "destructive" });
+        setSharing(false);
+        return;
       }
+
+      let successCount = 0;
+      let duplicateCount = 0;
+      for (const email of emails) {
+        const { error } = await supabase.from("vault_shares" as any).insert({
+          vault_id: vault.id,
+          shared_with_email: email,
+          shared_by: profile.id,
+          permission: "view",
+        });
+        if (error) {
+          if (error.code === "23505") {
+            duplicateCount++;
+          } else {
+            throw error;
+          }
+        } else {
+          successCount++;
+        }
+      }
+
+      const parts: string[] = [];
+      if (successCount > 0) parts.push(`Shared with ${successCount} user${successCount > 1 ? "s" : ""}`);
+      if (duplicateCount > 0) parts.push(`${duplicateCount} already shared`);
+      toast({ title: "Done", description: parts.join(". ") });
+      setShareEmail("");
+      setShowShareDialog(false);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
