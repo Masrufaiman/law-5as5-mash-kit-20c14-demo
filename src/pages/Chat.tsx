@@ -335,7 +335,8 @@ export default function Chat() {
 
   const handleSheetOpen = useCallback((data: SheetData) => {
     const container = scrollContainerRef.current;
-    const scrollTop = container?.scrollTop || 0;
+    const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+    const scrollTop = viewport?.scrollTop || 0;
     
     // If same title, merge as new version
     if (sheetDoc && sheetDoc.title === data.title && JSON.stringify(sheetDoc) !== JSON.stringify(data)) {
@@ -345,7 +346,7 @@ export default function Chat() {
     }
     setEditorDoc(null);
     requestAnimationFrame(() => {
-      if (container) container.scrollTop = scrollTop;
+      if (viewport) viewport.scrollTop = scrollTop;
     });
   }, [sheetDoc]);
 
