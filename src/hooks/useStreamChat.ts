@@ -21,6 +21,10 @@ export interface ChatMessage {
 export interface AgentStep {
   name: string;
   status: "done" | "working";
+  detail?: string;
+  duration?: string;
+  substeps?: { name: string; status: string }[];
+  startedAt?: number;
 }
 
 export interface Citation {
@@ -35,6 +39,11 @@ export interface SearchSource {
   domains: string[];
 }
 
+export interface FileRef {
+  name: string;
+  id?: string;
+}
+
 interface StreamChatOptions {
   conversationId: string;
   organizationId: string;
@@ -46,6 +55,7 @@ interface StreamChatOptions {
   sources?: string[];
   useCase?: string;
   promptMode?: string;
+  currentSheetState?: any;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`;
@@ -56,8 +66,12 @@ export function useStreamChat() {
   const [searchSources, setSearchSources] = useState<SearchSource | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [plan, setPlan] = useState<string[]>([]);
+  const [thinkingText, setThinkingText] = useState("");
+  const [fileRefs, setFileRefs] = useState<FileRef[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const lastUserMsgRef = useRef<string>("");
+  const stepTimers = useRef<Map<string, number>>(new Map());
 
   const loadHistory = useCallback((history: ChatMessage[]) => {
     setMessages(history);
@@ -68,8 +82,12 @@ export function useStreamChat() {
       setError(null);
       setSteps([]);
       setSearchSources(null);
+      setPlan([]);
+      setThinkingText("");
+      setFileRefs([]);
       setIsStreaming(true);
       lastUserMsgRef.current = content;
+      stepTimers.current.clear();
 
       const attachments: MessageAttachments = {};
       if (options.vaultName) attachments.vaultName = options.vaultName;
@@ -111,6 +129,7 @@ export function useStreamChat() {
             sources: options.sources,
             useCase: options.useCase,
             promptMode: options.promptMode,
+            currentSheetState: options.currentSheetState,
             history,
           }),
           signal: controller.signal,
@@ -159,22 +178,45 @@ export function useStreamChat() {
             try {
               const parsed = JSON.parse(jsonStr);
 
-              if (parsed.type === "steps") {
-                // Legacy batch steps format
+              if (parsed.type === "plan") {
+                setPlan(parsed.steps || []);
+              } else if (parsed.type === "steps") {
                 setSteps(parsed.steps);
               } else if (parsed.type === "step") {
-                // New progressive step format
                 setSteps((prev) => {
                   const step = parsed.step as AgentStep;
-                  // If step with same name exists, update its status
+                  const now = Date.now();
+                  
                   const existing = prev.findIndex((s) => s.name === step.name);
                   if (existing !== -1) {
-                    return prev.map((s, i) => i === existing ? step : s);
+                    // Calculate duration when step completes
+                    let duration = step.duration;
+                    if (step.status === "done" && !duration) {
+                      const startTime = stepTimers.current.get(step.name);
+                      if (startTime) {
+                        const elapsed = Math.round((now - startTime) / 1000);
+                        duration = `${elapsed}s`;
+                      }
+                    }
+                    return prev.map((s, i) => i === existing ? { ...step, duration, startedAt: s.startedAt } : s);
                   }
-                  return [...prev, step];
+                  
+                  // Track start time for new steps
+                  if (step.status === "working") {
+                    stepTimers.current.set(step.name, now);
+                  }
+                  return [...prev, { ...step, startedAt: now }];
                 });
+                
+                // Update plan checkmarks
+                if (step.status === "done") {
+                  setPlan((prevPlan) => prevPlan); // trigger re-render for plan checklist
+                }
+              } else if (parsed.type === "thinking") {
+                setThinkingText((prev) => prev + parsed.content);
+              } else if (parsed.type === "file_refs") {
+                setFileRefs((prev) => [...prev, ...(parsed.files || [])]);
               } else if (parsed.type === "sources") {
-                // Favicon sources from Perplexity
                 setSearchSources({ urls: parsed.urls, domains: parsed.domains });
               } else if (parsed.type === "reasoning") {
                 assistantReasoning += parsed.content;
@@ -280,6 +322,9 @@ export function useStreamChat() {
     setMessages([]);
     setSteps([]);
     setSearchSources(null);
+    setPlan([]);
+    setThinkingText("");
+    setFileRefs([]);
     setError(null);
   }, []);
 
@@ -289,6 +334,9 @@ export function useStreamChat() {
     searchSources,
     isStreaming,
     error,
+    plan,
+    thinkingText,
+    fileRefs,
     sendMessage,
     cancelStream,
     clearMessages,

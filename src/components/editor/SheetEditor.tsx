@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { X, Eye, EyeOff, Save, Clock, Plus, Trash2, Download, RotateCcw, Pencil, Bot, ChevronDown } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { X, Eye, EyeOff, Save, Clock, Plus, Trash2, Download, RotateCcw, Pencil, Bot, ChevronDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface SheetColumn {
   name: string;
@@ -45,7 +48,10 @@ const COLUMN_TYPE_LABELS: Record<SheetColumn["type"], string> = {
   number: "Number",
 };
 
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`;
+
 export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
+  const { profile } = useAuth();
   const [sheetData, setSheetData] = useState<SheetData>(data);
   const [versions, setVersions] = useState<SheetData[]>([data]);
   const [currentVersion, setCurrentVersion] = useState(0);
@@ -55,11 +61,25 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
   const [editValue, setEditValue] = useState("");
   const [activeColPopover, setActiveColPopover] = useState<string | null>(null);
   const [editingColDesc, setEditingColDesc] = useState<{ name: string; query: string } | null>(null);
+  const [fillingColumns, setFillingColumns] = useState<Set<string>>(new Set());
 
+  // Auto-version when data prop changes (new version from AI)
   useEffect(() => {
-    setSheetData(data);
-    setVersions([data]);
-    setCurrentVersion(0);
+    const currentTitle = sheetData.title;
+    const newTitle = data.title;
+    
+    // If same title but different content, add as new version
+    if (currentTitle === newTitle && JSON.stringify(data) !== JSON.stringify(sheetData)) {
+      const newVersions = [...versions, data];
+      setVersions(newVersions);
+      setCurrentVersion(newVersions.length - 1);
+      setSheetData(data);
+    } else if (currentTitle !== newTitle) {
+      // Different table entirely, reset
+      setSheetData(data);
+      setVersions([data]);
+      setCurrentVersion(0);
+    }
   }, [data]);
 
   const isViewingOldVersion = currentVersion < versions.length - 1;
@@ -99,6 +119,65 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
     setShowEdits(false);
   };
 
+  // AI column fill
+  const fillColumnWithAI = useCallback(async (col: SheetColumn) => {
+    if (!profile?.organization_id) return;
+    
+    setFillingColumns((prev) => new Set(prev).add(col.name));
+    
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      
+      const resp = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          conversationId: "column-fill",
+          message: `Fill column "${col.name}" with type "${col.type}". Query: ${col.query || col.name}. For these files: ${sheetData.rows.map(r => r.fileName).join(", ")}`,
+          useCase: "column_fill",
+          columnMeta: {
+            name: col.name,
+            type: col.type,
+            query: col.query || col.name,
+          },
+          fileNames: sheetData.rows.map(r => r.fileName),
+          existingSheet: sheetData,
+        }),
+      });
+      
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.values) {
+          const updated = {
+            ...sheetData,
+            rows: sheetData.rows.map((r) => ({
+              ...r,
+              values: {
+                ...r.values,
+                [col.name]: result.values[r.fileName] || r.values[col.name] || "",
+              },
+              status: "completed" as const,
+            })),
+          };
+          setSheetData(updated);
+          onUpdate?.(updated);
+        }
+      }
+    } catch (err) {
+      console.error("AI column fill failed:", err);
+    } finally {
+      setFillingColumns((prev) => {
+        const next = new Set(prev);
+        next.delete(col.name);
+        return next;
+      });
+    }
+  }, [sheetData, profile?.organization_id, onUpdate]);
+
   const handleAddColumn = (col: SheetColumn) => {
     const updated = {
       ...sheetData,
@@ -110,6 +189,11 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
     };
     setSheetData(updated);
     onUpdate?.(updated);
+    
+    // Trigger AI fill if fillMode is "ai"
+    if (col.fillMode === "ai") {
+      fillColumnWithAI(col);
+    }
   };
 
   const handleDeleteColumn = (colName: string) => {
@@ -137,6 +221,14 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
     onUpdate?.(updated);
   };
 
+  const handleRegenerateColumn = (colName: string) => {
+    const col = sheetData.columns.find(c => c.name === colName);
+    if (col) {
+      fillColumnWithAI(col);
+    }
+    setActiveColPopover(null);
+  };
+
   const handleExportCSV = () => {
     const headers = ["Document", ...sheetData.columns.map((c) => c.name), "Status"];
     const csvRows = [headers.join(",")];
@@ -157,7 +249,6 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
     URL.revokeObjectURL(url);
   };
 
-  // Diff for show edits
   const prevVersion = showEdits && currentVersion > 0 ? versions[currentVersion - 1] : null;
 
   return (
@@ -166,7 +257,6 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-foreground truncate">{sheetData.title}</h3>
-          {/* Version switcher */}
           <Popover>
             <PopoverTrigger asChild>
               <button className="flex items-center gap-0.5">
@@ -237,6 +327,14 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
         </div>
       )}
 
+      {/* AI filling indicator */}
+      {fillingColumns.size > 0 && (
+        <div className="px-4 py-2 bg-primary/5 border-b border-primary/20 text-xs text-primary flex items-center gap-2">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          AI is filling {fillingColumns.size} column{fillingColumns.size > 1 ? "s" : ""}...
+        </div>
+      )}
+
       {/* Table */}
       <ScrollArea className="flex-1">
         <div className="overflow-x-auto">
@@ -252,6 +350,9 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
                       <PopoverTrigger asChild>
                         <button className="flex items-center gap-1 hover:text-primary transition-colors">
                           <span className="truncate">{col.name}</span>
+                          {fillingColumns.has(col.name) && (
+                            <Loader2 className="h-2.5 w-2.5 animate-spin text-primary" />
+                          )}
                         </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-56 p-2" align="start">
@@ -272,7 +373,7 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
                           </button>
                           <button
                             className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors"
-                            onClick={() => setActiveColPopover(null)}
+                            onClick={() => handleRegenerateColumn(col.name)}
                           >
                             <RotateCcw className="h-3 w-3" /> Regenerate with AI
                           </button>
@@ -305,6 +406,7 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
                       ? prevVersion.rows[rowIdx]?.values[col.name] || ""
                       : null;
                     const changed = showEdits && prevVal !== null && prevVal !== val;
+                    const isFilling = fillingColumns.has(col.name);
 
                     return (
                       <td
@@ -313,9 +415,11 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
                           "px-3 py-2 text-foreground/90 cursor-pointer",
                           changed && "bg-chart-2/10"
                         )}
-                        onClick={() => !isEditing && handleCellClick(rowIdx, col.name, val)}
+                        onClick={() => !isEditing && !isFilling && handleCellClick(rowIdx, col.name, val)}
                       >
-                        {isEditing ? (
+                        {isFilling && !val ? (
+                          <Skeleton className="h-4 w-full" />
+                        ) : isEditing ? (
                           <Input
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
@@ -427,13 +531,13 @@ function ColumnBuilderDialog({
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Type</label>
             <Select value={type} onValueChange={(v) => setType(v as SheetColumn["type"])}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                <SelectItem value="free_response">Free response</SelectItem>
-                <SelectItem value="date">Date</SelectItem>
-                <SelectItem value="classification">Classification</SelectItem>
-                <SelectItem value="verbatim">Verbatim</SelectItem>
-                <SelectItem value="number">Number</SelectItem>
+                {Object.entries(COLUMN_TYPE_LABELS).map(([val, label]) => (
+                  <SelectItem key={val} value={val} className="text-sm">{label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -442,19 +546,25 @@ function ColumnBuilderDialog({
             <Textarea
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="What should the AI extract for this column?"
+              placeholder="What should the AI look for? e.g. 'Extract the effective date of the agreement'"
               className="text-sm min-h-[60px]"
               rows={2}
             />
           </div>
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-muted-foreground">AI fills this column</label>
-            <Switch checked={fillMode === "ai"} onCheckedChange={(v) => setFillMode(v ? "ai" : "manual")} className="scale-90" />
+            <label className="text-xs font-medium text-muted-foreground">AI Auto-fill</label>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground">{fillMode === "ai" ? "AI fills" : "Manual"}</span>
+              <Switch checked={fillMode === "ai"} onCheckedChange={(v) => setFillMode(v ? "ai" : "manual")} />
+            </div>
           </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={handleAdd} disabled={!name.trim()}>Add Column</Button>
+          <Button size="sm" onClick={handleAdd} disabled={!name.trim() || existingColumns.includes(name.trim())}>
+            <Plus className="h-3 w-3 mr-1" />
+            Add Column
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
