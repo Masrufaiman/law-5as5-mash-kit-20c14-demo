@@ -42,10 +42,13 @@ interface KBSource {
   category: string | null;
 }
 
-interface PromptTemplate {
-  id: string;
-  label: string;
-  prompt: string;
+interface WorkflowConfig {
+  title: string;
+  description: string;
+  type: string;
+  steps: number;
+  icon: string;
+  systemPrompt?: string;
 }
 
 // Jurisdiction sources
@@ -54,7 +57,6 @@ const JURISDICTION_SOURCES = [
   { name: "EDGAR (SEC)", icon: Scale },
   { name: "CourtListener", icon: Scale },
   { name: "EUR-Lex", icon: Scale },
-  { name: "WorldLII", icon: Scale },
   { name: "US Law", icon: Scale },
   { name: "UK Law", icon: Scale },
   { name: "Indian Law", icon: Scale },
@@ -66,50 +68,11 @@ const JURISDICTION_SOURCES = [
   { name: "Singapore Law", icon: Scale },
   { name: "UAE Law", icon: Scale },
   { name: "Italian Law", icon: Scale },
-  { name: "Mexican Law", icon: Scale },
-  { name: "Swedish Law", icon: Scale },
-  { name: "Arabic Law", icon: Scale },
-  { name: "Belgian Law", icon: Scale },
-  { name: "Danish Law", icon: Scale },
-  { name: "Chilean Law", icon: Scale },
-  { name: "Finnish Law", icon: Scale },
-  { name: "Dutch Law", icon: Scale },
-  { name: "Portuguese Law", icon: Scale },
-  { name: "Polish Law", icon: Scale },
-  { name: "Swiss Law", icon: Scale },
-  { name: "Hungarian Law", icon: Scale },
-  { name: "Austrian Law", icon: Scale },
-  { name: "Czech Law", icon: Scale },
-  { name: "Dominican Republic Law", icon: Scale },
-  { name: "Ecuadorian Law", icon: Scale },
-  { name: "Luxembourgish Law", icon: Scale },
-  { name: "Paraguayan Law", icon: Scale },
-  { name: "Peruvian Law", icon: Scale },
-  { name: "Spanish Law", icon: Scale },
   { name: "Japanese Law", icon: Scale },
   { name: "South Korean Law", icon: Scale },
   { name: "Chinese Law", icon: Scale },
-  { name: "Russian Law", icon: Scale },
-  { name: "Turkish Law", icon: Scale },
-  { name: "South African Law", icon: Scale },
-  { name: "Nigerian Law", icon: Scale },
-  { name: "Kenyan Law", icon: Scale },
-  { name: "Israeli Law", icon: Scale },
-  { name: "Thai Law", icon: Scale },
-  { name: "Malaysian Law", icon: Scale },
-  { name: "Indonesian Law", icon: Scale },
-  { name: "Philippine Law", icon: Scale },
-  { name: "Colombian Law", icon: Scale },
-  { name: "Argentine Law", icon: Scale },
-  { name: "Greek Law", icon: Scale },
-  { name: "Romanian Law", icon: Scale },
-  { name: "Croatian Law", icon: Scale },
-  { name: "Norwegian Law", icon: Scale },
-  { name: "Irish Law", icon: Scale },
-  { name: "New Zealand Law", icon: Scale },
-  { name: "Hong Kong Law", icon: Scale },
-  { name: "Casablanca Agreement", icon: Scale },
-  { name: "Whitford Lane", icon: Scale },
+  { name: "Spanish Law", icon: Scale },
+  { name: "Swiss Law", icon: Scale },
 ];
 
 // Icon mapping for workflow configs
@@ -130,6 +93,7 @@ interface WorkflowCard {
   type: string;
   steps: number;
   icon: React.ElementType;
+  systemPrompt?: string;
 }
 
 const DEFAULT_WORKFLOWS: WorkflowCard[] = [
@@ -178,16 +142,20 @@ export default function Home() {
   const [activeSources, setActiveSources] = useState<string[]>([]);
   const [kbSources, setKbSources] = useState<KBSource[]>([]);
   const [improving, setImproving] = useState(false);
-  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [searchFilter, setSearchFilter] = useState("");
   const [promptMode, setPromptMode] = useState<string | undefined>();
   const [workflows, setWorkflows] = useState<WorkflowCard[]>(DEFAULT_WORKFLOWS);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<{ title: string; systemPrompt?: string } | null>(null);
 
   // Handle fillPrompt from Workflows page
   useEffect(() => {
     const state = location.state as any;
     if (state?.fillPrompt) {
       setMessage(state.fillPrompt);
+      navigate("/", { replace: true, state: {} });
+    }
+    if (state?.workflowTag) {
+      setSelectedWorkflow(state.workflowTag);
       navigate("/", { replace: true, state: {} });
     }
   }, [location.state]);
@@ -209,7 +177,7 @@ export default function Home() {
       .order("title")
       .then(({ data }) => setKbSources(data || []));
 
-    // Load agent config (prompts + workflows)
+    // Load agent config (workflows)
     supabase
       .from("api_integrations")
       .select("config")
@@ -219,13 +187,6 @@ export default function Home() {
       .then(({ data }) => {
         if (data) {
           const c = (data.config as any) || {};
-          const templates: PromptTemplate[] = [];
-          if (c.prompts?.chat) templates.push({ id: "chat", label: "Chat / Research", prompt: c.prompts.chat });
-          if (c.prompts?.red_flags) templates.push({ id: "red_flags", label: "Red Flag Detection", prompt: c.prompts.red_flags });
-          if (c.prompts?.drafting) templates.push({ id: "drafting", label: "Document Drafting", prompt: c.prompts.drafting });
-          setPromptTemplates(templates);
-
-          // Load workflows from config
           if (c.workflows && c.workflows.length > 0) {
             setWorkflows(c.workflows.map((wf: any) => ({
               title: wf.title,
@@ -233,6 +194,7 @@ export default function Home() {
               type: wf.type || "Workflow",
               steps: wf.steps || 3,
               icon: ICON_MAP[wf.icon] || FileText,
+              systemPrompt: wf.systemPrompt,
             })));
           }
         }
@@ -249,6 +211,7 @@ export default function Home() {
         attachedFiles,
         activeSources,
         promptMode,
+        workflowTag: selectedWorkflow,
       },
     });
   };
@@ -279,6 +242,11 @@ export default function Home() {
     setActiveSources((prev) =>
       prev.includes(source) ? prev.filter((s) => s !== source) : [...prev, source]
     );
+  };
+
+  // Workflow click adds as tag, not as text
+  const handleWorkflowClick = (wf: WorkflowCard) => {
+    setSelectedWorkflow({ title: wf.title, systemPrompt: wf.systemPrompt });
   };
 
   const handleImprove = async () => {
@@ -349,7 +317,7 @@ export default function Home() {
     ? JURISDICTION_SOURCES.filter(j => j.name.toLowerCase().includes(searchFilter.toLowerCase()))
     : JURISDICTION_SOURCES;
 
-  const hasChips = selectedVault || deepResearch || activeSources.length > 0 || attachedFiles.length > 0 || promptMode;
+  const hasChips = selectedVault || deepResearch || activeSources.length > 0 || attachedFiles.length > 0 || promptMode || selectedWorkflow;
 
   return (
     <AppLayout>
@@ -369,6 +337,15 @@ export default function Home() {
           <div className="border border-border rounded-lg overflow-hidden">
             {hasChips && (
               <div className="flex flex-wrap gap-1.5 px-3 pt-3 bg-muted/30">
+                {selectedWorkflow && (
+                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
+                    <Zap className="h-2.5 w-2.5" />
+                    {selectedWorkflow.title}
+                    <button onClick={() => setSelectedWorkflow(null)} className="ml-0.5">
+                      <X className="h-2 w-2" />
+                    </button>
+                  </Badge>
+                )}
                 {selectedVault && (
                   <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
                     <FolderOpen className="h-2.5 w-2.5" />
@@ -604,7 +581,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Recommended workflows */}
+          {/* Recommended workflows - click adds as tag */}
           <div className="space-y-3 pb-8">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider text-center">
               Recommended workflows
@@ -613,8 +590,11 @@ export default function Home() {
               {workflows.map((wf) => (
                 <button
                   key={wf.title}
-                  className="flex items-start gap-3 rounded-lg border border-border p-3.5 text-left hover:bg-muted/50 transition-colors group"
-                  onClick={() => setMessage(wf.description)}
+                  className={cn(
+                    "flex items-start gap-3 rounded-lg border p-3.5 text-left hover:bg-muted/50 transition-colors group",
+                    selectedWorkflow?.title === wf.title ? "border-primary bg-primary/5" : "border-border"
+                  )}
+                  onClick={() => handleWorkflowClick(wf)}
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-secondary text-primary shrink-0">
                     <wf.icon className="h-4 w-4" />
@@ -623,7 +603,6 @@ export default function Home() {
                     <div className="flex items-center gap-2 mb-0.5">
                       <p className="text-sm font-medium text-foreground">{wf.title}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground line-clamp-1">{wf.description}</p>
                     <div className="flex items-center gap-2 mt-1.5">
                       <Badge variant="outline" className="text-[9px] py-0 px-1.5">{wf.type}</Badge>
                       <span className="text-[10px] text-muted-foreground">{wf.steps} steps</span>
