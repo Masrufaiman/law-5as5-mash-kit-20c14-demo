@@ -604,15 +604,7 @@ export default function Home() {
                 <button
                   key={wf.title}
                   className="flex items-start gap-3 rounded-lg border border-border p-3.5 text-left hover:bg-muted/50 transition-colors group"
-                  onClick={() => {
-                    navigate("/chat", {
-                      state: {
-                        initialMessage: wf.description,
-                        deepResearch,
-                        activeSources,
-                      },
-                    });
-                  }}
+                  onClick={() => setMessage(wf.description)}
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-secondary text-primary shrink-0">
                     <wf.icon className="h-4 w-4" />
