@@ -162,6 +162,22 @@ export function NavigationSidebar() {
     setDeleteTarget(null);
   };
 
+  const handleRenameChat = async () => {
+    if (!renameTarget || !renameValue.trim()) { setRenameTarget(null); return; }
+    const { error } = await supabase
+      .from("conversations")
+      .update({ title: renameValue.trim() })
+      .eq("id", renameTarget.id);
+    if (error) {
+      toast({ title: "Error", description: "Failed to rename", variant: "destructive" });
+    } else {
+      setRecentChats((prev) => prev.map((c) => c.id === renameTarget.id ? { ...c, title: renameValue.trim() } : c));
+      toast({ title: "Renamed" });
+    }
+    setRenameTarget(null);
+    setRenameValue("");
+  };
+
   const orgName = profile?.full_name?.split(" ")[0] || "LawKit";
 
   const bottomNav = [
