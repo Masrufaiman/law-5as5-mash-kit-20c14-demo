@@ -262,12 +262,13 @@ serve(async (req) => {
                   emitStep(controller, encoder, { name: "No matching sections found", status: "done" });
                 }
               } else {
-                console.error("Qdrant search failed:", await searchResp.text());
-                emitStep(controller, encoder, { name: "Document search unavailable", status: "done" });
+                const errText = await searchResp.text();
+                console.error("Qdrant search failed:", searchResp.status, errText);
+                emitStep(controller, encoder, { name: "Reading documents directly", status: "done" });
               }
             } catch (ragErr: any) {
               console.error("RAG error:", ragErr.message);
-              emitStep(controller, encoder, { name: "Document search error", status: "done" });
+              emitStep(controller, encoder, { name: "Reading documents directly", status: "done" });
             }
           }
 
