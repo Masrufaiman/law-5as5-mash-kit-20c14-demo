@@ -304,6 +304,7 @@ export default function Chat() {
         useCase: promptMode,
         currentSheetState: sheetDoc,
         workflowSystemPrompt: workflowTag?.systemPrompt,
+        currentDocumentContent: editorDoc?.content,
       };
       lastStreamOptions.current = opts;
       sendMessage(msg, opts);
