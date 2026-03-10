@@ -414,7 +414,7 @@ export default function Chat() {
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-xs text-muted-foreground">Assistant /</span>
               {isEditingTitle ? (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-1 min-w-0">
                   <Input
                     value={editTitleValue}
                     onChange={(e) => setEditTitleValue(e.target.value)}
@@ -423,21 +423,22 @@ export default function Chat() {
                       if (e.key === "Escape") setIsEditingTitle(false);
                     }}
                     onBlur={saveTitle}
-                    className="h-6 text-sm font-semibold w-64 px-1 py-0"
+                    className="h-6 text-sm font-semibold flex-1 px-1.5 py-0"
                     autoFocus
+                    onFocus={(e) => e.target.select()}
                   />
                 </div>
               ) : (
                 <button
                   onClick={startEditTitle}
-                  className="flex items-center gap-1 group min-w-0"
-                  title="Click to rename"
+                  className="flex items-center gap-1.5 group min-w-0"
+                  title={conversationTitle}
                 >
-                  <h2 className="text-sm font-semibold text-foreground truncate">
+                  <h2 className="text-sm font-semibold text-foreground truncate max-w-[300px]">
                     {conversationTitle}
                   </h2>
                   {conversationId && (
-                    <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    <Pencil className="h-3 w-3 text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity shrink-0" />
                   )}
                 </button>
               )}
