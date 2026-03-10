@@ -77,6 +77,8 @@ export function NavigationSidebar() {
   const [searchResults, setSearchResults] = useState<RecentChat[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<RecentChat | null>(null);
+  const [renameTarget, setRenameTarget] = useState<RecentChat | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   useEffect(() => {
     if (!profile?.organization_id) return;
