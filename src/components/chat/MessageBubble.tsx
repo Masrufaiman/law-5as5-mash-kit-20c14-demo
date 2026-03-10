@@ -551,7 +551,7 @@ export function MessageBubble({
           </div>
         )}
 
-        {isStreaming && !isUser && (
+        {isStreaming && !isUser && cleanContent.length > 0 && (
           <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom rounded-full" />
         )}
 

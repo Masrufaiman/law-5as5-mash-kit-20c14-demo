@@ -182,6 +182,7 @@ export function NavigationSidebar() {
 
   const bottomNav = [
     { icon: FileText, label: "Documents", path: "/documents" },
+    { icon: Table2, label: "Workflows", path: "/workflows" },
     { icon: Clock, label: "History", path: "/history" },
     { icon: BookOpen, label: "Library", path: "/library" },
     { icon: Compass, label: "Guidance", path: "/guidance" },
