@@ -276,7 +276,7 @@ export function MessageBubble({
   // Steps section (with reasoning)
   const stepsSection = !isUser && (steps?.length || message.reasoning) ? (
     <div className="mb-2">
-      <StepTracker steps={steps || []} isStreaming={isStreamingSteps} reasoning={message.reasoning} />
+      <StepTracker steps={steps || []} isStreaming={isStreamingSteps} reasoning={message.reasoning} searchSources={searchSources} />
     </div>
   ) : null;
 
