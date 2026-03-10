@@ -34,6 +34,7 @@ interface MessageBubbleProps {
   plan?: string[];
   thinkingText?: string;
   fileRefs?: FileRef[];
+  conversationId?: string;
 }
 
 /** User message action bar (edit, copy) */
