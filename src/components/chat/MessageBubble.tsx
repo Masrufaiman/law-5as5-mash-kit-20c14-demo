@@ -550,6 +550,7 @@ export function MessageBubble({
           <ResponseActions
             content={cleanContent}
             messageId={message.id}
+            conversationId={conversationId}
             onRegenerate={onRegenerate}
           />
         )}
