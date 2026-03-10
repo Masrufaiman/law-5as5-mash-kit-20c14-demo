@@ -330,6 +330,7 @@ export default function Chat() {
     setConversationTitle("New Conversation");
     setPromptMode(undefined);
     setEditorDoc(null);
+    setSheetDoc(null);
     initialMessageSentRef.current = false;
     clearMessages();
     navigate("/chat", { replace: true });
