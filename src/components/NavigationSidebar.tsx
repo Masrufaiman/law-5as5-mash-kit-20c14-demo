@@ -307,6 +307,13 @@ export function NavigationSidebar() {
                         </button>
                         <div className="hidden group-hover/chat:flex items-center gap-0.5 shrink-0">
                           <button
+                            onClick={(e) => { e.stopPropagation(); setRenameTarget(chat); setRenameValue(chat.title); }}
+                            className="p-0.5 rounded hover:bg-sidebar-accent text-sidebar-foreground/40 hover:text-sidebar-foreground transition-colors"
+                            title="Rename"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
                             onClick={(e) => handleShareChat(chat.id, e)}
                             className="p-0.5 rounded hover:bg-sidebar-accent text-sidebar-foreground/40 hover:text-sidebar-foreground transition-colors"
                             title="Share"
