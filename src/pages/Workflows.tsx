@@ -7,7 +7,10 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -45,15 +48,6 @@ interface WorkflowItem {
   created_by?: string;
 }
 
-const DEFAULT_WORKFLOWS: WorkflowItem[] = [
-  { title: "Draft a client alert", description: "Generate a structured legal alert based on recent developments", type: "Draft", steps: 4, icon: "FileText", category: "Litigation" },
-  { title: "Generate post-closing timeline", description: "Create a timeline of obligations from closing documents", type: "Review", steps: 3, icon: "Clock", category: "Transactional" },
-  { title: "Extract chronology from filings", description: "Build a fact chronology from multiple court filings", type: "Review", steps: 5, icon: "ListChecks", category: "Litigation" },
-  { title: "Review contract key terms", description: "Extract and compare key terms across agreements", type: "Review", steps: 3, icon: "Scale", category: "Transactional" },
-  { title: "Analyze financial disclosures", description: "Extract key financial data points from SEC filings", type: "Output", steps: 4, icon: "Zap", category: "Financial Services" },
-  { title: "Risk assessment memo", description: "Identify and summarize key risks in transaction documents", type: "Draft", steps: 3, icon: "AlertTriangle", category: "Transactional" },
-];
-
 const OUTPUT_TYPES = ["All", "Draft", "Review", "Output"];
 const CATEGORIES = ["All", "Litigation", "Transactional", "Financial Services"];
 
@@ -62,7 +56,8 @@ export default function Workflows() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [workflows, setWorkflows] = useState<WorkflowItem[]>(DEFAULT_WORKFLOWS);
+  const [workflows, setWorkflows] = useState<WorkflowItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [outputFilter, setOutputFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
@@ -71,11 +66,12 @@ export default function Workflows() {
   const [createDesc, setCreateDesc] = useState("");
   const [isBuilding, setIsBuilding] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<WorkflowItem | null>(null);
-  const [editPrompt, setEditPrompt] = useState("");
+  const [editForm, setEditForm] = useState<WorkflowItem>({ title: "", description: "", type: "Draft", steps: 3, icon: "FileText", category: "", systemPrompt: "" });
 
   // Load workflows from agent_config
   useEffect(() => {
     if (!profile?.organization_id) return;
+    setIsLoading(true);
     supabase
       .from("api_integrations")
       .select("config")
@@ -89,11 +85,11 @@ export default function Workflows() {
             setWorkflows(c.workflows);
           }
         }
+        setIsLoading(false);
       });
   }, [profile?.organization_id]);
 
   const handleWorkflowClick = (wf: WorkflowItem) => {
-    // Navigate to Home with workflow as tag (not description text)
     navigate("/", { state: { workflowTag: { title: wf.title, systemPrompt: wf.systemPrompt } } });
   };
 
@@ -173,7 +169,7 @@ export default function Workflows() {
       const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("Invalid response");
       const wf: WorkflowItem = JSON.parse(jsonMatch[0]);
-      wf.created_by = profile.id; // Tag with user id
+      wf.created_by = profile.id;
 
       const newWorkflows = [...workflows, wf];
       setWorkflows(newWorkflows);
@@ -196,15 +192,20 @@ export default function Workflows() {
     toast({ title: "Deleted", description: `"${wf.title}" removed` });
   };
 
-  const handleSavePrompt = async () => {
+  const openEdit = (wf: WorkflowItem) => {
+    setEditingWorkflow(wf);
+    setEditForm({ ...wf });
+  };
+
+  const handleSaveEdit = async () => {
     if (!editingWorkflow) return;
     const newWorkflows = workflows.map(w =>
-      w.title === editingWorkflow.title ? { ...w, systemPrompt: editPrompt } : w
+      w.title === editingWorkflow.title ? { ...editForm, created_by: w.created_by } : w
     );
     setWorkflows(newWorkflows);
     await saveWorkflows(newWorkflows);
     setEditingWorkflow(null);
-    toast({ title: "Saved", description: "System prompt updated" });
+    toast({ title: "Saved", description: "Workflow updated" });
   };
 
   const filtered = workflows.filter((wf) => {
@@ -241,125 +242,108 @@ export default function Workflows() {
               className="h-8 text-xs pl-8"
             />
           </div>
-          {/* Owner filter */}
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setOwnerFilter("all")}
-              className={cn(
-                "px-2.5 py-1 rounded-md text-xs transition-colors",
-                ownerFilter === "all" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-              )}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setOwnerFilter("mine")}
-              className={cn(
-                "px-2.5 py-1 rounded-md text-xs transition-colors",
-                ownerFilter === "mine" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-              )}
-            >
-              My Workflows
-            </button>
+            <button onClick={() => setOwnerFilter("all")} className={cn("px-2.5 py-1 rounded-md text-xs transition-colors", ownerFilter === "all" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>All</button>
+            <button onClick={() => setOwnerFilter("mine")} className={cn("px-2.5 py-1 rounded-md text-xs transition-colors", ownerFilter === "mine" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>My Workflows</button>
           </div>
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-1.5">
             {OUTPUT_TYPES.map((t) => (
-              <button
-                key={t}
-                onClick={() => setOutputFilter(t)}
-                className={cn(
-                  "px-2.5 py-1 rounded-md text-xs transition-colors",
-                  outputFilter === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-                )}
-              >
-                {t}
-              </button>
+              <button key={t} onClick={() => setOutputFilter(t)} className={cn("px-2.5 py-1 rounded-md text-xs transition-colors", outputFilter === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>{t}</button>
             ))}
           </div>
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-1.5">
             {CATEGORIES.map((c) => (
-              <button
-                key={c}
-                onClick={() => setCategoryFilter(c)}
-                className={cn(
-                  "px-2.5 py-1 rounded-md text-xs transition-colors",
-                  categoryFilter === c ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted"
-                )}
-              >
-                {c}
-              </button>
+              <button key={c} onClick={() => setCategoryFilter(c)} className={cn("px-2.5 py-1 rounded-md text-xs transition-colors", categoryFilter === c ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted")}>{c}</button>
             ))}
           </div>
         </div>
 
         {/* Grid */}
         <div className="flex-1 overflow-auto p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((wf, i) => {
-              const Icon = ICON_MAP[wf.icon] || FileText;
-              const isOwn = wf.created_by === profile?.id;
-              return (
-                <div
-                  key={`${wf.title}-${i}`}
-                  className="flex flex-col items-start gap-3 rounded-lg border border-border p-4 text-left hover:bg-muted/50 hover:border-primary/30 transition-all group relative"
-                >
-                  <button
-                    className="flex items-center gap-3 w-full"
-                    onClick={() => handleWorkflowClick(wf)}
-                  >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary text-primary shrink-0">
-                      <Icon className="h-4 w-4" />
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-lg border border-border p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-9 w-9 rounded-lg" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-1/3" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{wf.title}</p>
-                      {wf.category && (
-                        <p className="text-[10px] text-muted-foreground">{wf.category}</p>
-                      )}
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                  </button>
-                  <p className="text-xs text-muted-foreground line-clamp-2">{wf.description}</p>
-                  <div className="flex items-center gap-2 w-full">
-                    <Badge variant="outline" className="text-[9px] py-0 px-1.5">{wf.type}</Badge>
-                    <span className="text-[10px] text-muted-foreground">{wf.steps} steps</span>
-                    {wf.created_by && (
-                      <Badge variant="secondary" className="text-[9px] py-0 px-1.5 gap-0.5">
-                        <User className="h-2 w-2" />
-                        {isOwn ? "You" : "User"}
-                      </Badge>
-                    )}
-                    <div className="flex-1" />
-                    {/* Edit/Delete for own workflows */}
-                    {isOwn && (
-                      <div className="hidden group-hover:flex items-center gap-1">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setEditingWorkflow(wf); setEditPrompt(wf.systemPrompt || ""); }}
-                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                          title="Edit system prompt"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteWorkflow(wf); }}
-                          className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    )}
+                  </div>
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-2/3" />
+                  <div className="flex gap-2">
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
                   </div>
                 </div>
-              );
-            })}
-          </div>
-          {filtered.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <Search className="h-8 w-8 text-muted-foreground mb-3" />
-              <p className="text-sm text-muted-foreground">No workflows match your filters</p>
+              ))}
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filtered.map((wf, i) => {
+                  const Icon = ICON_MAP[wf.icon] || FileText;
+                  const isOwn = wf.created_by === profile?.id;
+                  return (
+                    <div
+                      key={`${wf.title}-${i}`}
+                      className="flex flex-col items-start gap-3 rounded-lg border border-border p-4 text-left hover:bg-muted/50 hover:border-primary/30 transition-all group relative"
+                    >
+                      <button className="flex items-center gap-3 w-full" onClick={() => handleWorkflowClick(wf)}>
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary text-primary shrink-0">
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{wf.title}</p>
+                          {wf.category && <p className="text-[10px] text-muted-foreground">{wf.category}</p>}
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </button>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{wf.description}</p>
+                      <div className="flex items-center gap-2 w-full">
+                        <Badge variant="outline" className="text-[9px] py-0 px-1.5">{wf.type}</Badge>
+                        <span className="text-[10px] text-muted-foreground">{wf.steps} steps</span>
+                        {wf.created_by && (
+                          <Badge variant="secondary" className="text-[9px] py-0 px-1.5 gap-0.5">
+                            <User className="h-2 w-2" />
+                            {isOwn ? "You" : "User"}
+                          </Badge>
+                        )}
+                        <div className="flex-1" />
+                        {isOwn && (
+                          <div className="hidden group-hover:flex items-center gap-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openEdit(wf); }}
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                              title="Edit workflow"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDeleteWorkflow(wf); }}
+                              className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {filtered.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <Search className="h-8 w-8 text-muted-foreground mb-3" />
+                  <p className="text-sm text-muted-foreground">No workflows match your filters</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -389,47 +373,86 @@ export default function Workflows() {
             <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button size="sm" onClick={handleCreateWorkflow} disabled={!createDesc.trim() || isBuilding}>
               {isBuilding ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                  Building...
-                </>
+                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Building...</>
               ) : (
-                <>
-                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                  Build Workflow
-                </>
+                <><Sparkles className="h-3.5 w-3.5 mr-1.5" />Build Workflow</>
               )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit system prompt dialog */}
+      {/* Edit workflow dialog — all fields */}
       <Dialog open={!!editingWorkflow} onOpenChange={(open) => !open && setEditingWorkflow(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="h-4 w-4 text-primary" />
-              Edit System Prompt — {editingWorkflow?.title}
+              Edit Workflow
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              This system prompt is used when this workflow is selected as context for a chat.
-            </p>
-            <Textarea
-              value={editPrompt}
-              onChange={(e) => setEditPrompt(e.target.value)}
-              placeholder="Enter the system prompt for this workflow..."
-              className="min-h-[200px] text-sm font-mono"
-              rows={8}
-            />
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Title</Label>
+                <Input value={editForm.title} onChange={(e) => setEditForm(f => ({ ...f, title: e.target.value }))} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Icon</Label>
+                <Select value={editForm.icon} onValueChange={(v) => setEditForm(f => ({ ...f, icon: v }))}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ICON_OPTIONS.map(icon => <SelectItem key={icon} value={icon}>{icon}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Description</Label>
+              <Input value={editForm.description} onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))} className="h-8 text-sm" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Type</Label>
+                <Select value={editForm.type} onValueChange={(v) => setEditForm(f => ({ ...f, type: v }))}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Draft">Draft</SelectItem>
+                    <SelectItem value="Review">Review</SelectItem>
+                    <SelectItem value="Output">Output</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Steps</Label>
+                <Input type="number" min={1} max={10} value={editForm.steps} onChange={(e) => setEditForm(f => ({ ...f, steps: parseInt(e.target.value) || 1 }))} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Category</Label>
+                <Select value={editForm.category || ""} onValueChange={(v) => setEditForm(f => ({ ...f, category: v }))}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Litigation">Litigation</SelectItem>
+                    <SelectItem value="Transactional">Transactional</SelectItem>
+                    <SelectItem value="Financial Services">Financial Services</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">System Prompt</Label>
+              <Textarea
+                value={editForm.systemPrompt || ""}
+                onChange={(e) => setEditForm(f => ({ ...f, systemPrompt: e.target.value }))}
+                placeholder="Enter the system prompt for this workflow..."
+                className="min-h-[150px] text-sm font-mono"
+                rows={6}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" size="sm" onClick={() => setEditingWorkflow(null)}>Cancel</Button>
-            <Button size="sm" onClick={handleSavePrompt}>
-              Save Prompt
-            </Button>
+            <Button size="sm" onClick={handleSaveEdit}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

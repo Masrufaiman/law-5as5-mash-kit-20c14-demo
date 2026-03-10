@@ -258,7 +258,7 @@ export function NavigationSidebar() {
         </div>
 
         {/* Main nav */}
-        <nav className={cn("flex-1 overflow-y-auto space-y-0.5", collapsed ? "px-1" : "px-2")}>
+        <nav className={cn("flex-1 min-h-0 space-y-0.5", collapsed ? "px-1 overflow-y-auto" : "px-2")}>
           {/* Assistant */}
           <div>
             <button
