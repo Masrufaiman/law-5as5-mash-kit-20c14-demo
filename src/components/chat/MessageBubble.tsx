@@ -261,6 +261,9 @@ export function MessageBubble({
   // Detect document patterns
   const docInfo = !isUser && !isStreaming ? detectDocument(cleanContent) : null;
 
+  // Detect sheet patterns
+  const sheetInfo = !isUser && !isStreaming ? detectSheet(cleanContent) : null;
+
   // Build custom components that inject inline citation popovers
   const citeComponents = React.useMemo(() => {
     if (!citations.length) return {};
