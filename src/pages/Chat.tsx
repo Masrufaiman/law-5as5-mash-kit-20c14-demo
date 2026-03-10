@@ -661,6 +661,15 @@ export default function Chat() {
                 onDeepResearchChange={setDeepResearch}
                 promptMode={promptMode}
                 onPromptModeChange={setPromptMode}
+                vaults={chatVaults}
+                selectedVault={selectedVault}
+                onVaultSelect={(v) => {
+                  setSelectedVault(v);
+                  if (v) { setVaultId(v.id); setVaultName(v.name); }
+                  else { setVaultId(undefined); setVaultName(undefined); }
+                }}
+                activeSources={activeSources}
+                onSourceToggle={(s) => setActiveSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
               />
             </div>
           </div>
