@@ -416,7 +416,20 @@ export default function Chat() {
   const lastMsg = messages[messages.length - 1];
   const showStreamingIndicator = isStreaming && lastMsg?.role === "user";
 
-  const rightPanel = editorDoc ? (
+  const rightPanel = sheetDoc ? (
+    <SheetEditor
+      data={sheetDoc}
+      onClose={() => {
+        const container = scrollContainerRef.current;
+        const scrollTop = container?.scrollTop || 0;
+        setSheetDoc(null);
+        requestAnimationFrame(() => {
+          if (container) container.scrollTop = scrollTop;
+        });
+      }}
+      onUpdate={(updated) => setSheetDoc(updated)}
+    />
+  ) : editorDoc ? (
     <DocumentEditor
       title={editorDoc.title}
       content={editorDoc.content}
