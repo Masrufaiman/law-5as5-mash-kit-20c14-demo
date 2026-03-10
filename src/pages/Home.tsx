@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
@@ -168,6 +168,7 @@ export default function Home() {
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
+  const location = useLocation();
 
   const [message, setMessage] = useState("");
   const [deepResearch, setDeepResearch] = useState(false);
@@ -181,6 +182,15 @@ export default function Home() {
   const [searchFilter, setSearchFilter] = useState("");
   const [promptMode, setPromptMode] = useState<string | undefined>();
   const [workflows, setWorkflows] = useState<WorkflowCard[]>(DEFAULT_WORKFLOWS);
+
+  // Handle fillPrompt from Workflows page
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.fillPrompt) {
+      setMessage(state.fillPrompt);
+      navigate("/", { replace: true, state: {} });
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (!profile?.organization_id) return;

@@ -1,0 +1,328 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { AppLayout } from "@/components/AppLayout";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Plus,
+  Search,
+  FileText,
+  Clock,
+  ListChecks,
+  Scale,
+  BookOpen,
+  Zap,
+  AlertTriangle,
+  ChevronRight,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
+
+const ICON_MAP: Record<string, React.ElementType> = {
+  FileText, Clock, ListChecks, Scale, Search, BookOpen, Zap, AlertTriangle,
+};
+
+const ICON_OPTIONS = ["FileText", "Clock", "ListChecks", "Scale", "Search", "BookOpen", "Zap", "AlertTriangle"];
+
+interface WorkflowItem {
+  title: string;
+  description: string;
+  type: string;
+  steps: number;
+  icon: string;
+  category?: string;
+  systemPrompt?: string;
+}
+
+const DEFAULT_WORKFLOWS: WorkflowItem[] = [
+  { title: "Draft a client alert", description: "Generate a structured legal alert based on recent developments", type: "Draft", steps: 4, icon: "FileText", category: "Litigation" },
+  { title: "Generate post-closing timeline", description: "Create a timeline of obligations from closing documents", type: "Review", steps: 3, icon: "Clock", category: "Transactional" },
+  { title: "Extract chronology from filings", description: "Build a fact chronology from multiple court filings", type: "Review", steps: 5, icon: "ListChecks", category: "Litigation" },
+  { title: "Review contract key terms", description: "Extract and compare key terms across agreements", type: "Review", steps: 3, icon: "Scale", category: "Transactional" },
+  { title: "Analyze financial disclosures", description: "Extract key financial data points from SEC filings", type: "Output", steps: 4, icon: "Zap", category: "Financial Services" },
+  { title: "Risk assessment memo", description: "Identify and summarize key risks in transaction documents", type: "Draft", steps: 3, icon: "AlertTriangle", category: "Transactional" },
+];
+
+const OUTPUT_TYPES = ["All", "Draft", "Review", "Output"];
+const CATEGORIES = ["All", "Litigation", "Transactional", "Financial Services"];
+
+export default function Workflows() {
+  const { profile } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const [workflows, setWorkflows] = useState<WorkflowItem[]>(DEFAULT_WORKFLOWS);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [outputFilter, setOutputFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [showCreate, setShowCreate] = useState(false);
+  const [createDesc, setCreateDesc] = useState("");
+  const [isBuilding, setIsBuilding] = useState(false);
+
+  // Load workflows from agent_config
+  useEffect(() => {
+    if (!profile?.organization_id) return;
+    supabase
+      .from("api_integrations")
+      .select("config")
+      .eq("organization_id", profile.organization_id)
+      .eq("provider", "agent_config")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const c = (data.config as any) || {};
+          if (c.workflows?.length) {
+            setWorkflows(c.workflows);
+          }
+        }
+      });
+  }, [profile?.organization_id]);
+
+  const handleWorkflowClick = (wf: WorkflowItem) => {
+    navigate("/", { state: { fillPrompt: wf.description } });
+  };
+
+  const handleCreateWorkflow = async () => {
+    if (!createDesc.trim() || !profile?.organization_id) return;
+    setIsBuilding(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Not authenticated");
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            conversationId: "",
+            message: `Create a workflow based on this description. Return ONLY valid JSON with this exact format, no other text:\n{"title":"short title","description":"1-2 sentence description","type":"Draft|Review|Output","steps":3,"icon":"FileText","category":"Litigation|Transactional|Financial Services","systemPrompt":"detailed system prompt for the AI"}\n\nUser description: "${createDesc}"`,
+            history: [],
+            useCase: "workflow_builder",
+          }),
+        }
+      );
+
+      if (!resp.ok) throw new Error("Failed to build workflow");
+
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let result = "";
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buffer.indexOf("\n")) !== -1) {
+          let line = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.type === "token") result += parsed.content;
+          } catch {}
+        }
+      }
+
+      // Extract JSON from result
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Invalid response");
+      const wf: WorkflowItem = JSON.parse(jsonMatch[0]);
+
+      const newWorkflows = [...workflows, wf];
+      setWorkflows(newWorkflows);
+
+      // Save to agent_config
+      const { data: existing } = await supabase
+        .from("api_integrations")
+        .select("id, config")
+        .eq("organization_id", profile.organization_id)
+        .eq("provider", "agent_config")
+        .maybeSingle();
+
+      const config = { ...((existing?.config as any) || {}), workflows: newWorkflows };
+      if (existing) {
+        await supabase.from("api_integrations").update({ config }).eq("id", existing.id);
+      } else {
+        await supabase.from("api_integrations").insert({
+          organization_id: profile.organization_id,
+          provider: "agent_config",
+          name: "Agent Configuration",
+          config,
+        });
+      }
+
+      toast({ title: "Workflow created", description: wf.title });
+      setShowCreate(false);
+      setCreateDesc("");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setIsBuilding(false);
+    }
+  };
+
+  const filtered = workflows.filter((wf) => {
+    if (outputFilter !== "All" && wf.type !== outputFilter) return false;
+    if (categoryFilter !== "All" && wf.category !== categoryFilter) return false;
+    if (searchQuery && !wf.title.toLowerCase().includes(searchQuery.toLowerCase()) && !wf.description.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  return (
+    <AppLayout>
+      <div className="flex h-full flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
+          <div>
+            <h1 className="text-lg font-heading font-semibold text-foreground">Workflows</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Pre-built and custom AI workflows for your practice</p>
+          </div>
+          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setShowCreate(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            Create workflow
+          </Button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-border/30">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search workflows..."
+              className="h-8 text-xs pl-8"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            {OUTPUT_TYPES.map((t) => (
+              <button
+                key={t}
+                onClick={() => setOutputFilter(t)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-xs transition-colors",
+                  outputFilter === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                )}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className="h-4 w-px bg-border" />
+          <div className="flex items-center gap-1.5">
+            {CATEGORIES.map((c) => (
+              <button
+                key={c}
+                onClick={() => setCategoryFilter(c)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-xs transition-colors",
+                  categoryFilter === c ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted"
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Grid */}
+        <div className="flex-1 overflow-auto p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((wf, i) => {
+              const Icon = ICON_MAP[wf.icon] || FileText;
+              return (
+                <button
+                  key={`${wf.title}-${i}`}
+                  className="flex flex-col items-start gap-3 rounded-lg border border-border p-4 text-left hover:bg-muted/50 hover:border-primary/30 transition-all group"
+                  onClick={() => handleWorkflowClick(wf)}
+                >
+                  <div className="flex items-center gap-3 w-full">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary text-primary shrink-0">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{wf.title}</p>
+                      {wf.category && (
+                        <p className="text-[10px] text-muted-foreground">{wf.category}</p>
+                      )}
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{wf.description}</p>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[9px] py-0 px-1.5">{wf.type}</Badge>
+                    <span className="text-[10px] text-muted-foreground">{wf.steps} steps</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {filtered.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Search className="h-8 w-8 text-muted-foreground mb-3" />
+              <p className="text-sm text-muted-foreground">No workflows match your filters</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Create workflow dialog */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Create Workflow
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Describe what you want this workflow to do. Our AI will build it for you.
+            </p>
+            <Textarea
+              value={createDesc}
+              onChange={(e) => setCreateDesc(e.target.value)}
+              placeholder="e.g., I want a workflow that reviews NDAs and extracts key terms like confidentiality period, exceptions, governing law, and termination clauses into a structured table..."
+              className="min-h-[120px] text-sm"
+              rows={5}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleCreateWorkflow} disabled={!createDesc.trim() || isBuilding}>
+              {isBuilding ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  Building...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                  Build Workflow
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </AppLayout>
+  );
+}
