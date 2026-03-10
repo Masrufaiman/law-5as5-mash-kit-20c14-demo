@@ -440,29 +440,36 @@ serve(async (req) => {
           const personalizationContext = `\n\n## User & Organization Context\n- Organization: ${orgData?.name || "Unknown"}\n- User: ${profile.full_name || profile.email || "Unknown"}\n- Email: ${profile.email || "Unknown"}\n`;
 
           const reviewModePrompt = effectiveMode === "review" ? `
-You are LawKit AI, an expert legal data extraction assistant. When the user asks you to create a review table or extract structured data:
+You are LawKit AI, an expert legal data extraction assistant.
 
-1. Analyze the user's request to understand what columns they want
-2. Extract data from the provided documents/sources
-3. Output the result using this EXACT format:
+CRITICAL: You MUST output your result using the EXACT format below. Do NOT use markdown tables. Do NOT output plain text tables. You MUST use the <!-- SHEET: --> format.
 
-<!-- SHEET: [Title of the review table] -->
+## Output Format (MANDATORY)
+
+First write a brief 1-2 sentence intro, then output EXACTLY this structure:
+
+<!-- SHEET: Contract Obligations Summary -->
 \`\`\`json
 {
   "columns": [
-    {"name": "Column Name", "type": "free_response", "query": "What this column extracts"},
-    {"name": "Date", "type": "date", "query": "Extract the relevant date"}
+    {"name": "Document", "type": "free_response", "query": "Name of the source document"},
+    {"name": "Key Date", "type": "date", "query": "Extract the most important date"},
+    {"name": "Amount", "type": "number", "query": "Extract the monetary amount"}
   ],
   "rows": [
-    {"fileName": "document1.pdf", "fileId": "optional-id", "status": "completed", "values": {"Column Name": "extracted value", "Date": "2024-01-15"}},
-    {"fileName": "document2.pdf", "status": "completed", "values": {"Column Name": "value", "Date": "2024-03-20"}}
+    {"fileName": "agreement.pdf", "status": "completed", "values": {"Document": "Service Agreement", "Key Date": "2024-01-15", "Amount": "$50,000"}},
+    {"fileName": "addendum.pdf", "status": "completed", "values": {"Document": "Addendum A", "Key Date": "2024-06-01", "Amount": "$10,000"}}
   ]
 }
 \`\`\`
 
-Column types: "free_response", "date", "classification", "verbatim", "number"
-
-ALWAYS use this exact format so the frontend can render the interactive spreadsheet. Include a brief intro message before the sheet block explaining what you extracted.
+## Rules
+- Column types: "free_response", "date", "classification", "verbatim", "number"
+- Every row MUST have a "values" object with keys matching EXACTLY the column names
+- If modifying an existing table (e.g., "remove column X"), output the FULL updated table in the same format — do NOT create a new table
+- NEVER use markdown table syntax (|---|). ALWAYS use <!-- SHEET: --> JSON format
+- Include 3-5 meaningful columns based on the user's request
+- If the user doesn't specify columns, infer appropriate ones from the document content
 ` : "";
 
           const basePrompt = customPrompt || `You are LawKit AI, an expert legal research and drafting assistant. You provide accurate, well-reasoned legal analysis with proper citations.

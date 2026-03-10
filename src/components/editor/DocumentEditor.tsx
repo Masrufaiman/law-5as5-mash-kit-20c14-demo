@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { X, Eye, EyeOff, Save, Clock, ChevronDown } from "lucide-react";
+import { X, Eye, EyeOff, Save, Clock, ChevronDown, ChevronsLeft, ChevronsRight, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -92,6 +92,7 @@ export function DocumentEditor({ title, content, onClose }: DocumentEditorProps)
   const [versions, setVersions] = useState<string[]>([]);
   const [currentVersion, setCurrentVersion] = useState(0);
   const [showEdits, setShowEdits] = useState(false);
+  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
 
   useEffect(() => {
     const html = markdownToHtml(content);
@@ -123,9 +124,22 @@ export function DocumentEditor({ title, content, onClose }: DocumentEditorProps)
 
   return (
     <div className="flex flex-col h-full bg-card">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+      {/* Compact header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground shrink-0"
+            onClick={() => setToolbarCollapsed(!toolbarCollapsed)}
+            title={toolbarCollapsed ? "Show toolbar" : "Hide toolbar"}
+          >
+            {toolbarCollapsed ? <ChevronsRight className="h-3.5 w-3.5" /> : <ChevronsLeft className="h-3.5 w-3.5" />}
+          </Button>
           <h3 className="text-sm font-semibold text-foreground truncate">{title}</h3>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Version selector */}
           <Popover>
             <PopoverTrigger asChild>
               <button className="flex items-center gap-0.5">
@@ -136,7 +150,7 @@ export function DocumentEditor({ title, content, onClose }: DocumentEditorProps)
                 </Badge>
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-36 p-1" align="start">
+            <PopoverContent className="w-36 p-1" align="end">
               {versions.map((_, idx) => (
                 <button
                   key={idx}
@@ -152,34 +166,35 @@ export function DocumentEditor({ title, content, onClose }: DocumentEditorProps)
               ))}
             </PopoverContent>
           </Popover>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
+
+          {/* Show edits */}
           {versions.length >= 2 && (
             <Button
               variant={showEdits ? "secondary" : "ghost"}
               size="sm"
-              className="h-7 text-[10px] gap-1 px-2"
+              className="h-6 text-[10px] gap-1 px-2"
               onClick={() => setShowEdits(!showEdits)}
               disabled={currentVersion === 0}
             >
               {showEdits ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-              {showEdits ? "Hide edits" : "Show edits"}
+              {showEdits ? "Hide" : "Edits"}
             </Button>
           )}
-          <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 px-2" onClick={handleSaveVersion}>
+
+          <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={handleSaveVersion}>
             <Save className="h-3 w-3" />
             Save
           </Button>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
-            <X className="h-4 w-4" />
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}>
+            <X className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
 
       {isViewingOldVersion && (
-        <div className="px-4 py-2 bg-muted/50 border-b border-border text-xs text-muted-foreground flex items-center gap-2">
+        <div className="px-3 py-1.5 bg-muted/50 border-b border-border text-xs text-muted-foreground flex items-center gap-2">
           Viewing version {currentVersion + 1} (read-only)
-          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => switchVersion(versions.length - 1)}>
+          <Button variant="outline" size="sm" className="h-5 text-[10px] px-2" onClick={() => switchVersion(versions.length - 1)}>
             Go to latest
           </Button>
         </div>
@@ -193,7 +208,10 @@ export function DocumentEditor({ title, content, onClose }: DocumentEditorProps)
           />
         </div>
       ) : (
-        <div className="flex-1 overflow-hidden [&_.ql-container]:border-0 [&_.ql-toolbar]:border-x-0 [&_.ql-toolbar]:border-t-0 [&_.ql-toolbar]:bg-muted/30 [&_.ql-editor]:min-h-full [&_.ql-editor]:text-sm [&_.ql-editor]:text-foreground [&_.ql-editor]:leading-relaxed">
+        <div className={cn(
+          "flex-1 overflow-hidden [&_.ql-container]:border-0 [&_.ql-toolbar]:border-x-0 [&_.ql-toolbar]:border-t-0 [&_.ql-toolbar]:bg-muted/30 [&_.ql-editor]:min-h-full [&_.ql-editor]:text-sm [&_.ql-editor]:text-foreground [&_.ql-editor]:leading-relaxed",
+          toolbarCollapsed && "[&_.ql-toolbar]:hidden"
+        )}>
           <ReactQuill
             theme="snow"
             value={editorContent}

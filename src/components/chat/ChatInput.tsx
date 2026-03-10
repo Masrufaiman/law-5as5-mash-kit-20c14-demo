@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect } from "react";
-import { Sparkles, Send, Plus, Zap, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, Upload, FolderOpen, Scale, BookOpen, Table2 } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Sparkles, Send, Plus, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, FolderOpen, Scale, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MentionDropdown } from "./MentionDropdown";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -45,6 +47,11 @@ interface VaultItem {
   name: string;
 }
 
+interface MentionedFile {
+  id: string;
+  name: string;
+}
+
 interface ChatInputProps {
   value: string;
   onChange: (val: string) => void;
@@ -72,8 +79,11 @@ export function ChatInput({
   const [improving, setImproving] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");
   const [localVaults, setLocalVaults] = useState<VaultItem[]>([]);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [showMention, setShowMention] = useState(false);
+  const [mentionedFiles, setMentionedFiles] = useState<MentionedFile[]>([]);
+  const mentionStartRef = useRef<number>(-1);
 
-  // Load vaults if not passed as prop
   useEffect(() => {
     if (vaults) return;
     if (!profile?.organization_id) return;
@@ -88,10 +98,53 @@ export function ChatInput({
   const effectiveVaults = vaults || localVaults;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showMention) return; // let mention dropdown handle it
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       onSend();
     }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    const cursorPos = e.target.selectionStart || 0;
+    onChange(val);
+
+    // Check for @ mention
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const atIdx = textBeforeCursor.lastIndexOf("@");
+    if (atIdx !== -1) {
+      const textAfterAt = textBeforeCursor.slice(atIdx + 1);
+      // Only show if no space in query (single word file search)
+      if (!textAfterAt.includes(" ") || textAfterAt.length < 20) {
+        setMentionQuery(textAfterAt);
+        setShowMention(true);
+        mentionStartRef.current = atIdx;
+        return;
+      }
+    }
+    setShowMention(false);
+  };
+
+  const handleMentionSelect = useCallback((file: { id: string; name: string }) => {
+    const start = mentionStartRef.current;
+    if (start === -1) return;
+    const before = value.slice(0, start);
+    const cursorPos = textareaRef.current?.selectionStart || value.length;
+    const after = value.slice(cursorPos);
+    const newVal = `${before}@${file.name} ${after}`;
+    onChange(newVal);
+    setShowMention(false);
+    setMentionedFiles((prev) => {
+      if (prev.some((f) => f.id === file.id)) return prev;
+      return [...prev, { id: file.id, name: file.name }];
+    });
+    // Focus back
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [value, onChange]);
+
+  const removeMentionedFile = (id: string) => {
+    setMentionedFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
   const handleImprove = async () => {
@@ -166,16 +219,42 @@ export function ChatInput({
 
   return (
     <div className="border border-border rounded-lg bg-card overflow-hidden">
-      <Textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Ask LawKit anything about your documents..."
-        className="border-0 focus-visible:ring-0 resize-none min-h-[80px] text-sm bg-muted/30"
-        rows={3}
-        disabled={disabled}
-      />
+      {/* Mentioned files badges */}
+      {mentionedFiles.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+          {mentionedFiles.map((f) => (
+            <Badge
+              key={f.id}
+              variant="secondary"
+              className="text-[10px] py-0 px-1.5 gap-1 font-normal cursor-pointer hover:bg-destructive/20"
+              onClick={() => removeMentionedFile(f.id)}
+            >
+              <FileText className="h-2.5 w-2.5" />
+              {f.name}
+              <span className="ml-0.5 text-muted-foreground">×</span>
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      <div className="relative">
+        <Textarea
+          ref={textareaRef}
+          value={value}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask LawKit anything... Type @ to reference a file"
+          className="border-0 focus-visible:ring-0 resize-none min-h-[80px] text-sm bg-muted/30"
+          rows={3}
+          disabled={disabled}
+        />
+        <MentionDropdown
+          query={mentionQuery}
+          visible={showMention}
+          onSelect={handleMentionSelect}
+          onClose={() => setShowMention(false)}
+        />
+      </div>
 
       {/* Bottom toolbar */}
       <div className="flex items-center gap-1 px-3 py-2 border-t border-border bg-muted/30">

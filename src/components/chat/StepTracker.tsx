@@ -15,14 +15,6 @@ interface StepTrackerProps {
   searchSources?: SearchSource | null;
 }
 
-function getDomain(url: string): string {
-  try {
-    return new URL(url).hostname.replace("www.", "");
-  } catch {
-    return url;
-  }
-}
-
 export function StepTracker({ steps, isStreaming, reasoning, searchSources }: StepTrackerProps) {
   const [open, setOpen] = useState(false);
 
@@ -35,7 +27,6 @@ export function StepTracker({ steps, isStreaming, reasoning, searchSources }: St
   const currentStep = steps.find((s) => s.status === "working");
   const isWorking = !allDone || isStreaming;
 
-  // Auto-expand while working, collapse when done (user can toggle)
   const isOpen = isWorking ? true : open;
 
   const label = isWorking
@@ -65,38 +56,44 @@ export function StepTracker({ steps, isStreaming, reasoning, searchSources }: St
       </CollapsibleTrigger>
 
       <CollapsibleContent>
-        <div className="ml-5 mt-1 border-l border-border pl-3 space-y-1">
-          {/* Steps list */}
+        <div className="ml-2 mt-1 pl-3 space-y-0.5">
+          {/* Steps list with vertical line */}
           {hasSteps && (
-            <div className="space-y-0.5">
-              {steps.map((step, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "flex items-center gap-2 text-xs py-0.5 animate-in fade-in slide-in-from-left-2",
-                    step.status === "done"
-                      ? "text-muted-foreground"
-                      : "text-foreground"
-                  )}
-                  style={{ animationDelay: `${i * 80}ms`, animationFillMode: "both" }}
-                >
-                  {step.status === "done" ? (
-                    <Check className="h-2.5 w-2.5 text-primary shrink-0" />
-                  ) : (
-                    <span className="relative flex h-2.5 w-2.5 shrink-0">
-                      <span className="absolute inline-flex h-full w-full rounded-full bg-primary/40 animate-ping" />
-                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
-                    </span>
-                  )}
-                  <span>{step.name}</span>
-                </div>
-              ))}
+            <div className="relative">
+              {/* Vertical connector line */}
+              <div className="absolute left-[4px] top-1 bottom-1 w-px bg-border" />
+              <div className="space-y-0">
+                {steps.map((step, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex items-start gap-2.5 text-xs py-1 pl-0 animate-in fade-in slide-in-from-left-2 relative",
+                      step.status === "done"
+                        ? "text-muted-foreground"
+                        : "text-foreground"
+                    )}
+                    style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
+                  >
+                    {step.status === "done" ? (
+                      <div className="relative z-10 flex h-[9px] w-[9px] shrink-0 mt-[3px] items-center justify-center rounded-full bg-primary/20">
+                        <Check className="h-2 w-2 text-primary" />
+                      </div>
+                    ) : (
+                      <div className="relative z-10 flex h-[9px] w-[9px] shrink-0 mt-[3px]">
+                        <span className="absolute inline-flex h-full w-full rounded-full bg-primary/40 animate-ping" />
+                        <span className="relative inline-flex h-[9px] w-[9px] rounded-full bg-primary" />
+                      </div>
+                    )}
+                    <span className="leading-tight">{step.name}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Search source favicon pills */}
           {searchSources && searchSources.domains.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 py-1.5">
+            <div className="flex flex-wrap gap-1.5 py-1.5 ml-4">
               {searchSources.domains.slice(0, 8).map((domain) => (
                 <span
                   key={domain}
@@ -118,7 +115,7 @@ export function StepTracker({ steps, isStreaming, reasoning, searchSources }: St
 
           {/* Reasoning/thinking text */}
           {hasReasoning && (
-            <div className="text-xs text-muted-foreground/80 leading-relaxed whitespace-pre-wrap py-1 max-h-48 overflow-y-auto">
+            <div className="ml-4 text-xs text-muted-foreground/80 leading-relaxed whitespace-pre-wrap py-1 max-h-48 overflow-y-auto border-l border-border/50 pl-3">
               {reasoning}
             </div>
           )}
