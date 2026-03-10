@@ -48,6 +48,9 @@ export default function Admin() {
               <TabsTrigger value="agent" className="text-xs gap-1.5 data-[state=active]:bg-background">
                 <Bot className="h-3.5 w-3.5" /> Agentic AI
               </TabsTrigger>
+              <TabsTrigger value="feedback" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <ThumbsUp className="h-3.5 w-3.5" /> Feedback
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="llm"><LlmTab orgId={orgId} /></TabsContent>
@@ -55,6 +58,7 @@ export default function Admin() {
             <TabsContent value="storage"><StorageTab orgId={orgId} /></TabsContent>
             <TabsContent value="knowledge"><KnowledgeTab orgId={orgId} /></TabsContent>
             <TabsContent value="agent"><AgentTab orgId={orgId} /></TabsContent>
+            <TabsContent value="feedback"><FeedbackTab orgId={orgId} /></TabsContent>
           </Tabs>
         </div>
       </div>

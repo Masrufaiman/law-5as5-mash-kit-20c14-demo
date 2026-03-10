@@ -127,9 +127,8 @@ export default function History() {
   };
 
   const filteredActivities = activities.filter((a) => {
-    if (filter === "All") return true;
+    if (filter === "All") return a.type !== "document";
     if (filter === "Chats") return a.type === "chat";
-    if (filter === "Documents") return a.type === "document";
     if (filter === "Vault") return a.type === "vault";
     if (filter === "Files") return a.type === "file";
     return true;
