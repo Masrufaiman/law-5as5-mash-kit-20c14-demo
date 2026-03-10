@@ -12,8 +12,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Bot, Copy, Pencil, Database, Paperclip } from "lucide-react";
+import { FileText, Bot, Copy, Pencil, Database, Paperclip, Table2 } from "lucide-react";
 import type { ChatMessage, Citation, AgentStep, SearchSource } from "@/hooks/useStreamChat";
+import type { SheetData } from "@/components/editor/SheetEditor";
 
 interface MessageBubbleProps {
   message: ChatMessage;
