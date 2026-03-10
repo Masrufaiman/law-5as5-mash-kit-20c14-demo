@@ -887,6 +887,46 @@ export default function Chat() {
           />
         )}
       </div>
+
+      {/* Share Dialog */}
+      <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share className="h-4 w-4" />
+              Share Conversation
+            </DialogTitle>
+            <DialogDescription>
+              Enter email addresses to share this conversation. Users will see it in their recent chats.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Textarea
+              placeholder="Enter emails separated by commas or new lines..."
+              value={shareEmails}
+              onChange={(e) => setShareEmails(e.target.value)}
+              className="min-h-[80px] text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Shared users can view this conversation and its messages.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowShareDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleShareSubmit}
+              disabled={!shareEmails.trim() || isSharingLoading}
+              className="gap-1.5"
+            >
+              {isSharingLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+              Share
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
