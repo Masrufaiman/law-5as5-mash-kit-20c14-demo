@@ -205,13 +205,19 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Enter the email of the person you want to share this vault with.</p>
-            <Input
-              type="email"
-              placeholder="colleague@example.com"
+            <p className="text-sm text-muted-foreground">Enter emails separated by commas or press Enter after each one.</p>
+            <Textarea
+              placeholder="colleague@example.com, team@example.com"
               value={shareEmail}
               onChange={(e) => setShareEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleShare()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleShare();
+                }
+              }}
+              rows={3}
+              className="text-sm"
             />
           </div>
           <DialogFooter>
