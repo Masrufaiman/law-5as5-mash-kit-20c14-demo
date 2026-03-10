@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { FileText, Bot, Copy, Pencil, Database, Paperclip } from "lucide-react";
-import type { ChatMessage, Citation, AgentStep } from "@/hooks/useStreamChat";
+import type { ChatMessage, Citation, AgentStep, SearchSource } from "@/hooks/useStreamChat";
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -25,6 +25,7 @@ interface MessageBubbleProps {
   isLastAssistant?: boolean;
   steps?: AgentStep[];
   isStreamingSteps?: boolean;
+  searchSources?: SearchSource | null;
   onFollowUp?: (text: string) => void;
   onEditMessage?: (messageId: string, content: string) => void;
 }
