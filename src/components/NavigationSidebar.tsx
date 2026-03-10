@@ -260,7 +260,7 @@ export function NavigationSidebar() {
               )}
             </button>
             {!collapsed && recentsOpen && (
-              <ScrollArea className="max-h-52">
+              <ScrollArea className="max-h-[320px]">
                 <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
                   {isLoadingChats ? (
                     <>

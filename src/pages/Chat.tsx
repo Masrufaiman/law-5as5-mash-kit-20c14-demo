@@ -646,6 +646,8 @@ export default function Chat() {
                 disabled={isStreaming}
                 deepResearch={deepResearch}
                 onDeepResearchChange={setDeepResearch}
+                promptMode={promptMode}
+                onPromptModeChange={setPromptMode}
               />
             </div>
           </div>
