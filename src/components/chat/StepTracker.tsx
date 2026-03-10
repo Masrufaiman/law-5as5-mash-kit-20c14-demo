@@ -48,8 +48,6 @@ export function StepTracker({
   const hasPlan = plan && plan.length > 0;
   const hasThinking = !!thinkingText?.trim();
 
-  if (!hasSteps && !hasReasoning && !hasPlan && !hasThinking) return null;
-
   const allDone = steps.every((s) => s.status === "done");
   const currentStep = steps.find((s) => s.status === "working");
   const isWorking = !allDone || isStreaming;
@@ -66,6 +64,8 @@ export function StepTracker({
       setCollapsed(false);
     }
   }, [allDone, isStreaming, hasSteps]);
+
+  if (!hasSteps && !hasReasoning && !hasPlan && !hasThinking) return null;
 
   const toggleStep = (idx: number) => {
     setExpandedSteps((prev) => {
