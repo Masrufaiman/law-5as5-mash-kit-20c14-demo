@@ -23,6 +23,7 @@ interface MessageBubbleProps {
   onRegenerate?: () => void;
   onChoiceSelect?: (text: string) => void;
   onDocumentOpen?: (title: string, content: string) => void;
+  onSheetOpen?: (data: SheetData) => void;
   isLastAssistant?: boolean;
   steps?: AgentStep[];
   isStreamingSteps?: boolean;
