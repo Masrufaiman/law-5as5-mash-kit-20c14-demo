@@ -49,7 +49,7 @@ const TYPE_COLORS: Record<string, string> = {
   sheet: "bg-chart-4/10 text-chart-4",
 };
 
-const FILTERS = ["All", "Chats", "Documents", "Vault", "Files"];
+const FILTERS = ["All", "Chats", "Vault", "Files"];
 
 export default function History() {
   const { profile } = useAuth();
