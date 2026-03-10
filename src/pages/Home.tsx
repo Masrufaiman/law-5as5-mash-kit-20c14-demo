@@ -714,10 +714,19 @@ export default function Home() {
                 size="sm"
                 className="h-7 px-4 text-xs gap-1.5"
                 onClick={handleSend}
-                disabled={!message.trim()}
+                disabled={!message.trim() || isSendingWithFiles}
               >
-                Ask LawKit
-                <Send className="h-3 w-3" />
+                {isSendingWithFiles ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Uploading files...
+                  </>
+                ) : (
+                  <>
+                    Ask LawKit
+                    <Send className="h-3 w-3" />
+                  </>
+                )}
               </Button>
             </div>
           </div>
