@@ -281,7 +281,14 @@ export function useStreamChat() {
                   ];
                 });
               } else if (parsed.type === "done") {
-                // Freeze steps/plan/thinking onto the assistant message
+                const frozenMeta = {
+                  frozenSteps: liveSteps.map(s => ({ ...s, status: "done" as const })),
+                  frozenPlan: livePlan,
+                  frozenThinkingText: liveThinkingText,
+                  frozenSearchSources: liveSearchSources,
+                  frozenFileRefs: liveFileRefs,
+                  followUps: parsed.followUps,
+                };
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantId
@@ -289,16 +296,19 @@ export function useStreamChat() {
                           ...m,
                           citations: parsed.citations,
                           followUps: parsed.followUps,
-                          frozenSteps: liveSteps.map(s => ({ ...s, status: "done" as const })),
-                          frozenPlan: livePlan,
-                          frozenThinkingText: liveThinkingText,
-                          frozenSearchSources: liveSearchSources,
-                          frozenFileRefs: liveFileRefs,
+                          ...frozenMeta,
                         }
                       : m
                   )
                 );
                 setSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
+                // Persist metadata to DB
+                try {
+                  const { supabase: sb } = await import("@/integrations/supabase/client");
+                  await sb.from("messages" as any).update({
+                    metadata: frozenMeta,
+                  } as any).eq("id", assistantId);
+                } catch {}
               } else if (parsed.type === "error") {
                 setError(parsed.error);
               }

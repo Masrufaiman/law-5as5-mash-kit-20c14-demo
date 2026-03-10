@@ -449,7 +449,7 @@ export default function Home() {
                     Sources
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-72 p-0" align="start">
+                <PopoverContent className="w-72 p-0 overflow-hidden" align="start">
                   <ScrollArea className="max-h-[400px]">
                     <div className="p-2">
                       <button

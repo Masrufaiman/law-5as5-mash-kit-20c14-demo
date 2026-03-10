@@ -77,6 +77,7 @@ export default function Chat() {
   const [selectedVault, setSelectedVault] = useState<{ id: string; name: string } | null>(null);
   const [chatVaults, setChatVaults] = useState<{ id: string; name: string }[]>([]);
   const [workflowTag, setWorkflowTag] = useState<{ title: string; systemPrompt?: string } | null>(null);
+  const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Load vaults for sources dropdown
@@ -89,6 +90,79 @@ export default function Chat() {
       .order("created_at")
       .then(({ data }) => setChatVaults(data || []));
   }, [profile?.organization_id]);
+
+  // Helper: process attached files through R2/OCR pipeline
+  const processAttachedFiles = async (files: File[]): Promise<{ fileIds: string[]; fileNames: string[]; vaultId: string }> => {
+    if (!profile?.organization_id) throw new Error("No org");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Not authenticated");
+
+    // Find or create a "Prompt Uploads" vault
+    let { data: pVault } = await supabase
+      .from("vaults")
+      .select("id")
+      .eq("organization_id", profile.organization_id)
+      .eq("name", "Prompt Uploads")
+      .maybeSingle();
+
+    if (!pVault) {
+      const { data: newVault, error: vErr } = await supabase
+        .from("vaults")
+        .insert({ name: "Prompt Uploads", organization_id: profile.organization_id, created_by: profile.id, description: "Auto-created vault for prompt file attachments" })
+        .select()
+        .single();
+      if (vErr || !newVault) throw new Error("Failed to create upload vault");
+      pVault = newVault;
+    }
+
+    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    const fileIds: string[] = [];
+    const fileNames: string[] = [];
+
+    for (const file of files) {
+      const fileId = crypto.randomUUID();
+      const sanitizedName = file.name.replace(/\s+/g, "_").replace(/[()]/g, "");
+      const r2Key = `${profile.organization_id}/${pVault.id}/${fileId}-${sanitizedName}`;
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("orgId", profile.organization_id);
+      formData.append("r2Key", r2Key);
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/r2-upload`,
+        { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` }, body: formData }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(err.error || "Upload failed");
+      }
+
+      const result = await response.json();
+
+      await supabase.from("files").insert({
+        id: fileId,
+        name: file.name,
+        original_name: file.name,
+        mime_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+        storage_path: result.r2_key || r2Key,
+        vault_id: pVault.id,
+        organization_id: profile.organization_id!,
+        uploaded_by: profile.id,
+        status: "processing",
+      });
+
+      // Trigger document processor (fire & forget)
+      supabase.functions.invoke("document-processor", { body: { fileId } }).catch(() => {});
+
+      fileIds.push(fileId);
+      fileNames.push(file.name);
+    }
+
+    return { fileIds, fileNames, vaultId: pVault.id };
+  };
 
   // Load conversation from URL ?id=
   useEffect(() => {
@@ -125,14 +199,23 @@ export default function Chat() {
 
       if (msgs?.length) {
         loadHistory(
-          msgs.map((m) => ({
-            id: m.id,
-            role: m.role as "user" | "assistant",
-            content: m.content,
-            citations: (m.citations as any) || undefined,
-            model: m.model_used || undefined,
-            createdAt: new Date(m.created_at),
-          }))
+          msgs.map((m) => {
+            const meta = (m as any).metadata || {};
+            return {
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              citations: (m.citations as any) || undefined,
+              model: m.model_used || undefined,
+              followUps: meta.followUps || undefined,
+              frozenSteps: meta.frozenSteps || undefined,
+              frozenPlan: meta.frozenPlan || undefined,
+              frozenThinkingText: meta.frozenThinkingText || undefined,
+              frozenSearchSources: meta.frozenSearchSources || undefined,
+              frozenFileRefs: meta.frozenFileRefs || undefined,
+              createdAt: new Date(m.created_at),
+            };
+          })
         );
       }
     } finally {
@@ -152,6 +235,7 @@ export default function Chat() {
       const srcs = state.activeSources || [];
       const pMode = state.promptMode;
       const wfTag = state.workflowTag || null;
+      const pendingFiles: File[] = state.attachedFiles || [];
 
       setVaultId(vault);
       setVaultName(vName);
@@ -161,7 +245,26 @@ export default function Chat() {
       setWorkflowTag(wfTag);
 
       navigate("/chat", { replace: true, state: {} });
-      createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
+
+      // If there are attached files, process them first
+      if (pendingFiles.length > 0) {
+        setIsProcessingFiles(true);
+        processAttachedFiles(pendingFiles)
+          .then(({ fileIds, fileNames, vaultId: pVaultId }) => {
+            const effectiveVault = vault || pVaultId;
+            const effectiveVaultName = vName || "Prompt Uploads";
+            setVaultId(effectiveVault);
+            setVaultName(effectiveVaultName);
+            createConversationAndSend(msg, effectiveVault, deep, srcs, pMode, effectiveVaultName, wfTag?.systemPrompt, fileIds, fileNames);
+          })
+          .catch((err) => {
+            toast({ title: "File upload failed", description: err.message, variant: "destructive" });
+            createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
+          })
+          .finally(() => setIsProcessingFiles(false));
+      } else {
+        createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
+      }
     }
   }, [location.state, profile?.organization_id]);
 
@@ -248,6 +351,8 @@ export default function Chat() {
     pMode?: string,
     vName?: string,
     workflowSystemPrompt?: string,
+    attachedFileIds?: string[],
+    attachedFileNames?: string[],
   ) => {
     if (!profile?.organization_id) return;
 
@@ -281,6 +386,8 @@ export default function Chat() {
       currentSheetState: sheetDoc,
       workflowSystemPrompt: workflowSystemPrompt || workflowTag?.systemPrompt,
       currentDocumentContent: editorDoc?.content,
+      attachedFileIds,
+      attachedFileNames,
     };
     lastStreamOptions.current = opts;
     sendMessage(msg, opts);

@@ -5,9 +5,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquare, FileText, FolderOpen, Upload, Table2, Pencil, Trash2 } from "lucide-react";
+import { MessageSquare, FileText, FolderOpen, Upload, Table2, Search } from "lucide-react";
 import { formatDistanceToNow, format, isToday, isYesterday } from "date-fns";
 
 interface ActivityItem {
@@ -57,6 +58,7 @@ export default function History() {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!profile?.organization_id) return;
@@ -91,34 +93,15 @@ export default function History() {
     const items: ActivityItem[] = [];
 
     (convRes.data || []).forEach((c) => {
-      items.push({
-        id: `conv-${c.id}`,
-        type: "chat",
-        action: "Started conversation",
-        title: c.title,
-        timestamp: c.created_at,
-        resourceId: c.id,
-      });
+      items.push({ id: `conv-${c.id}`, type: "chat", action: "Started conversation", title: c.title, timestamp: c.created_at, resourceId: c.id });
     });
 
     (fileRes.data || []).forEach((f) => {
-      items.push({
-        id: `file-${f.id}`,
-        type: "file",
-        action: "Uploaded file",
-        title: f.name,
-        timestamp: f.created_at,
-      });
+      items.push({ id: `file-${f.id}`, type: "file", action: "Uploaded file", title: f.name, timestamp: f.created_at });
     });
 
     (docRes.data || []).forEach((d) => {
-      items.push({
-        id: `doc-${d.id}`,
-        type: "document",
-        action: "Created document",
-        title: d.title,
-        timestamp: d.created_at,
-      });
+      items.push({ id: `doc-${d.id}`, type: "document", action: "Created document", title: d.title, timestamp: d.created_at });
     });
 
     items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -127,10 +110,11 @@ export default function History() {
   };
 
   const filteredActivities = activities.filter((a) => {
-    if (filter === "All") return a.type !== "document";
-    if (filter === "Chats") return a.type === "chat";
-    if (filter === "Vault") return a.type === "vault";
-    if (filter === "Files") return a.type === "file";
+    if (filter === "All" && a.type === "document") return false;
+    if (filter === "Chats" && a.type !== "chat") return false;
+    if (filter === "Vault" && a.type !== "vault") return false;
+    if (filter === "Files" && a.type !== "file") return false;
+    if (searchQuery && !a.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
@@ -152,20 +136,31 @@ export default function History() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex items-center gap-1.5 px-6 py-3 border-b border-border/30">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-xs transition-colors",
-                filter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-              )}
-            >
-              {f}
-            </button>
-          ))}
+        {/* Search + Filters */}
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-border/30">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search activity..."
+              className="h-8 text-xs pl-8"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            {FILTERS.map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs transition-colors",
+                  filter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                )}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
         </div>
 
         <ScrollArea className="flex-1">
@@ -185,7 +180,7 @@ export default function History() {
             ) : Object.keys(grouped).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <MessageSquare className="h-8 w-8 text-muted-foreground mb-3" />
-                <p className="text-sm text-muted-foreground">No activity yet</p>
+                <p className="text-sm text-muted-foreground">No activity found</p>
               </div>
             ) : (
               <div className="space-y-8">
