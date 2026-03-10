@@ -590,7 +590,7 @@ export default function Chat() {
 
                       {/* Streaming indicator: skeleton or steps, always shows LawKit AI branding */}
                       {isLastUser && showStreamingIndicator && (
-                        <div className="mt-4">
+                        <div className="mt-6">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
                               <Bot className="h-3.5 w-3.5 text-muted-foreground" />
@@ -599,7 +599,7 @@ export default function Chat() {
                           </div>
                           <div className="pl-8">
                             {steps.length > 0 ? (
-                              <StepTracker steps={steps} isStreaming={true} />
+                              <StepTracker steps={steps} isStreaming={true} searchSources={searchSources} />
                             ) : (
                               <div className="space-y-3">
                                 <Skeleton className="h-4 w-3/4" />
