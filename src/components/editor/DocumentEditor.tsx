@@ -7,18 +7,16 @@ import { cn } from "@/lib/utils";
 import ReactQuill, { Quill } from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 
-// Register custom fonts
+// Register custom fonts — use app fonts
 const Font = Quill.import("formats/font") as any;
 Font.whitelist = [
-  false, // default
+  false, // default (Instrument Sans)
   "serif",
   "monospace",
-  "inter",
+  "playfair-display",
+  "ibm-plex-mono",
   "georgia",
   "times-new-roman",
-  "courier-new",
-  "garamond",
-  "palatino",
 ];
 Quill.register(Font, true);
 
@@ -31,7 +29,7 @@ interface DocumentEditorProps {
 const modules = {
   toolbar: [
     [{ header: [1, 2, 3, false] }],
-    [{ font: [false, "serif", "monospace", "inter", "georgia", "times-new-roman", "courier-new", "garamond", "palatino"] }],
+    [{ font: [false, "serif", "monospace", "playfair-display", "ibm-plex-mono", "georgia", "times-new-roman"] }],
     [{ size: ["small", false, "large", "huge"] }],
     ["bold", "italic", "underline", "strike"],
     [{ color: [] }, { background: [] }],
@@ -162,26 +160,23 @@ export function DocumentEditor({ title, content, onClose }: DocumentEditorProps)
 
   return (
     <div className="flex flex-col h-full bg-card">
-      {/* Font face CSS for custom fonts */}
+      {/* Font face CSS for app fonts */}
       <style>{`
-        .ql-font-inter { font-family: 'Inter', sans-serif; }
+        .ql-editor { font-family: 'Instrument Sans', sans-serif; }
+        .ql-font-playfair-display { font-family: 'Playfair Display', serif; }
+        .ql-font-ibm-plex-mono { font-family: 'IBM Plex Mono', monospace; }
         .ql-font-georgia { font-family: 'Georgia', serif; }
         .ql-font-times-new-roman { font-family: 'Times New Roman', serif; }
-        .ql-font-courier-new { font-family: 'Courier New', monospace; }
-        .ql-font-garamond { font-family: 'Garamond', serif; }
-        .ql-font-palatino { font-family: 'Palatino Linotype', 'Palatino', serif; }
-        .ql-picker.ql-font .ql-picker-label[data-value="inter"]::before,
-        .ql-picker.ql-font .ql-picker-item[data-value="inter"]::before { content: 'Inter'; font-family: 'Inter', sans-serif; }
+        .ql-picker.ql-font .ql-picker-label::before,
+        .ql-picker.ql-font .ql-picker-item::before { font-family: 'Instrument Sans', sans-serif; }
+        .ql-picker.ql-font .ql-picker-label[data-value="playfair-display"]::before,
+        .ql-picker.ql-font .ql-picker-item[data-value="playfair-display"]::before { content: 'Playfair Display'; font-family: 'Playfair Display', serif; }
+        .ql-picker.ql-font .ql-picker-label[data-value="ibm-plex-mono"]::before,
+        .ql-picker.ql-font .ql-picker-item[data-value="ibm-plex-mono"]::before { content: 'IBM Plex Mono'; font-family: 'IBM Plex Mono', monospace; }
         .ql-picker.ql-font .ql-picker-label[data-value="georgia"]::before,
         .ql-picker.ql-font .ql-picker-item[data-value="georgia"]::before { content: 'Georgia'; font-family: 'Georgia', serif; }
         .ql-picker.ql-font .ql-picker-label[data-value="times-new-roman"]::before,
         .ql-picker.ql-font .ql-picker-item[data-value="times-new-roman"]::before { content: 'Times New Roman'; font-family: 'Times New Roman', serif; }
-        .ql-picker.ql-font .ql-picker-label[data-value="courier-new"]::before,
-        .ql-picker.ql-font .ql-picker-item[data-value="courier-new"]::before { content: 'Courier New'; font-family: 'Courier New', monospace; }
-        .ql-picker.ql-font .ql-picker-label[data-value="garamond"]::before,
-        .ql-picker.ql-font .ql-picker-item[data-value="garamond"]::before { content: 'Garamond'; font-family: 'Garamond', serif; }
-        .ql-picker.ql-font .ql-picker-label[data-value="palatino"]::before,
-        .ql-picker.ql-font .ql-picker-item[data-value="palatino"]::before { content: 'Palatino'; font-family: 'Palatino Linotype', serif; }
       `}</style>
 
       {/* Compact header */}

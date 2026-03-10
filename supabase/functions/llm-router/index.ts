@@ -203,7 +203,26 @@ serve(async (req) => {
 
       const fileNamesList = fileNames || existingSheet?.rows?.map((r: any) => r.fileName) || [];
       
-      const colFillPrompt = `You are a data extraction AI. Given a column definition, extract the value for each file/document.
+      // Load actual file content for each file so AI has real data to extract from
+      let fileContentContext = "";
+      if (fileNamesList.length > 0) {
+        const { data: fileRecords } = await adminClient
+          .from("files")
+          .select("name, extracted_text")
+          .eq("organization_id", orgId)
+          .in("name", fileNamesList)
+          .not("extracted_text", "is", null)
+          .limit(50);
+        
+        if (fileRecords?.length) {
+          fileContentContext = "\n\n## Document Contents\n" +
+            fileRecords.map((f: any) => 
+              `### ${f.name}\n${(f.extracted_text || "").substring(0, 4000)}`
+            ).join("\n\n");
+        }
+      }
+      
+      const colFillPrompt = `You are a data extraction AI. Given a column definition, extract the value for each file/document using the actual document contents provided below.
 
 Column Name: ${columnMeta.name}
 Column Type: ${columnMeta.type}
@@ -211,6 +230,7 @@ Extraction Query: ${columnMeta.query}
 
 Files to extract from:
 ${fileNamesList.map((f: string, i: number) => `${i + 1}. ${f}`).join("\n")}
+${fileContentContext}
 
 Respond with ONLY a JSON object mapping file names to extracted values:
 {
@@ -218,7 +238,7 @@ Respond with ONLY a JSON object mapping file names to extracted values:
   "filename2.pdf": "extracted value 2"
 }
 
-If you cannot determine a value, use "N/A". Be concise but accurate.`;
+If you cannot determine a value from the document content, use "N/A". Be concise but accurate. Extract ONLY from the document text provided above.`;
 
       try {
         const resp = await fetch(aiUrl, {
@@ -622,11 +642,27 @@ If you cannot determine a value, use "N/A". Be concise but accurate.`;
             customPrompt = agentConf.prompts[effectiveMode];
           } else if (effectiveMode === "review") {
             customPrompt = "";
+          } else if (effectiveMode === "drafting") {
+            customPrompt = "";
           } else {
             customPrompt = agentConf.prompts?.chat || "";
           }
 
           const personalizationContext = `\n\n## User & Organization Context\n- Organization: ${orgData?.name || "Unknown"}\n- User: ${profile.full_name || profile.email || "Unknown"}\n- Email: ${profile.email || "Unknown"}\n`;
+
+          const draftingModePrompt = effectiveMode === "drafting" ? `
+You are LawKit AI, an expert legal document drafting assistant.
+
+CRITICAL RULES:
+- You MUST generate a complete, properly formatted legal document. NEVER output JSON, extraction data, or structured data objects.
+- Start with "# [Document Title]" followed by the full document body.
+- Use proper legal document formatting: numbered sections, subsections, defined terms in bold, signature blocks.
+- Fill in ALL details using the user's provided information and the organization context. NEVER use placeholder text like [Party Name], [Date], etc.
+- If a detail is not provided, use reasonable professional defaults or omit the clause with a note.
+- Include all standard clauses expected for the document type (e.g., for NDA: definitions, obligations, exclusions, term, remedies, governing law, signatures).
+- Use the organization name and user details from the context to personalize the document.
+- At the end, suggest 3 follow-up questions starting with ">>FOLLOWUP: "
+` : "";
 
           const reviewModePrompt = effectiveMode === "review" ? `
 You are LawKit AI, an expert legal data extraction assistant.
@@ -717,7 +753,7 @@ IMPORTANT: Output ONLY the <!-- SHEET: --> format. NEVER use markdown tables. Th
           }
 
           // Workflow system prompt override
-          let effectiveBasePrompt = reviewModePrompt || basePrompt;
+          let effectiveBasePrompt = draftingModePrompt || reviewModePrompt || basePrompt;
           if (workflowSystemPrompt) {
             effectiveBasePrompt = workflowSystemPrompt + "\n\n" + effectiveBasePrompt;
           }

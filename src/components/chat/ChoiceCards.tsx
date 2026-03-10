@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Send, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -18,6 +19,30 @@ interface ChoiceCardsProps {
   onSelect: (text: string) => void;
   disabled?: boolean;
   selectedValue?: string | null;
+}
+
+/**
+ * Render text with inline badges for backtick-wrapped segments: `badge text`
+ */
+function renderWithBadges(text: string) {
+  const parts = text.split(/(`[^`]+`)/g);
+  if (parts.length === 1) return text;
+
+  return (
+    <span className="inline-flex items-center gap-1 flex-wrap">
+      {parts.map((part, i) => {
+        const badgeMatch = part.match(/^`(.+)`$/);
+        if (badgeMatch) {
+          return (
+            <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
+              {badgeMatch[1]}
+            </Badge>
+          );
+        }
+        return part ? <span key={i}>{part}</span> : null;
+      })}
+    </span>
+  );
 }
 
 /**
@@ -121,7 +146,6 @@ export function parseChoices(content: string): { preamble: string; choices: Choi
   if (choices.length > 6 || avgTitleLen > 80) return null;
 
   // --- False positive guards ---
-  // Don't render as choices if items contain monetary values, file names, or data
   const hasMonetaryValues = choices.some(c =>
     /[\$₹€£¥৳]|USD|BDT|INR|EUR|GBP|AED|SGD|\b\d{1,3}(,\d{3})*\.\d{2}\b|\b\d+\s*(BDT|USD|INR|EUR|taka|dollar|rupee)/i.test(c.title + " " + c.description)
   );
@@ -134,7 +158,6 @@ export function parseChoices(content: string): { preamble: string; choices: Choi
     preamble = lines.slice(0, choiceStartIdx).join("\n").trim();
   }
 
-  // Only show as interactive choices if the context is asking a question
   const hasQuestion = /\?\s*$|choose|select|pick|which.*would|which.*prefer|would you like/im.test(preamble);
 
   if ((hasMonetaryValues || hasFileExtensions || hasDataPatterns) && !hasQuestion) return null;
@@ -185,10 +208,12 @@ export function ChoiceCards({ choices, preamble, onSelect, disabled, selectedVal
                   {selected ? <Check className="h-3 w-3" /> : choice.number}
                 </span>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{choice.title}</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {renderWithBadges(choice.title)}
+                  </p>
                   {choice.description && (
                     <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      {choice.description}
+                      {renderWithBadges(choice.description)}
                     </p>
                   )}
                 </div>
