@@ -76,6 +76,7 @@ export default function Chat() {
   const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const [selectedVault, setSelectedVault] = useState<{ id: string; name: string } | null>(null);
   const [chatVaults, setChatVaults] = useState<{ id: string; name: string }[]>([]);
+  const [workflowTag, setWorkflowTag] = useState<{ title: string; systemPrompt?: string } | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Load vaults for sources dropdown
