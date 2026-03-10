@@ -40,6 +40,9 @@ import {
   X,
   Pencil,
   Reply,
+  Loader2,
+  Mail,
+  Trash2,
 } from "lucide-react";
 
 export default function Chat() {
