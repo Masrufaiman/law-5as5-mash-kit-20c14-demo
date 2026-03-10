@@ -709,6 +709,8 @@ export default function Chat() {
                 }}
                 activeSources={activeSources}
                 onSourceToggle={(s) => setActiveSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
+                workflowTag={workflowTag}
+                onWorkflowTagRemove={() => setWorkflowTag(null)}
               />
             </div>
           </div>
