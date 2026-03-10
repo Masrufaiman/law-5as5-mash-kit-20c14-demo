@@ -127,6 +127,23 @@ const DEFAULT_WORKFLOWS: WorkflowCard[] = [
   },
 ];
 
+// Session storage helpers for persisting prompt state
+const SS_KEY = "lawkit_home_state";
+
+function loadSessionState() {
+  try {
+    const raw = sessionStorage.getItem(SS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function saveSessionState(state: any) {
+  try {
+    sessionStorage.setItem(SS_KEY, JSON.stringify(state));
+  } catch {}
+}
+
 export default function Home() {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -134,18 +151,33 @@ export default function Home() {
   const { toast } = useToast();
   const location = useLocation();
 
-  const [message, setMessage] = useState("");
-  const [deepResearch, setDeepResearch] = useState(false);
+  // Restore from sessionStorage
+  const saved = useRef(loadSessionState());
+
+  const [message, setMessage] = useState(saved.current?.message || "");
+  const [deepResearch, setDeepResearch] = useState(saved.current?.deepResearch || false);
   const [vaults, setVaults] = useState<VaultItem[]>([]);
-  const [selectedVault, setSelectedVault] = useState<VaultItem | null>(null);
+  const [selectedVault, setSelectedVault] = useState<VaultItem | null>(saved.current?.selectedVault || null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [activeSources, setActiveSources] = useState<string[]>([]);
+  const [activeSources, setActiveSources] = useState<string[]>(saved.current?.activeSources || []);
   const [kbSources, setKbSources] = useState<KBSource[]>([]);
   const [improving, setImproving] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");
-  const [promptMode, setPromptMode] = useState<string | undefined>();
+  const [promptMode, setPromptMode] = useState<string | undefined>(saved.current?.promptMode || undefined);
   const [workflows, setWorkflows] = useState<WorkflowCard[]>(DEFAULT_WORKFLOWS);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<{ title: string; systemPrompt?: string } | null>(null);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<{ title: string; systemPrompt?: string } | null>(saved.current?.selectedWorkflow || null);
+
+  // Persist state to sessionStorage on changes
+  useEffect(() => {
+    saveSessionState({
+      message,
+      deepResearch,
+      selectedVault,
+      activeSources,
+      promptMode,
+      selectedWorkflow,
+    });
+  }, [message, deepResearch, selectedVault, activeSources, promptMode, selectedWorkflow]);
 
   // Handle fillPrompt from Workflows page
   useEffect(() => {
@@ -203,6 +235,8 @@ export default function Home() {
 
   const handleSend = () => {
     if (!message.trim()) return;
+    // Clear session state on send
+    sessionStorage.removeItem(SS_KEY);
     navigate("/chat", {
       state: {
         initialMessage: message,
@@ -338,55 +372,57 @@ export default function Home() {
             {hasChips && (
               <div className="flex flex-wrap gap-1.5 px-3 pt-3 bg-muted/30">
                 {selectedWorkflow && (
-                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <Zap className="h-2.5 w-2.5" />
-                    {selectedWorkflow.title}
-                    <button onClick={() => setSelectedWorkflow(null)} className="ml-0.5">
+                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
+                    <Zap className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">{selectedWorkflow.title}</span>
+                    <button onClick={() => setSelectedWorkflow(null)} className="ml-0.5 shrink-0">
                       <X className="h-2 w-2" />
                     </button>
                   </Badge>
                 )}
                 {selectedVault && (
-                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <FolderOpen className="h-2.5 w-2.5" />
-                    {selectedVault.name}
-                    <button onClick={() => setSelectedVault(null)} className="ml-0.5">
+                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
+                    <FolderOpen className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">{selectedVault.name}</span>
+                    <button onClick={() => setSelectedVault(null)} className="ml-0.5 shrink-0">
                       <X className="h-2 w-2" />
                     </button>
                   </Badge>
                 )}
                 {deepResearch && (
                   <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <Zap className="h-2.5 w-2.5" />
+                    <Zap className="h-2.5 w-2.5 shrink-0" />
                     Deep Research
-                    <button onClick={() => setDeepResearch(false)} className="ml-0.5">
+                    <button onClick={() => setDeepResearch(false)} className="ml-0.5 shrink-0">
                       <X className="h-2 w-2" />
                     </button>
                   </Badge>
                 )}
                 {activeSources.map((source) => (
-                  <Badge key={source} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <Scale className="h-2.5 w-2.5" />
-                    {source}
-                    <button onClick={() => toggleSource(source)} className="ml-0.5">
+                  <Badge key={source} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
+                    <Scale className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">{source}</span>
+                    <button onClick={() => toggleSource(source)} className="ml-0.5 shrink-0">
                       <X className="h-2 w-2" />
                     </button>
                   </Badge>
                 ))}
                 {attachedFiles.map((file, i) => (
-                  <Badge key={i} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <FileText className="h-2.5 w-2.5" />
-                    {file.name}
-                    <button onClick={() => removeFile(i)} className="ml-0.5">
+                  <Badge key={i} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
+                    <FileText className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">{file.name}</span>
+                    <button onClick={() => removeFile(i)} className="ml-0.5 shrink-0">
                       <X className="h-2 w-2" />
                     </button>
                   </Badge>
                 ))}
                 {promptMode && (
                   <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <Sparkles className="h-2.5 w-2.5" />
-                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Document Drafting" : promptMode === "review" ? "Review Table" : "Chat Mode"}
-                    <button onClick={() => setPromptMode(undefined)} className="ml-0.5">
+                    <Sparkles className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">
+                      {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Document Drafting" : promptMode === "review" ? "Review Table" : "Chat Mode"}
+                    </span>
+                    <button onClick={() => setPromptMode(undefined)} className="ml-0.5 shrink-0">
                       <X className="h-2 w-2" />
                     </button>
                   </Badge>

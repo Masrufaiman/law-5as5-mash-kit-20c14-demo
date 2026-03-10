@@ -1,14 +1,18 @@
 import { useState, useRef } from "react";
-import { ArrowLeft, Search, Upload, Filter, FileText, MoreHorizontal, Pencil, Trash2, Eye, X, Download } from "lucide-react";
+import { ArrowLeft, Search, Upload, Filter, FileText, MoreHorizontal, Pencil, Trash2, Eye, X, Download, Share2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileTable } from "./FileTable";
 import type { Tables } from "@/integrations/supabase/types";
 import { format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 type FileRow = Tables<"files">;
 type VaultRow = Tables<"vaults">;
@@ -37,22 +41,58 @@ interface VaultDetailProps {
 }
 
 export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRename, onDelete }: VaultDetailProps) {
+  const { profile } = useAuth();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState(vault.name);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileRow | null>(null);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareEmail, setShareEmail] = useState("");
+  const [sharing, setSharing] = useState(false);
 
-  const filtered = files.filter((f) =>
-    f.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = files.filter((f) => {
+    const matchesSearch = f.name.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "all" || f.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   const handleSaveName = () => {
     if (editName.trim() && editName.trim() !== vault.name && onRename) {
       onRename(vault.id, editName.trim());
     }
     setIsEditingName(false);
+  };
+
+  const handleShare = async () => {
+    if (!shareEmail.trim() || !profile?.id) return;
+    setSharing(true);
+    try {
+      const { error } = await supabase.from("vault_shares" as any).insert({
+        vault_id: vault.id,
+        shared_with_email: shareEmail.trim().toLowerCase(),
+        shared_by: profile.id,
+        permission: "view",
+      });
+      if (error) {
+        if (error.code === "23505") {
+          toast({ title: "Already shared", description: "This vault is already shared with that email." });
+        } else {
+          throw error;
+        }
+      } else {
+        toast({ title: "Shared!", description: `Vault shared with ${shareEmail.trim()}` });
+        setShareEmail("");
+        setShowShareDialog(false);
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSharing(false);
+    }
   };
 
   return (
@@ -92,35 +132,76 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
           )}
           <Badge variant="outline" className="text-[10px] ml-1">Vault</Badge>
 
-          {(onRename || onDelete) && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 ml-auto">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {onRename && (
-                  <DropdownMenuItem onClick={() => { setEditName(vault.name); setIsEditingName(true); }}>
-                    <Pencil className="h-3.5 w-3.5 mr-2" />
-                    Rename vault
-                  </DropdownMenuItem>
-                )}
-                {onDelete && (
-                  <DropdownMenuItem className="text-destructive" onClick={() => setShowDeleteConfirm(true)}>
-                    <Trash2 className="h-3.5 w-3.5 mr-2" />
-                    Delete vault
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <div className="flex items-center gap-1 ml-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1.5"
+              onClick={() => setShowShareDialog(true)}
+            >
+              <Share2 className="h-3 w-3" />
+              Share
+            </Button>
+
+            {(onRename || onDelete) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {onRename && (
+                    <DropdownMenuItem onClick={() => { setEditName(vault.name); setIsEditingName(true); }}>
+                      <Pencil className="h-3.5 w-3.5 mr-2" />
+                      Rename vault
+                    </DropdownMenuItem>
+                  )}
+                  {onDelete && (
+                    <DropdownMenuItem className="text-destructive" onClick={() => setShowDeleteConfirm(true)}>
+                      <Trash2 className="h-3.5 w-3.5 mr-2" />
+                      Delete vault
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
         <p className="text-xs text-muted-foreground ml-7">
           {files.length} files · {formatTotalSize(files)}
           {vault.description && ` · ${vault.description}`}
         </p>
       </div>
+
+      {/* Share dialog */}
+      <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Share vault "{vault.name}"
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Enter the email of the person you want to share this vault with.</p>
+            <Input
+              type="email"
+              placeholder="colleague@example.com"
+              value={shareEmail}
+              onChange={(e) => setShareEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleShare()}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setShowShareDialog(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleShare} disabled={!shareEmail.trim() || sharing}>
+              <Share2 className="h-3 w-3 mr-1.5" />
+              {sharing ? "Sharing..." : "Share"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
@@ -181,10 +262,19 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
             e.target.value = "";
           }}
         />
-        <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
-          <Filter className="h-3.5 w-3.5" />
-          Filters
-        </Button>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="h-8 w-[120px] text-xs">
+            <Filter className="h-3.5 w-3.5 mr-1.5" />
+            <SelectValue placeholder="Filter" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">All statuses</SelectItem>
+            <SelectItem value="ready" className="text-xs">Ready</SelectItem>
+            <SelectItem value="processing" className="text-xs">Processing</SelectItem>
+            <SelectItem value="error" className="text-xs">Error</SelectItem>
+            <SelectItem value="uploading" className="text-xs">Uploading</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* File table */}
@@ -192,8 +282,12 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-center">
             <Upload className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium text-foreground">No files yet</p>
-            <p className="text-sm text-muted-foreground mt-1">Drag & drop files or click Upload</p>
+            <p className="font-medium text-foreground">
+              {files.length === 0 ? "No files yet" : "No matching files"}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {files.length === 0 ? "Drag & drop files or click Upload" : "Try adjusting your search or filter"}
+            </p>
           </div>
         ) : (
           <FileTable files={filtered} onFileClick={setPreviewFile} />

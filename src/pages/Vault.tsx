@@ -30,23 +30,49 @@ export default function Vault() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
+  const [sharedVaultIds, setSharedVaultIds] = useState<string[]>([]);
 
   const selectedVault = vaults.find((v) => v.id === selectedVaultId);
 
-  // Load vaults
+  // Load vaults + shared vaults
   useEffect(() => {
     if (!profile?.organization_id) return;
     const load = async () => {
+      // Load org vaults
       const { data } = await supabase
         .from("vaults")
         .select("*")
         .eq("organization_id", profile.organization_id!)
         .order("created_at");
-      setVaults(data || []);
+      
+      // Load shared vault IDs for the current user
+      const { data: shares } = await supabase
+        .from("vault_shares" as any)
+        .select("vault_id")
+        .eq("shared_with_email", profile.email);
+      
+      const sharedIds = (shares || []).map((s: any) => s.vault_id);
+      setSharedVaultIds(sharedIds);
 
-      if (data?.length) {
+      // If there are shared vaults from other orgs, load them too
+      let allVaults = data || [];
+      if (sharedIds.length > 0) {
+        const orgVaultIds = new Set(allVaults.map(v => v.id));
+        const missingIds = sharedIds.filter((id: string) => !orgVaultIds.has(id));
+        if (missingIds.length > 0) {
+          const { data: sharedVaults } = await supabase
+            .from("vaults")
+            .select("*")
+            .in("id", missingIds);
+          if (sharedVaults) allVaults = [...allVaults, ...sharedVaults];
+        }
+      }
+      
+      setVaults(allVaults);
+
+      if (allVaults.length) {
         const counts: Record<string, number> = {};
-        for (const v of data) {
+        for (const v of allVaults) {
           const { count } = await supabase
             .from("files")
             .select("*", { count: "exact", head: true })
@@ -58,7 +84,7 @@ export default function Vault() {
       setLoading(false);
     };
     load();
-  }, [profile?.organization_id]);
+  }, [profile?.organization_id, profile?.email]);
 
   // Load files for selected vault
   useEffect(() => {
@@ -164,7 +190,6 @@ export default function Vault() {
     const sanitizedName = file.name.replace(/\s+/g, "_").replace(/[()]/g, "");
     const r2Key = `${profile.organization_id}/${selectedVaultId}/${fileId}-${sanitizedName}`;
 
-    // Update progress: uploading
     setUploadProgress(prev => [...prev, { fileName: file.name, status: "uploading" }]);
 
     try {
@@ -205,14 +230,12 @@ export default function Vault() {
       });
       if (dbError) throw dbError;
 
-      // Update progress: processing
       setUploadProgress(prev => prev.map(p => p.fileName === file.name ? { ...p, status: "processing" } : p));
 
       supabase.functions.invoke("document-processor", {
         body: { fileId },
       }).catch((err) => console.warn("Processing trigger failed:", err));
 
-      // Update progress: done
       setUploadProgress(prev => prev.map(p => p.fileName === file.name ? { ...p, status: "done" } : p));
     } catch (err: any) {
       setUploadProgress(prev => prev.map(p => p.fileName === file.name ? { ...p, status: "error" } : p));
@@ -225,7 +248,6 @@ export default function Vault() {
     setUploading(true);
     setUploadProgress([]);
 
-    // Upload files in parallel (batches of 3)
     const batchSize = 3;
     for (let i = 0; i < fileList.length; i += batchSize) {
       const batch = fileList.slice(i, i + batchSize);
@@ -234,7 +256,6 @@ export default function Vault() {
 
     toast({ title: "Upload complete", description: `${fileList.length} file(s) uploaded` });
     
-    // Clear progress after a delay
     setTimeout(() => setUploadProgress([]), 3000);
     setUploading(false);
   };
@@ -265,6 +286,8 @@ export default function Vault() {
             onDeleteVault={handleDeleteVault}
             onRenameVault={handleRenameVault}
             userId={profile?.id}
+            userEmail={profile?.email}
+            sharedVaultIds={sharedVaultIds}
           />
         )}
       </FileUploadZone>

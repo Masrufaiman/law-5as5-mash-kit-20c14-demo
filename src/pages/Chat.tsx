@@ -288,7 +288,11 @@ export default function Chat() {
 
   const handleSend = async (text?: string) => {
     const msg = (text || input).trim();
-    if (!msg || isStreaming || !profile?.organization_id) return;
+    if (!msg || isStreaming) return;
+    if (!profile?.organization_id) {
+      toast({ title: "Not ready", description: "Your profile is still loading. Please wait a moment.", variant: "destructive" });
+      return;
+    }
     if (!text) setInput("");
 
     if (!conversationId) {

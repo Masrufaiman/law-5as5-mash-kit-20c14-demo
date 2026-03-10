@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, Loader2, ChevronDown, ChevronRight, Brain, FileText, Circle, Clock } from "lucide-react";
 import type { AgentStep, SearchSource, FileRef } from "@/hooks/useStreamChat";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,7 @@ export function StepTracker({
 }: StepTrackerProps) {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const [showAllFileRefs, setShowAllFileRefs] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   const hasSteps = steps.length > 0;
   const hasReasoning = !!reasoning?.trim();
@@ -55,6 +56,17 @@ export function StepTracker({
   const completedCount = steps.filter((s) => s.status === "done").length;
   const totalSteps = hasPlan ? plan.length : steps.length;
 
+  // Auto-collapse when done
+  useEffect(() => {
+    if (allDone && !isStreaming && hasSteps) {
+      const timer = setTimeout(() => setCollapsed(true), 800);
+      return () => clearTimeout(timer);
+    }
+    if (isStreaming) {
+      setCollapsed(false);
+    }
+  }, [allDone, isStreaming, hasSteps]);
+
   const toggleStep = (idx: number) => {
     setExpandedSteps((prev) => {
       const next = new Set(prev);
@@ -67,6 +79,33 @@ export function StepTracker({
   const visibleFileRefs = fileRefs || [];
   const displayedRefs = showAllFileRefs ? visibleFileRefs : visibleFileRefs.slice(0, 5);
 
+  // Collapsed summary
+  if (collapsed && !isWorking) {
+    const stepNames = steps.slice(0, 3).map(s => s.name).join(", ");
+    const totalTime = steps.reduce((sum, s) => {
+      if (s.duration) {
+        const num = parseInt(s.duration);
+        return sum + (isNaN(num) ? 0 : num);
+      }
+      return sum;
+    }, 0);
+
+    return (
+      <button
+        onClick={() => setCollapsed(false)}
+        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-lg bg-muted/30 border border-border/40 px-3 py-2 w-full text-left group"
+      >
+        <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+        <span className="flex-1 truncate">
+          Analyzed in {completedCount} step{completedCount !== 1 ? "s" : ""}
+          {totalTime > 0 && ` · ${totalTime}s`}
+          {stepNames && <span className="text-muted-foreground/60 ml-1">— {stepNames}</span>}
+        </span>
+        <ChevronRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0" />
+      </button>
+    );
+  }
+
   return (
     <div className="rounded-lg bg-muted/30 border border-border/40 p-3 space-y-2">
       {/* Header with progress */}
@@ -75,7 +114,9 @@ export function StepTracker({
           {isWorking ? (
             <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
           ) : (
-            <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+            <button onClick={() => setCollapsed(true)} className="shrink-0">
+              <Check className="h-3.5 w-3.5 text-primary" />
+            </button>
           )}
           <span className="font-medium text-foreground">
             {isWorking
@@ -83,11 +124,21 @@ export function StepTracker({
               : `Completed in ${steps.length} steps`}
           </span>
         </div>
-        {totalSteps > 0 && (
-          <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-mono">
-            {completedCount} / {totalSteps}
-          </Badge>
-        )}
+        <div className="flex items-center gap-1.5">
+          {totalSteps > 0 && (
+            <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-mono">
+              {completedCount} / {totalSteps}
+            </Badge>
+          )}
+          {!isWorking && (
+            <button
+              onClick={() => setCollapsed(true)}
+              className="text-muted-foreground/40 hover:text-muted-foreground"
+            >
+              <ChevronDown className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Plan checklist */}
