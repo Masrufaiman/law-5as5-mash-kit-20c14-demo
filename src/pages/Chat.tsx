@@ -91,6 +91,79 @@ export default function Chat() {
       .then(({ data }) => setChatVaults(data || []));
   }, [profile?.organization_id]);
 
+  // Helper: process attached files through R2/OCR pipeline
+  const processAttachedFiles = async (files: File[]): Promise<{ fileIds: string[]; fileNames: string[]; vaultId: string }> => {
+    if (!profile?.organization_id) throw new Error("No org");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Not authenticated");
+
+    // Find or create a "Prompt Uploads" vault
+    let { data: pVault } = await supabase
+      .from("vaults")
+      .select("id")
+      .eq("organization_id", profile.organization_id)
+      .eq("name", "Prompt Uploads")
+      .maybeSingle();
+
+    if (!pVault) {
+      const { data: newVault, error: vErr } = await supabase
+        .from("vaults")
+        .insert({ name: "Prompt Uploads", organization_id: profile.organization_id, created_by: profile.id, description: "Auto-created vault for prompt file attachments" })
+        .select()
+        .single();
+      if (vErr || !newVault) throw new Error("Failed to create upload vault");
+      pVault = newVault;
+    }
+
+    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    const fileIds: string[] = [];
+    const fileNames: string[] = [];
+
+    for (const file of files) {
+      const fileId = crypto.randomUUID();
+      const sanitizedName = file.name.replace(/\s+/g, "_").replace(/[()]/g, "");
+      const r2Key = `${profile.organization_id}/${pVault.id}/${fileId}-${sanitizedName}`;
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("orgId", profile.organization_id);
+      formData.append("r2Key", r2Key);
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/r2-upload`,
+        { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` }, body: formData }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(err.error || "Upload failed");
+      }
+
+      const result = await response.json();
+
+      await supabase.from("files").insert({
+        id: fileId,
+        name: file.name,
+        original_name: file.name,
+        mime_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+        storage_path: result.r2_key || r2Key,
+        vault_id: pVault.id,
+        organization_id: profile.organization_id!,
+        uploaded_by: profile.id,
+        status: "processing",
+      });
+
+      // Trigger document processor (fire & forget)
+      supabase.functions.invoke("document-processor", { body: { fileId } }).catch(() => {});
+
+      fileIds.push(fileId);
+      fileNames.push(file.name);
+    }
+
+    return { fileIds, fileNames, vaultId: pVault.id };
+  };
+
   // Load conversation from URL ?id=
   useEffect(() => {
     const convId = searchParams.get("id");
