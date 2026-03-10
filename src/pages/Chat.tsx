@@ -68,6 +68,8 @@ export default function Chat() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState("");
   const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [selectedVault, setSelectedVault] = useState<{ id: string; name: string } | null>(null);
+  const [chatVaults, setChatVaults] = useState<{ id: string; name: string }[]>([]);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Load conversation from URL ?id=
