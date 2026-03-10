@@ -235,6 +235,7 @@ export default function Chat() {
       const srcs = state.activeSources || [];
       const pMode = state.promptMode;
       const wfTag = state.workflowTag || null;
+      const pendingFiles: File[] = state.attachedFiles || [];
 
       setVaultId(vault);
       setVaultName(vName);
@@ -244,7 +245,26 @@ export default function Chat() {
       setWorkflowTag(wfTag);
 
       navigate("/chat", { replace: true, state: {} });
-      createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
+
+      // If there are attached files, process them first
+      if (pendingFiles.length > 0) {
+        setIsProcessingFiles(true);
+        processAttachedFiles(pendingFiles)
+          .then(({ fileIds, fileNames, vaultId: pVaultId }) => {
+            const effectiveVault = vault || pVaultId;
+            const effectiveVaultName = vName || "Prompt Uploads";
+            setVaultId(effectiveVault);
+            setVaultName(effectiveVaultName);
+            createConversationAndSend(msg, effectiveVault, deep, srcs, pMode, effectiveVaultName, wfTag?.systemPrompt, fileIds, fileNames);
+          })
+          .catch((err) => {
+            toast({ title: "File upload failed", description: err.message, variant: "destructive" });
+            createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
+          })
+          .finally(() => setIsProcessingFiles(false));
+      } else {
+        createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
+      }
     }
   }, [location.state, profile?.organization_id]);
 
