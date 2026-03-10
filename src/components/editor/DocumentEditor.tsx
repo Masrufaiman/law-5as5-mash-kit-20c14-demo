@@ -7,18 +7,16 @@ import { cn } from "@/lib/utils";
 import ReactQuill, { Quill } from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 
-// Register custom fonts
+// Register custom fonts — use app fonts
 const Font = Quill.import("formats/font") as any;
 Font.whitelist = [
-  false, // default
+  false, // default (Instrument Sans)
   "serif",
   "monospace",
-  "inter",
+  "playfair-display",
+  "ibm-plex-mono",
   "georgia",
   "times-new-roman",
-  "courier-new",
-  "garamond",
-  "palatino",
 ];
 Quill.register(Font, true);
 
