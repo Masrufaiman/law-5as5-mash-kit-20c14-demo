@@ -228,6 +228,7 @@ export function MessageBubble({
   onRegenerate,
   onChoiceSelect,
   onDocumentOpen,
+  onSheetOpen,
   isLastAssistant,
   steps,
   isStreamingSteps,
