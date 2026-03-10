@@ -171,7 +171,7 @@ export function MentionDropdown({ query, visible, onSelect, onClose, position }:
                   <FolderOpen className="h-2.5 w-2.5" />
                   {file.vault_name}
                   {file.status === "processing" && (
-                    <span className="text-yellow-500 ml-1">· processing</span>
+                    <span className="text-warning ml-1">· processing</span>
                   )}
                 </p>
               </div>
