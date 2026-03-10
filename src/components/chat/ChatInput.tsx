@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Sparkles, Send, Plus, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, FolderOpen, Scale, Table2 } from "lucide-react";
+import { Sparkles, Send, Plus, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, FolderOpen, Scale, Table2, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -52,6 +52,11 @@ interface MentionedFile {
   name: string;
 }
 
+export interface WorkflowTag {
+  title: string;
+  systemPrompt?: string;
+}
+
 interface ChatInputProps {
   value: string;
   onChange: (val: string) => void;
@@ -67,11 +72,14 @@ interface ChatInputProps {
   onVaultSelect?: (vault: VaultItem | null) => void;
   activeSources?: string[];
   onSourceToggle?: (source: string) => void;
+  workflowTag?: WorkflowTag | null;
+  onWorkflowTagRemove?: () => void;
 }
 
 export function ChatInput({
   value, onChange, onSend, disabled, deepResearch = false, onDeepResearchChange,
   promptMode, onPromptModeChange, vaults, selectedVault, onVaultSelect, activeSources, onSourceToggle,
+  workflowTag, onWorkflowTagRemove,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { profile } = useAuth();
@@ -98,7 +106,12 @@ export function ChatInput({
   const effectiveVaults = vaults || localVaults;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (showMention) return; // let mention dropdown handle it
+    if (showMention) {
+      // Allow Enter to select from mention dropdown (handled by MentionDropdown)
+      if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Escape") {
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       onSend();
@@ -115,7 +128,6 @@ export function ChatInput({
     const atIdx = textBeforeCursor.lastIndexOf("@");
     if (atIdx !== -1) {
       const textAfterAt = textBeforeCursor.slice(atIdx + 1);
-      // Only show if no space in query (single word file search)
       if (!textAfterAt.includes(" ") || textAfterAt.length < 20) {
         setMentionQuery(textAfterAt);
         setShowMention(true);
@@ -139,7 +151,6 @@ export function ChatInput({
       if (prev.some((f) => f.id === file.id)) return prev;
       return [...prev, { id: file.id, name: file.name }];
     });
-    // Focus back
     setTimeout(() => textareaRef.current?.focus(), 0);
   }, [value, onChange]);
 
@@ -217,11 +228,24 @@ export function ChatInput({
     ? JURISDICTION_SOURCES.filter(j => j.name.toLowerCase().includes(searchFilter.toLowerCase()))
     : JURISDICTION_SOURCES;
 
+  const hasChips = mentionedFiles.length > 0 || workflowTag;
+
   return (
     <div className="border border-border rounded-lg bg-card overflow-hidden">
-      {/* Mentioned files badges */}
-      {mentionedFiles.length > 0 && (
+      {/* Mentioned files & workflow tag badges */}
+      {hasChips && (
         <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+          {workflowTag && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] py-0 px-1.5 gap-1 font-normal cursor-pointer hover:bg-destructive/20"
+              onClick={onWorkflowTagRemove}
+            >
+              <Zap className="h-2.5 w-2.5" />
+              {workflowTag.title}
+              <span className="ml-0.5 text-muted-foreground">×</span>
+            </Badge>
+          )}
           {mentionedFiles.map((f) => (
             <Badge
               key={f.id}
