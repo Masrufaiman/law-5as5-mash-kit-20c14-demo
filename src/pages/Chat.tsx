@@ -264,7 +264,7 @@ export default function Chat() {
         processAttachedFiles(pendingFiles)
           .then(({ fileIds, fileNames, vaultId: pVaultId }) => {
             const effectiveVault = vault || pVaultId;
-            const effectiveVaultName = vName || "Prompt Uploads";
+            const effectiveVaultName = vName || "Uploads";
             setVaultId(effectiveVault);
             setVaultName(effectiveVaultName);
             createConversationAndSend(msg, effectiveVault, deep, srcs, pMode, effectiveVaultName, wfTag?.systemPrompt, fileIds, fileNames);

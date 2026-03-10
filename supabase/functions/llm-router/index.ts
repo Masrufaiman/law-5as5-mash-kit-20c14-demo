@@ -953,6 +953,27 @@ ${documentEditingContext}`;
             )
           );
 
+          // Collect all tracked steps for metadata persistence
+          const collectedSteps: any[] = [];
+          // We track steps via emitStep — collect from stepStartTimes
+          for (const [name] of stepStartTimes) {
+            const start = stepStartTimes.get(name);
+            const duration = start ? `${Math.round((Date.now() - start) / 1000)}s` : undefined;
+            collectedSteps.push({ name, status: "done", duration });
+          }
+
+          const messageMetadata: any = {};
+          if (collectedSteps.length > 0) messageMetadata.frozenSteps = collectedSteps;
+          if (planSteps.length > 0) messageMetadata.frozenPlan = planSteps;
+          if (reasoningContent) messageMetadata.frozenThinkingText = reasoningContent;
+          if (followUps.length > 0) messageMetadata.followUps = followUps;
+          if (searchSourceDomains.length > 0) {
+            messageMetadata.frozenSearchSources = {
+              urls: perplexityCitations.map(c => c.url).filter(Boolean),
+              domains: [...new Set(searchSourceDomains)],
+            };
+          }
+
           // Save assistant message
           if (conversationId && conversationId !== "column-fill") {
             await adminClient.from("messages").insert({
@@ -962,6 +983,7 @@ ${documentEditingContext}`;
               content: cleanedContent,
               model_used: modelId,
               citations: uniqueCitations.length > 0 ? uniqueCitations : null,
+              metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : null,
             });
 
             const { count } = await adminClient

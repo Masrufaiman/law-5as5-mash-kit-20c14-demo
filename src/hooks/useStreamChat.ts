@@ -302,13 +302,7 @@ export function useStreamChat() {
                   )
                 );
                 setSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
-                // Persist metadata to DB
-                try {
-                  const { supabase: sb } = await import("@/integrations/supabase/client");
-                  await sb.from("messages" as any).update({
-                    metadata: frozenMeta,
-                  } as any).eq("id", assistantId);
-                } catch {}
+                // Metadata is persisted by the backend (llm-router) — no client-side update needed
               } else if (parsed.type === "error") {
                 setError(parsed.error);
               }
