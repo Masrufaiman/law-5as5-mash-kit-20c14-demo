@@ -125,14 +125,23 @@ export default function Chat() {
 
       if (msgs?.length) {
         loadHistory(
-          msgs.map((m) => ({
-            id: m.id,
-            role: m.role as "user" | "assistant",
-            content: m.content,
-            citations: (m.citations as any) || undefined,
-            model: m.model_used || undefined,
-            createdAt: new Date(m.created_at),
-          }))
+          msgs.map((m) => {
+            const meta = (m as any).metadata || {};
+            return {
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              citations: (m.citations as any) || undefined,
+              model: m.model_used || undefined,
+              followUps: meta.followUps || undefined,
+              frozenSteps: meta.frozenSteps || undefined,
+              frozenPlan: meta.frozenPlan || undefined,
+              frozenThinkingText: meta.frozenThinkingText || undefined,
+              frozenSearchSources: meta.frozenSearchSources || undefined,
+              frozenFileRefs: meta.frozenFileRefs || undefined,
+              createdAt: new Date(m.created_at),
+            };
+          })
         );
       }
     } finally {
