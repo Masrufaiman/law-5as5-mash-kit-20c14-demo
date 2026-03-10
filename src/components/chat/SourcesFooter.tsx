@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Globe, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import type { Citation } from "@/hooks/useStreamChat";
 
 interface SourcesFooterProps {
@@ -17,7 +17,6 @@ function getDomain(url: string): string {
 export function SourcesFooter({ citations }: SourcesFooterProps) {
   const [expanded, setExpanded] = useState(false);
 
-  // Only show web sources (those with URLs)
   const webSources = citations.filter((c) => c.url);
   const docSources = citations.filter((c) => !c.url);
 
@@ -39,12 +38,9 @@ export function SourcesFooter({ citations }: SourcesFooterProps) {
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors group"
       >
-        <Globe className="h-3.5 w-3.5" />
+        <BookOpen className="h-3.5 w-3.5" />
         <span>
-          {webSources.length > 0 ? "Web search" : ""}
-          {webSources.length > 0 && docSources.length > 0 ? " and " : ""}
-          {docSources.length > 0 ? "documents" : ""}
-          {" — "}
+          Sources{" — "}
           <span className="font-medium text-foreground">{totalCited} cited</span>
         </span>
         {expanded ? (

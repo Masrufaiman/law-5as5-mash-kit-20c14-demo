@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Loader2, ChevronDown, ChevronRight, Brain } from "lucide-react";
-import type { AgentStep } from "@/hooks/useStreamChat";
+import type { AgentStep, SearchSource } from "@/hooks/useStreamChat";
 import { cn } from "@/lib/utils";
 import {
   Collapsible,
@@ -12,9 +12,18 @@ interface StepTrackerProps {
   steps: AgentStep[];
   isStreaming?: boolean;
   reasoning?: string;
+  searchSources?: SearchSource | null;
 }
 
-export function StepTracker({ steps, isStreaming, reasoning }: StepTrackerProps) {
+function getDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace("www.", "");
+  } catch {
+    return url;
+  }
+}
+
+export function StepTracker({ steps, isStreaming, reasoning, searchSources }: StepTrackerProps) {
   const [open, setOpen] = useState(false);
 
   const hasSteps = steps.length > 0;
@@ -81,6 +90,28 @@ export function StepTracker({ steps, isStreaming, reasoning }: StepTrackerProps)
                   )}
                   <span>{step.name}</span>
                 </div>
+              ))}
+            </div>
+          )}
+
+          {/* Search source favicon pills */}
+          {searchSources && searchSources.domains.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 py-1.5">
+              {searchSources.domains.slice(0, 8).map((domain) => (
+                <span
+                  key={domain}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  <img
+                    src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`}
+                    alt=""
+                    className="h-3 w-3 rounded-sm"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                  <span className="truncate max-w-[100px]">{domain}</span>
+                </span>
               ))}
             </div>
           )}
