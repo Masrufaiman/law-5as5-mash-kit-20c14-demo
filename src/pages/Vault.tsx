@@ -246,7 +246,8 @@ export default function Vault() {
   const handleUpload = async (fileList: File[]) => {
     if (!profile?.organization_id || !selectedVaultId) return;
     setUploading(true);
-    setUploadProgress([]);
+    // Immediately show skeleton for ALL files before uploading
+    setUploadProgress(fileList.map(f => ({ fileName: f.name, status: "uploading" as const })));
 
     const batchSize = 3;
     for (let i = 0; i < fileList.length; i += batchSize) {

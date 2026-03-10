@@ -746,10 +746,19 @@ IMPORTANT: Output ONLY the <!-- SHEET: --> format. NEVER use markdown tables. Th
 - Do not include "---" horizontal rules or "References:" sections at the end
 - At the end of your response, suggest 3 follow-up questions the user might want to ask, each on its own line starting with ">>FOLLOWUP: "`;
 
-          // Document editing context
+          // Document editing context — also enforce version updates in drafting mode
           let documentEditingContext = "";
           if (currentDocumentContent) {
-            documentEditingContext = `\n\n## Currently Open Document\nThe user has a document open in the editor. When they ask for changes, modifications, or edits, modify ONLY the changed parts and output the COMPLETE updated document. Do NOT create a new document from scratch.\n\nCurrent document content:\n${currentDocumentContent.substring(0, 10000)}`;
+            documentEditingContext = `\n\n## Currently Open Document (VERSION UPDATE MODE)
+The user has an existing document open in the editor. You MUST:
+1. UPDATE the existing document with the requested changes — do NOT create a brand new document
+2. Output the COMPLETE updated document with "# [Same Title]" heading
+3. Preserve all existing content that the user did not ask to change
+4. Apply modifications inline where needed
+5. NEVER generate a separate/new document card — always output ONE updated document
+
+Current document content:
+${currentDocumentContent.substring(0, 10000)}`;
           }
 
           // Workflow system prompt override

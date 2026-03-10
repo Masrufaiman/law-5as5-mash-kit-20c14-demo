@@ -321,20 +321,22 @@ export default function Chat() {
 
   const handleDocumentOpen = useCallback((title: string, content: string) => {
     const container = scrollContainerRef.current;
-    const scrollTop = container?.scrollTop || 0;
+    const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+    const scrollTop = viewport?.scrollTop || 0;
 
     setEditorDoc(
       editorDoc?.title === title ? null : { title, content }
     );
 
     requestAnimationFrame(() => {
-      if (container) container.scrollTop = scrollTop;
+      if (viewport) viewport.scrollTop = scrollTop;
     });
   }, [editorDoc]);
 
   const handleSheetOpen = useCallback((data: SheetData) => {
     const container = scrollContainerRef.current;
-    const scrollTop = container?.scrollTop || 0;
+    const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+    const scrollTop = viewport?.scrollTop || 0;
     
     // If same title, merge as new version
     if (sheetDoc && sheetDoc.title === data.title && JSON.stringify(sheetDoc) !== JSON.stringify(data)) {
@@ -344,7 +346,7 @@ export default function Chat() {
     }
     setEditorDoc(null);
     requestAnimationFrame(() => {
-      if (container) container.scrollTop = scrollTop;
+      if (viewport) viewport.scrollTop = scrollTop;
     });
   }, [sheetDoc]);
 
@@ -433,10 +435,11 @@ export default function Chat() {
       data={sheetDoc}
       onClose={() => {
         const container = scrollContainerRef.current;
-        const scrollTop = container?.scrollTop || 0;
+        const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+        const scrollTop = viewport?.scrollTop || 0;
         setSheetDoc(null);
         requestAnimationFrame(() => {
-          if (container) container.scrollTop = scrollTop;
+          if (viewport) viewport.scrollTop = scrollTop;
         });
       }}
       onUpdate={(updated) => setSheetDoc(updated)}
@@ -447,10 +450,11 @@ export default function Chat() {
       content={editorDoc.content}
       onClose={() => {
         const container = scrollContainerRef.current;
-        const scrollTop = container?.scrollTop || 0;
+        const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+        const scrollTop = viewport?.scrollTop || 0;
         setEditorDoc(null);
         requestAnimationFrame(() => {
-          if (container) container.scrollTop = scrollTop;
+          if (viewport) viewport.scrollTop = scrollTop;
         });
       }}
     />
@@ -704,7 +708,7 @@ export default function Chat() {
                 value={input}
                 onChange={setInput}
                 onSend={handleSend}
-                disabled={isStreaming}
+                disabled={isStreaming || !profile?.organization_id}
                 deepResearch={deepResearch}
                 onDeepResearchChange={setDeepResearch}
                 promptMode={promptMode}

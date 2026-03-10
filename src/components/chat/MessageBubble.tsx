@@ -232,7 +232,29 @@ export function MessageBubble({
   const citations = message.citations || [];
   const followUps = message.followUps || [];
 
-  const cleanContent = !isUser ? stripCitationsBlock(message.content) : message.content;
+  // Client-side follow-up extraction fallback
+  let rawContent = message.content;
+  let extractedFollowUps: string[] = [...followUps];
+  if (!isUser && !isStreaming && extractedFollowUps.length === 0) {
+    const followUpRegex = />>FOLLOWUP:\s*(.+)/g;
+    let match;
+    while ((match = followUpRegex.exec(rawContent)) !== null) {
+      extractedFollowUps.push(match[1].trim());
+    }
+    // Also handle without >> prefix
+    const altRegex = /^FOLLOWUP:\s*(.+)/gm;
+    while ((match = altRegex.exec(rawContent)) !== null) {
+      if (!extractedFollowUps.includes(match[1].trim())) {
+        extractedFollowUps.push(match[1].trim());
+      }
+    }
+    // Strip follow-up lines from content
+    if (extractedFollowUps.length > 0) {
+      rawContent = rawContent.replace(/>>?FOLLOWUP:\s*.+/g, "").trim();
+    }
+  }
+
+  const cleanContent = !isUser ? stripCitationsBlock(rawContent) : rawContent;
 
   const alreadySelected = nextMessage?.role === "user" ? nextMessage.content : null;
 
@@ -300,8 +322,11 @@ export function MessageBubble({
     <SourcesFooter citations={citations} />
   ) : null;
 
-  const followUpSection = !isUser && !isStreaming && followUps.length > 0 && isLastAssistant && onFollowUp ? (
-    <FollowUpSuggestions suggestions={followUps} onSelect={onFollowUp} />
+  // Always show follow-ups for messages that have them; clickable only when isLastAssistant
+  const followUpSection = !isUser && !isStreaming && extractedFollowUps.length > 0 && onFollowUp ? (
+    <div className={!isLastAssistant ? "opacity-50 pointer-events-none" : ""}>
+      <FollowUpSuggestions suggestions={extractedFollowUps} onSelect={onFollowUp} />
+    </div>
   ) : null;
 
   // Markdown components with remark-gfm for proper tables

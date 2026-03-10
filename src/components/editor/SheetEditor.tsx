@@ -165,6 +165,12 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
           };
           setSheetData(updated);
           onUpdate?.(updated);
+          // Auto-save version after AI fill
+          setVersions((prev) => {
+            const newVersions = [...prev, updated];
+            setCurrentVersion(newVersions.length - 1);
+            return newVersions;
+          });
         }
       }
     } catch (err) {
