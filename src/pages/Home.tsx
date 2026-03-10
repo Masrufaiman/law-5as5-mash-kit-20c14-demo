@@ -398,7 +398,7 @@ export default function Home() {
                 {promptMode && (
                   <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
                     <Sparkles className="h-2.5 w-2.5" />
-                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Document Drafting" : "Chat Mode"}
+                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Document Drafting" : promptMode === "review" ? "Review Table" : "Chat Mode"}
                     <button onClick={() => setPromptMode(undefined)} className="ml-0.5">
                       <X className="h-2 w-2" />
                     </button>
