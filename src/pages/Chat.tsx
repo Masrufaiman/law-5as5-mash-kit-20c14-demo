@@ -708,7 +708,7 @@ export default function Chat() {
                 value={input}
                 onChange={setInput}
                 onSend={handleSend}
-                disabled={isStreaming}
+                disabled={isStreaming || !profile?.organization_id}
                 deepResearch={deepResearch}
                 onDeepResearchChange={setDeepResearch}
                 promptMode={promptMode}

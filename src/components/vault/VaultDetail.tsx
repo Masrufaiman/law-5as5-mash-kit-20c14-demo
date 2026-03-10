@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { ArrowLeft, Search, Upload, Filter, FileText, MoreHorizontal, Pencil, Trash2, Eye, X, Download, Share2, Users } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

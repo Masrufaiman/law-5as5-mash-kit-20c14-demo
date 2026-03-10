@@ -145,7 +145,8 @@ export function StepTracker({
       {hasPlan && (
         <div className="space-y-1 ml-1">
           {plan.map((item, i) => {
-            const done = isPlanStepDone(item, steps);
+            // When all steps are done and not streaming, mark all plan items as done
+            const done = (allDone && !isStreaming) || isPlanStepDone(item, steps);
             return (
               <div
                 key={i}

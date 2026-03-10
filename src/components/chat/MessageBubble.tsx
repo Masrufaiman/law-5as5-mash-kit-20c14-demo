@@ -322,8 +322,11 @@ export function MessageBubble({
     <SourcesFooter citations={citations} />
   ) : null;
 
-  const followUpSection = !isUser && !isStreaming && followUps.length > 0 && isLastAssistant && onFollowUp ? (
-    <FollowUpSuggestions suggestions={followUps} onSelect={onFollowUp} />
+  // Always show follow-ups for messages that have them; clickable only when isLastAssistant
+  const followUpSection = !isUser && !isStreaming && extractedFollowUps.length > 0 && onFollowUp ? (
+    <div className={!isLastAssistant ? "opacity-50 pointer-events-none" : ""}>
+      <FollowUpSuggestions suggestions={extractedFollowUps} onSelect={onFollowUp} />
+    </div>
   ) : null;
 
   // Markdown components with remark-gfm for proper tables

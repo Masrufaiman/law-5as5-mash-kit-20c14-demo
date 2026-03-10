@@ -82,12 +82,16 @@ export function NavigationSidebar() {
     setIsLoadingVaults(true);
     setIsLoadingChats(true);
 
-    supabase
-      .from("vaults")
-      .select("id, name")
-      .eq("organization_id", profile.organization_id)
-      .order("created_at")
-      .then(({ data }) => { setVaults(data || []); setIsLoadingVaults(false); });
+    const loadVaults = () => {
+      supabase
+        .from("vaults")
+        .select("id, name")
+        .eq("organization_id", profile.organization_id!)
+        .order("created_at")
+        .then(({ data }) => { setVaults(data || []); setIsLoadingVaults(false); });
+    };
+
+    loadVaults();
 
     supabase
       .from("conversations")
@@ -96,6 +100,16 @@ export function NavigationSidebar() {
       .order("updated_at", { ascending: false })
       .limit(20)
       .then(({ data }) => { setRecentChats(data || []); setIsLoadingChats(false); });
+
+    // Realtime subscription for vault changes (rename/delete/create)
+    const vaultChannel = supabase
+      .channel("sidebar-vaults")
+      .on("postgres_changes", { event: "*", schema: "public", table: "vaults" }, () => {
+        loadVaults();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(vaultChannel); };
   }, [profile?.organization_id]);
 
   useEffect(() => {
