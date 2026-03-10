@@ -430,6 +430,9 @@ serve(async (req) => {
           let customPrompt = "";
           if (effectiveMode && agentConf.prompts?.[effectiveMode]) {
             customPrompt = agentConf.prompts[effectiveMode];
+          } else if (effectiveMode === "review") {
+            // Built-in review mode prompt
+            customPrompt = "";
           } else {
             customPrompt = agentConf.prompts?.chat || "";
           }
