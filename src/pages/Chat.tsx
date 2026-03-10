@@ -520,23 +520,43 @@ export default function Chat() {
     toast({ title: "Exported", description: "Conversation downloaded as Markdown" });
   };
 
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareEmails, setShareEmails] = useState("");
+  const [isSharingLoading, setIsSharingLoading] = useState(false);
+
   const handleShare = async () => {
     if (!conversationId) return;
+    setShowShareDialog(true);
+  };
 
-    const token = crypto.randomUUID();
-    const { error: shareErr } = await supabase
-      .from("conversations")
-      .update({ share_token: token, is_public: true })
-      .eq("id", conversationId);
+  const handleShareSubmit = async () => {
+    if (!conversationId || !shareEmails.trim()) return;
+    setIsSharingLoading(true);
+    try {
+      const emails = shareEmails.split(/[,;\n]+/).map(e => e.trim().toLowerCase()).filter(Boolean);
+      if (emails.length === 0) return;
 
-    if (shareErr) {
-      toast({ title: "Error", description: "Failed to share conversation", variant: "destructive" });
-      return;
+      const inserts = emails.map(email => ({
+        conversation_id: conversationId,
+        shared_with_email: email,
+        shared_by: profile?.id,
+      }));
+
+      const { error: shareErr } = await supabase
+        .from("conversation_shares" as any)
+        .upsert(inserts as any, { onConflict: "conversation_id,shared_with_email" });
+
+      if (shareErr) {
+        toast({ title: "Error", description: shareErr.message, variant: "destructive" });
+        return;
+      }
+
+      toast({ title: "Shared!", description: `Conversation shared with ${emails.length} user${emails.length > 1 ? 's' : ''}` });
+      setShareEmails("");
+      setShowShareDialog(false);
+    } finally {
+      setIsSharingLoading(false);
     }
-
-    const shareUrl = `${window.location.origin}/shared/${token}`;
-    await navigator.clipboard.writeText(shareUrl);
-    toast({ title: "Link copied!", description: "Public share link copied to clipboard" });
   };
 
   const allCitations: Citation[] = messages
