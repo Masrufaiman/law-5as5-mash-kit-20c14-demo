@@ -642,6 +642,8 @@ If you cannot determine a value from the document content, use "N/A". Be concise
             customPrompt = agentConf.prompts[effectiveMode];
           } else if (effectiveMode === "review") {
             customPrompt = "";
+          } else if (effectiveMode === "drafting") {
+            customPrompt = "";
           } else {
             customPrompt = agentConf.prompts?.chat || "";
           }
