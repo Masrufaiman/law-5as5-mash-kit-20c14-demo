@@ -650,6 +650,20 @@ If you cannot determine a value from the document content, use "N/A". Be concise
 
           const personalizationContext = `\n\n## User & Organization Context\n- Organization: ${orgData?.name || "Unknown"}\n- User: ${profile.full_name || profile.email || "Unknown"}\n- Email: ${profile.email || "Unknown"}\n`;
 
+          const draftingModePrompt = effectiveMode === "drafting" ? `
+You are LawKit AI, an expert legal document drafting assistant.
+
+CRITICAL RULES:
+- You MUST generate a complete, properly formatted legal document. NEVER output JSON, extraction data, or structured data objects.
+- Start with "# [Document Title]" followed by the full document body.
+- Use proper legal document formatting: numbered sections, subsections, defined terms in bold, signature blocks.
+- Fill in ALL details using the user's provided information and the organization context. NEVER use placeholder text like [Party Name], [Date], etc.
+- If a detail is not provided, use reasonable professional defaults or omit the clause with a note.
+- Include all standard clauses expected for the document type (e.g., for NDA: definitions, obligations, exclusions, term, remedies, governing law, signatures).
+- Use the organization name and user details from the context to personalize the document.
+- At the end, suggest 3 follow-up questions starting with ">>FOLLOWUP: "
+` : "";
+
           const reviewModePrompt = effectiveMode === "review" ? `
 You are LawKit AI, an expert legal data extraction assistant.
 
