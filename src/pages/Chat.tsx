@@ -567,7 +567,8 @@ export default function Chat() {
                   const nextMsg = messages[i + 1] || undefined;
 
                   // Only pass steps to the last assistant message
-                  const showSteps = msg.role === "assistant" && i === messages.length - 1;
+                    const showSteps = msg.role === "assistant" && i === messages.length - 1;
+                    const showSearchSources = showSteps ? searchSources : undefined;
 
                   return (
                     <div key={msg.id}>
