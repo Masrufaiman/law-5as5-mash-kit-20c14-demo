@@ -320,6 +320,16 @@ export default function Chat() {
     });
   }, [editorDoc]);
 
+  const handleSheetOpen = useCallback((data: SheetData) => {
+    const container = scrollContainerRef.current;
+    const scrollTop = container?.scrollTop || 0;
+    setSheetDoc(sheetDoc?.title === data.title ? null : data);
+    setEditorDoc(null);
+    requestAnimationFrame(() => {
+      if (container) container.scrollTop = scrollTop;
+    });
+  }, [sheetDoc]);
+
   const handleRegenerate = () => {
     if (!lastStreamOptions.current || isStreaming) return;
     regenerateLastMessage(lastStreamOptions.current);
