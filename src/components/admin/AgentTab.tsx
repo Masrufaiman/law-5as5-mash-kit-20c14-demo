@@ -287,6 +287,7 @@ export function AgentTab({ orgId }: AgentTabProps) {
 
         {/* Workflows */}
         <TabsContent value="workflows" className="space-y-4">
+          <AdminAIWorkflowBuilder orgId={orgId} workflows={workflows} setWorkflows={setWorkflows} />
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-foreground">Workflow Templates</p>
