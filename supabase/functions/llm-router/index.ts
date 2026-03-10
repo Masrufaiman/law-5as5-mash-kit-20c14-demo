@@ -430,11 +430,40 @@ serve(async (req) => {
           let customPrompt = "";
           if (effectiveMode && agentConf.prompts?.[effectiveMode]) {
             customPrompt = agentConf.prompts[effectiveMode];
+          } else if (effectiveMode === "review") {
+            // Built-in review mode prompt
+            customPrompt = "";
           } else {
             customPrompt = agentConf.prompts?.chat || "";
           }
 
           const personalizationContext = `\n\n## User & Organization Context\n- Organization: ${orgData?.name || "Unknown"}\n- User: ${profile.full_name || profile.email || "Unknown"}\n- Email: ${profile.email || "Unknown"}\n`;
+
+          const reviewModePrompt = effectiveMode === "review" ? `
+You are LawKit AI, an expert legal data extraction assistant. When the user asks you to create a review table or extract structured data:
+
+1. Analyze the user's request to understand what columns they want
+2. Extract data from the provided documents/sources
+3. Output the result using this EXACT format:
+
+<!-- SHEET: [Title of the review table] -->
+\`\`\`json
+{
+  "columns": [
+    {"name": "Column Name", "type": "free_response", "query": "What this column extracts"},
+    {"name": "Date", "type": "date", "query": "Extract the relevant date"}
+  ],
+  "rows": [
+    {"fileName": "document1.pdf", "fileId": "optional-id", "status": "completed", "values": {"Column Name": "extracted value", "Date": "2024-01-15"}},
+    {"fileName": "document2.pdf", "status": "completed", "values": {"Column Name": "value", "Date": "2024-03-20"}}
+  ]
+}
+\`\`\`
+
+Column types: "free_response", "date", "classification", "verbatim", "number"
+
+ALWAYS use this exact format so the frontend can render the interactive spreadsheet. Include a brief intro message before the sheet block explaining what you extracted.
+` : "";
 
           const basePrompt = customPrompt || `You are LawKit AI, an expert legal research and drafting assistant. You provide accurate, well-reasoned legal analysis with proper citations.
 
@@ -472,7 +501,7 @@ serve(async (req) => {
 - Do not include "---" horizontal rules or "References:" sections at the end
 - At the end of your response, suggest 3 follow-up questions the user might want to ask, each on its own line starting with ">>FOLLOWUP: "`;
 
-          const systemPrompt = `${basePrompt}
+          const systemPrompt = `${reviewModePrompt || basePrompt}
 ${personalizationContext}
 ${knowledgeContext}
 ${ragContext || vaultContext}

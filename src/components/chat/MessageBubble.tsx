@@ -12,8 +12,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Bot, Copy, Pencil, Database, Paperclip } from "lucide-react";
+import { FileText, Bot, Copy, Pencil, Database, Paperclip, Table2 } from "lucide-react";
 import type { ChatMessage, Citation, AgentStep, SearchSource } from "@/hooks/useStreamChat";
+import type { SheetData } from "@/components/editor/SheetEditor";
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -22,6 +23,7 @@ interface MessageBubbleProps {
   onRegenerate?: () => void;
   onChoiceSelect?: (text: string) => void;
   onDocumentOpen?: (title: string, content: string) => void;
+  onSheetOpen?: (data: SheetData) => void;
   isLastAssistant?: boolean;
   steps?: AgentStep[];
   isStreamingSteps?: boolean;
@@ -176,6 +178,8 @@ function stripCitationsBlock(content: string): string {
 
 /** Detect if content is a document/draft (heading + long content, or bold ALL-CAPS title) */
 function detectDocument(content: string): { title: string } | null {
+  // Don't detect as document if it's a sheet
+  if (content.includes("<!-- SHEET:")) return null;
   const headingMatch = content.match(/^#\s+(.+)/m) || content.match(/^##\s+(.+)/m);
   if (headingMatch && content.length > 500) return { title: headingMatch[1] };
 
@@ -183,6 +187,22 @@ function detectDocument(content: string): { title: string } | null {
   if (boldMatch && content.length > 500) return { title: boldMatch[1] };
 
   return null;
+}
+
+/** Detect sheet pattern <!-- SHEET: Title --> followed by JSON block */
+function detectSheet(content: string): SheetData | null {
+  const match = content.match(/<!--\s*SHEET:\s*(.+?)\s*-->\s*```json\s*([\s\S]*?)```/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[2]);
+    return {
+      title: match[1].trim(),
+      columns: parsed.columns || [],
+      rows: parsed.rows || [],
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Agent avatar component */
@@ -208,6 +228,7 @@ export function MessageBubble({
   onRegenerate,
   onChoiceSelect,
   onDocumentOpen,
+  onSheetOpen,
   isLastAssistant,
   steps,
   isStreamingSteps,
@@ -239,6 +260,9 @@ export function MessageBubble({
 
   // Detect document patterns
   const docInfo = !isUser && !isStreaming ? detectDocument(cleanContent) : null;
+
+  // Detect sheet patterns
+  const sheetInfo = !isUser && !isStreaming ? detectSheet(cleanContent) : null;
 
   // Build custom components that inject inline citation popovers
   const citeComponents = React.useMemo(() => {
@@ -289,6 +313,40 @@ export function MessageBubble({
   const followUpSection = !isUser && !isStreaming && followUps.length > 0 && isLastAssistant && onFollowUp ? (
     <FollowUpSuggestions suggestions={followUps} onSelect={onFollowUp} />
   ) : null;
+
+  // Render sheet as compact card
+  if (sheetInfo && onSheetOpen) {
+    return (
+      <div className="group">
+        <div className="flex items-center gap-2 mb-2">
+          <AgentAvatar isUser={false} />
+          <span className="text-xs font-semibold text-foreground">LawKit AI</span>
+        </div>
+        <div className="pl-8 space-y-3">
+          {stepsSection}
+          <Card
+            className="cursor-pointer border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-all duration-200 p-0"
+            onClick={() => onSheetOpen(sheetInfo)}
+          >
+            <div className="flex items-center gap-3 p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-chart-3/10">
+                <Table2 className="h-4 w-4 text-chart-3" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{sheetInfo.title}</p>
+                <p className="text-xs text-muted-foreground">{sheetInfo.columns.length} columns · {sheetInfo.rows.length} rows — Click to open</p>
+              </div>
+            </div>
+          </Card>
+          {sourcesFooter}
+          {followUpSection}
+          {!isStreaming && cleanContent && (
+            <ResponseActions content={cleanContent} messageId={message.id} onRegenerate={onRegenerate} />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Render document as compact card instead of full content
   if (docInfo && onDocumentOpen) {

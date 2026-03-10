@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Sparkles, Send, Plus, Zap, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, Upload, FolderOpen, Scale, BookOpen } from "lucide-react";
+import { Sparkles, Send, Plus, Zap, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, Upload, FolderOpen, Scale, BookOpen, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -14,6 +14,7 @@ const PROMPT_MODES = [
   { id: "chat", label: "Chat / Research", description: "Ask questions, analyze documents, research topics", icon: MessageSquare },
   { id: "drafting", label: "Draft Document", description: "Generate contracts, memos, briefs, and legal documents", icon: FileText },
   { id: "red_flags", label: "Red Flag Detection", description: "Identify risks, compliance issues, and red flags", icon: AlertTriangle },
+  { id: "review", label: "Review Table", description: "Extract structured data from documents into a spreadsheet", icon: Table2 },
 ];
 
 const JURISDICTION_SOURCES = [

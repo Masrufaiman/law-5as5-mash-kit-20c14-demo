@@ -398,7 +398,7 @@ export default function Home() {
                 {promptMode && (
                   <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
                     <Sparkles className="h-2.5 w-2.5" />
-                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Document Drafting" : "Chat Mode"}
+                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Document Drafting" : promptMode === "review" ? "Review Table" : "Chat Mode"}
                     <button onClick={() => setPromptMode(undefined)} className="ml-0.5">
                       <X className="h-2 w-2" />
                     </button>
@@ -522,8 +522,8 @@ export default function Home() {
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground">
-                    {promptMode === "red_flags" ? <AlertTriangle className="h-3.5 w-3.5" /> : promptMode === "drafting" ? <FileText className="h-3.5 w-3.5" /> : <Scale className="h-3.5 w-3.5" />}
-                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Draft Document" : "Chat / Research"}
+                    {promptMode === "red_flags" ? <AlertTriangle className="h-3.5 w-3.5" /> : promptMode === "drafting" ? <FileText className="h-3.5 w-3.5" /> : promptMode === "review" ? <ListChecks className="h-3.5 w-3.5" /> : <Scale className="h-3.5 w-3.5" />}
+                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Draft Document" : promptMode === "review" ? "Review Table" : "Chat / Research"}
                     <ChevronRight className="h-2.5 w-2.5" />
                   </Button>
                 </PopoverTrigger>
@@ -532,6 +532,7 @@ export default function Home() {
                     { id: "chat", label: "Chat / Research", description: "Ask questions, analyze documents, research topics", icon: Scale },
                     { id: "drafting", label: "Draft Document", description: "Generate contracts, memos, briefs, and legal documents", icon: FileText },
                     { id: "red_flags", label: "Red Flag Detection", description: "Identify risks, compliance issues, and red flags", icon: AlertTriangle },
+                    { id: "review", label: "Review Table", description: "Extract structured data from documents into a spreadsheet", icon: ListChecks },
                   ].map((mode) => (
                     <button
                       key={mode.id}
@@ -603,15 +604,7 @@ export default function Home() {
                 <button
                   key={wf.title}
                   className="flex items-start gap-3 rounded-lg border border-border p-3.5 text-left hover:bg-muted/50 transition-colors group"
-                  onClick={() => {
-                    navigate("/chat", {
-                      state: {
-                        initialMessage: wf.description,
-                        deepResearch,
-                        activeSources,
-                      },
-                    });
-                  }}
+                  onClick={() => setMessage(wf.description)}
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-secondary text-primary shrink-0">
                     <wf.icon className="h-4 w-4" />

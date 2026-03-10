@@ -181,7 +181,6 @@ export function NavigationSidebar() {
   const orgName = profile?.full_name?.split(" ")[0] || "LawKit";
 
   const bottomNav = [
-    { icon: Table2, label: "Review", path: "/review" },
     { icon: FileText, label: "Documents", path: "/documents" },
     { icon: Clock, label: "History", path: "/history" },
     { icon: BookOpen, label: "Library", path: "/library" },

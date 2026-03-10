@@ -7,6 +7,8 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { SourcesPanel } from "@/components/chat/SourcesPanel";
 import { DocumentEditor } from "@/components/editor/DocumentEditor";
+import { SheetEditor } from "@/components/editor/SheetEditor";
+import type { SheetData } from "@/components/editor/SheetEditor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -65,6 +67,7 @@ export default function Chat() {
   const [activeSources, setActiveSources] = useState<string[]>([]);
   const [promptMode, setPromptMode] = useState<string | undefined>();
   const [editorDoc, setEditorDoc] = useState<{ title: string; content: string } | null>(null);
+  const [sheetDoc, setSheetDoc] = useState<SheetData | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState("");
   const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
@@ -317,6 +320,16 @@ export default function Chat() {
     });
   }, [editorDoc]);
 
+  const handleSheetOpen = useCallback((data: SheetData) => {
+    const container = scrollContainerRef.current;
+    const scrollTop = container?.scrollTop || 0;
+    setSheetDoc(sheetDoc?.title === data.title ? null : data);
+    setEditorDoc(null);
+    requestAnimationFrame(() => {
+      if (container) container.scrollTop = scrollTop;
+    });
+  }, [sheetDoc]);
+
   const handleRegenerate = () => {
     if (!lastStreamOptions.current || isStreaming) return;
     regenerateLastMessage(lastStreamOptions.current);
@@ -327,6 +340,7 @@ export default function Chat() {
     setConversationTitle("New Conversation");
     setPromptMode(undefined);
     setEditorDoc(null);
+    setSheetDoc(null);
     initialMessageSentRef.current = false;
     clearMessages();
     navigate("/chat", { replace: true });
@@ -402,7 +416,20 @@ export default function Chat() {
   const lastMsg = messages[messages.length - 1];
   const showStreamingIndicator = isStreaming && lastMsg?.role === "user";
 
-  const rightPanel = editorDoc ? (
+  const rightPanel = sheetDoc ? (
+    <SheetEditor
+      data={sheetDoc}
+      onClose={() => {
+        const container = scrollContainerRef.current;
+        const scrollTop = container?.scrollTop || 0;
+        setSheetDoc(null);
+        requestAnimationFrame(() => {
+          if (container) container.scrollTop = scrollTop;
+        });
+      }}
+      onUpdate={(updated) => setSheetDoc(updated)}
+    />
+  ) : editorDoc ? (
     <DocumentEditor
       title={editorDoc.title}
       content={editorDoc.content}
@@ -457,7 +484,7 @@ export default function Chat() {
               )}
               {promptMode && (
                 <Badge variant="secondary" className="text-[9px] py-0 px-1.5">
-                  {promptMode === "red_flags" ? "Red Flag" : promptMode === "drafting" ? "Drafting" : "Chat"}
+                  {promptMode === "red_flags" ? "Red Flag" : promptMode === "drafting" ? "Drafting" : promptMode === "review" ? "Review Table" : "Chat"}
                 </Badge>
               )}
             </div>
@@ -596,6 +623,7 @@ export default function Chat() {
                         onRegenerate={msg.role === "assistant" ? handleRegenerate : undefined}
                         onChoiceSelect={handleChoiceSelect}
                         onDocumentOpen={handleDocumentOpen}
+                        onSheetOpen={handleSheetOpen}
                         isLastAssistant={isLastAssistant}
                         steps={showSteps ? steps : undefined}
                         isStreamingSteps={isStreaming}
