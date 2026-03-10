@@ -561,3 +561,96 @@ export function AgentTab({ orgId }: AgentTabProps) {
     </div>
   );
 }
+
+function AdminAIWorkflowBuilder({ orgId, workflows, setWorkflows }: { orgId: string; workflows: WorkflowConfig[]; setWorkflows: (wfs: WorkflowConfig[]) => void }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [desc, setDesc] = useState("");
+  const [building, setBuilding] = useState(false);
+
+  const handleBuild = async () => {
+    if (!desc.trim()) return;
+    setBuilding(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Not authenticated");
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            conversationId: "",
+            message: `Create a workflow based on this description. Return ONLY valid JSON with this exact format, no other text:\n{"title":"short title","description":"1-2 sentence description","type":"Draft|Review|Output","steps":3,"icon":"FileText","systemPrompt":"detailed system prompt for the AI"}\n\nUser description: "${desc}"`,
+            history: [],
+            useCase: "workflow_builder",
+          }),
+        }
+      );
+      if (!resp.ok) throw new Error("Failed to build workflow");
+
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let result = "";
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buffer.indexOf("\n")) !== -1) {
+          let line = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          try { const p = JSON.parse(jsonStr); if (p.type === "token") result += p.content; } catch {}
+        }
+      }
+
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Invalid response");
+      const wf = JSON.parse(jsonMatch[0]);
+      const newWf: WorkflowConfig = { id: crypto.randomUUID(), title: wf.title || "", description: wf.description || "", type: wf.type || "Workflow", steps: wf.steps || 3, icon: wf.icon || "FileText", systemPrompt: wf.systemPrompt || "" };
+      setWorkflows([...workflows, newWf]);
+      toast({ title: "Workflow created", description: newWf.title });
+      setOpen(false);
+      setDesc("");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setBuilding(false);
+    }
+  };
+
+  return (
+    <>
+      <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={() => setOpen(true)}>
+        <Sparkles className="h-3 w-3" /> AI Build Workflow
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              AI Workflow Builder
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Describe the workflow and AI will generate it.</p>
+            <Textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="e.g., A workflow to review NDAs and extract key terms..." className="min-h-[120px] text-sm" rows={5} />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleBuild} disabled={!desc.trim() || building}>
+              {building ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Building...</> : <><Sparkles className="h-3.5 w-3.5 mr-1.5" />Build</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
