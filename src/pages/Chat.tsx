@@ -321,14 +321,15 @@ export default function Chat() {
 
   const handleDocumentOpen = useCallback((title: string, content: string) => {
     const container = scrollContainerRef.current;
-    const scrollTop = container?.scrollTop || 0;
+    const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+    const scrollTop = viewport?.scrollTop || 0;
 
     setEditorDoc(
       editorDoc?.title === title ? null : { title, content }
     );
 
     requestAnimationFrame(() => {
-      if (container) container.scrollTop = scrollTop;
+      if (viewport) viewport.scrollTop = scrollTop;
     });
   }, [editorDoc]);
 
