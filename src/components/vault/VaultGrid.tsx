@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { FolderOpen, BookOpen, Search, Plus, Shield, FileText, MessageSquare } from "lucide-react";
+import { FolderOpen, BookOpen, Search, Plus, Shield, FileText, MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Tables } from "@/integrations/supabase/types";
@@ -23,18 +24,25 @@ interface VaultGridProps {
   fileCounts: Record<string, number>;
   onSelectVault: (id: string) => void;
   onCreateVault: (name: string, description: string) => void;
+  onDeleteVault?: (id: string) => void;
+  onRenameVault?: (id: string, name: string) => void;
+  userId?: string;
 }
 
-export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault }: VaultGridProps) {
+export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault, onDeleteVault, onRenameVault, userId }: VaultGridProps) {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"all" | "yours">("all");
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameName, setRenameName] = useState("");
 
-  const filtered = vaults.filter((v) =>
-    v.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = vaults
+    .filter((v) => {
+      if (tab === "yours" && userId && v.created_by !== userId) return false;
+      return v.name.toLowerCase().includes(search.toLowerCase());
+    });
 
   const handleCreate = () => {
     if (!newName.trim()) return;
@@ -42,6 +50,13 @@ export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault }: 
     setNewName("");
     setNewDesc("");
     setShowCreate(false);
+  };
+
+  const handleRename = (id: string) => {
+    if (!renameName.trim() || !onRenameVault) return;
+    onRenameVault(id, renameName.trim());
+    setRenameId(null);
+    setRenameName("");
   };
 
   return (
@@ -134,12 +149,38 @@ export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault }: 
         </div>
       </div>
 
+      {/* Rename dialog */}
+      <Dialog open={!!renameId} onOpenChange={(open) => !open && setRenameId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Vault</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                value={renameName}
+                onChange={(e) => setRenameName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && renameId) handleRename(renameId); }}
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRenameId(null)}>Cancel</Button>
+              <Button onClick={() => renameId && handleRename(renameId)} disabled={!renameName.trim()}>Save</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Vault grid */}
       <div className="flex-1 overflow-auto px-8 py-6">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-center">
             <FolderOpen className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium text-foreground">No vaults yet</p>
+            <p className="font-medium text-foreground">
+              {tab === "yours" ? "You haven't created any vaults" : "No vaults yet"}
+            </p>
             <p className="text-sm text-muted-foreground mt-1">Create a vault to get started</p>
           </div>
         ) : (
@@ -147,12 +188,37 @@ export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault }: 
             {filtered.map((vault, i) => (
               <Card
                 key={vault.id}
-                className="border border-border hover:border-primary/30 cursor-pointer transition-all group overflow-hidden"
+                className="border border-border hover:border-primary/30 cursor-pointer transition-all group overflow-hidden relative"
                 onClick={() => onSelectVault(vault.id)}
               >
                 {/* Gradient header area */}
-                <div className={`h-20 bg-gradient-to-br ${VAULT_GRADIENTS[i % VAULT_GRADIENTS.length]} flex items-center justify-center`}>
+                <div className={`h-20 bg-gradient-to-br ${VAULT_GRADIENTS[i % VAULT_GRADIENTS.length]} flex items-center justify-center relative`}>
                   <FolderOpen className="h-8 w-8 text-muted-foreground/40" />
+                  {(onDeleteVault || onRenameVault) && (
+                    <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 bg-background/80 hover:bg-background">
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          {onRenameVault && (
+                            <DropdownMenuItem onClick={() => { setRenameId(vault.id); setRenameName(vault.name); }}>
+                              <Pencil className="h-3.5 w-3.5 mr-2" />
+                              Rename
+                            </DropdownMenuItem>
+                          )}
+                          {onDeleteVault && (
+                            <DropdownMenuItem className="text-destructive" onClick={() => onDeleteVault(vault.id)}>
+                              <Trash2 className="h-3.5 w-3.5 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
                 </div>
                 <CardContent className="pt-3 pb-3 px-3">
                   <p className="font-medium text-foreground text-sm truncate">{vault.name}</p>
