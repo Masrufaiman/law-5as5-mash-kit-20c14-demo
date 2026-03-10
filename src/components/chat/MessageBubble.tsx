@@ -314,6 +314,40 @@ export function MessageBubble({
     <FollowUpSuggestions suggestions={followUps} onSelect={onFollowUp} />
   ) : null;
 
+  // Render sheet as compact card
+  if (sheetInfo && onSheetOpen) {
+    return (
+      <div className="group">
+        <div className="flex items-center gap-2 mb-2">
+          <AgentAvatar isUser={false} />
+          <span className="text-xs font-semibold text-foreground">LawKit AI</span>
+        </div>
+        <div className="pl-8 space-y-3">
+          {stepsSection}
+          <Card
+            className="cursor-pointer border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-all duration-200 p-0"
+            onClick={() => onSheetOpen(sheetInfo)}
+          >
+            <div className="flex items-center gap-3 p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-chart-3/10">
+                <Table2 className="h-4 w-4 text-chart-3" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{sheetInfo.title}</p>
+                <p className="text-xs text-muted-foreground">{sheetInfo.columns.length} columns · {sheetInfo.rows.length} rows — Click to open</p>
+              </div>
+            </div>
+          </Card>
+          {sourcesFooter}
+          {followUpSection}
+          {!isStreaming && cleanContent && (
+            <ResponseActions content={cleanContent} messageId={message.id} onRegenerate={onRegenerate} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Render document as compact card instead of full content
   if (docInfo && onDocumentOpen) {
     return (
