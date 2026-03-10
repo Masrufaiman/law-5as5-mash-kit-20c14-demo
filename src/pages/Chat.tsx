@@ -14,6 +14,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import type { Citation } from "@/hooks/useStreamChat";
@@ -31,6 +40,9 @@ import {
   X,
   Pencil,
   Reply,
+  Loader2,
+  Mail,
+  Trash2,
 } from "lucide-react";
 
 export default function Chat() {
@@ -97,22 +109,34 @@ export default function Chat() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error("Not authenticated");
 
-    // Find or create a "Prompt Uploads" vault
+    // Find or create an "Uploads" vault
     let { data: pVault } = await supabase
       .from("vaults")
       .select("id")
       .eq("organization_id", profile.organization_id)
-      .eq("name", "Prompt Uploads")
+      .eq("name", "Uploads")
       .maybeSingle();
 
     if (!pVault) {
-      const { data: newVault, error: vErr } = await supabase
+      // Also check for legacy name
+      const { data: legacyVault } = await supabase
         .from("vaults")
-        .insert({ name: "Prompt Uploads", organization_id: profile.organization_id, created_by: profile.id, description: "Auto-created vault for prompt file attachments" })
-        .select()
-        .single();
-      if (vErr || !newVault) throw new Error("Failed to create upload vault");
-      pVault = newVault;
+        .select("id")
+        .eq("organization_id", profile.organization_id)
+        .eq("name", "Prompt Uploads")
+        .maybeSingle();
+      
+      if (legacyVault) {
+        pVault = legacyVault;
+      } else {
+        const { data: newVault, error: vErr } = await supabase
+          .from("vaults")
+          .insert({ name: "Uploads", organization_id: profile.organization_id, created_by: profile.id, description: "Default vault for uploaded documents" })
+          .select()
+          .single();
+        if (vErr || !newVault) throw new Error("Failed to create upload vault");
+        pVault = newVault;
+      }
     }
 
     const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
@@ -252,7 +276,7 @@ export default function Chat() {
         processAttachedFiles(pendingFiles)
           .then(({ fileIds, fileNames, vaultId: pVaultId }) => {
             const effectiveVault = vault || pVaultId;
-            const effectiveVaultName = vName || "Prompt Uploads";
+            const effectiveVaultName = vName || "Uploads";
             setVaultId(effectiveVault);
             setVaultName(effectiveVaultName);
             createConversationAndSend(msg, effectiveVault, deep, srcs, pMode, effectiveVaultName, wfTag?.systemPrompt, fileIds, fileNames);
@@ -508,23 +532,43 @@ export default function Chat() {
     toast({ title: "Exported", description: "Conversation downloaded as Markdown" });
   };
 
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareEmails, setShareEmails] = useState("");
+  const [isSharingLoading, setIsSharingLoading] = useState(false);
+
   const handleShare = async () => {
     if (!conversationId) return;
+    setShowShareDialog(true);
+  };
 
-    const token = crypto.randomUUID();
-    const { error: shareErr } = await supabase
-      .from("conversations")
-      .update({ share_token: token, is_public: true })
-      .eq("id", conversationId);
+  const handleShareSubmit = async () => {
+    if (!conversationId || !shareEmails.trim()) return;
+    setIsSharingLoading(true);
+    try {
+      const emails = shareEmails.split(/[,;\n]+/).map(e => e.trim().toLowerCase()).filter(Boolean);
+      if (emails.length === 0) return;
 
-    if (shareErr) {
-      toast({ title: "Error", description: "Failed to share conversation", variant: "destructive" });
-      return;
+      const inserts = emails.map(email => ({
+        conversation_id: conversationId,
+        shared_with_email: email,
+        shared_by: profile?.id,
+      }));
+
+      const { error: shareErr } = await supabase
+        .from("conversation_shares" as any)
+        .upsert(inserts as any, { onConflict: "conversation_id,shared_with_email" });
+
+      if (shareErr) {
+        toast({ title: "Error", description: shareErr.message, variant: "destructive" });
+        return;
+      }
+
+      toast({ title: "Shared!", description: `Conversation shared with ${emails.length} user${emails.length > 1 ? 's' : ''}` });
+      setShareEmails("");
+      setShowShareDialog(false);
+    } finally {
+      setIsSharingLoading(false);
     }
-
-    const shareUrl = `${window.location.origin}/shared/${token}`;
-    await navigator.clipboard.writeText(shareUrl);
-    toast({ title: "Link copied!", description: "Public share link copied to clipboard" });
   };
 
   const allCitations: Citation[] = messages
@@ -843,6 +887,46 @@ export default function Chat() {
           />
         )}
       </div>
+
+      {/* Share Dialog */}
+      <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share className="h-4 w-4" />
+              Share Conversation
+            </DialogTitle>
+            <DialogDescription>
+              Enter email addresses to share this conversation. Users will see it in their recent chats.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Textarea
+              placeholder="Enter emails separated by commas or new lines..."
+              value={shareEmails}
+              onChange={(e) => setShareEmails(e.target.value)}
+              className="min-h-[80px] text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Shared users can view this conversation and its messages.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowShareDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleShareSubmit}
+              disabled={!shareEmails.trim() || isSharingLoading}
+              className="gap-1.5"
+            >
+              {isSharingLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+              Share
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

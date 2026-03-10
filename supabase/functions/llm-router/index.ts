@@ -706,6 +706,8 @@ First write a brief 1-2 sentence intro, then output EXACTLY this structure:
 - NEVER use markdown table syntax (|---|). ALWAYS use <!-- SHEET: --> JSON format
 - Include 3-5 meaningful columns based on the user's request
 - If the user doesn't specify columns, infer appropriate ones from the document content
+- When adding new columns to an existing table, you MUST fill in the values for ALL rows using the document context provided. Extract the actual data from the document chunks/text — do NOT leave values empty or as "N/A" if the information exists in the provided documents.
+- Each row's "values" must include ALL column keys (both existing and new columns)
 
 IMPORTANT: Output ONLY the <!-- SHEET: --> format. NEVER use markdown tables. This is mandatory.
 ` : "";
@@ -953,6 +955,27 @@ ${documentEditingContext}`;
             )
           );
 
+          // Collect all tracked steps for metadata persistence
+          const collectedSteps: any[] = [];
+          // We track steps via emitStep — collect from stepStartTimes
+          for (const [name] of stepStartTimes) {
+            const start = stepStartTimes.get(name);
+            const duration = start ? `${Math.round((Date.now() - start) / 1000)}s` : undefined;
+            collectedSteps.push({ name, status: "done", duration });
+          }
+
+          const messageMetadata: any = {};
+          if (collectedSteps.length > 0) messageMetadata.frozenSteps = collectedSteps;
+          if (planSteps.length > 0) messageMetadata.frozenPlan = planSteps;
+          if (reasoningContent) messageMetadata.frozenThinkingText = reasoningContent;
+          if (followUps.length > 0) messageMetadata.followUps = followUps;
+          if (searchSourceDomains.length > 0) {
+            messageMetadata.frozenSearchSources = {
+              urls: perplexityCitations.map(c => c.url).filter(Boolean),
+              domains: [...new Set(searchSourceDomains)],
+            };
+          }
+
           // Save assistant message
           if (conversationId && conversationId !== "column-fill") {
             await adminClient.from("messages").insert({
@@ -962,6 +985,7 @@ ${documentEditingContext}`;
               content: cleanedContent,
               model_used: modelId,
               citations: uniqueCitations.length > 0 ? uniqueCitations : null,
+              metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : null,
             });
 
             const { count } = await adminClient
