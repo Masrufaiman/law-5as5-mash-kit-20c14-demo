@@ -522,8 +522,8 @@ export default function Home() {
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground">
-                    {promptMode === "red_flags" ? <AlertTriangle className="h-3.5 w-3.5" /> : promptMode === "drafting" ? <FileText className="h-3.5 w-3.5" /> : <Scale className="h-3.5 w-3.5" />}
-                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Draft Document" : "Chat / Research"}
+                    {promptMode === "red_flags" ? <AlertTriangle className="h-3.5 w-3.5" /> : promptMode === "drafting" ? <FileText className="h-3.5 w-3.5" /> : promptMode === "review" ? <ListChecks className="h-3.5 w-3.5" /> : <Scale className="h-3.5 w-3.5" />}
+                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Draft Document" : promptMode === "review" ? "Review Table" : "Chat / Research"}
                     <ChevronRight className="h-2.5 w-2.5" />
                   </Button>
                 </PopoverTrigger>
