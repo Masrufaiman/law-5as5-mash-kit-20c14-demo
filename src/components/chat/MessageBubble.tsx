@@ -211,6 +211,7 @@ export function MessageBubble({
   isLastAssistant,
   steps,
   isStreamingSteps,
+  searchSources,
   onFollowUp,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
