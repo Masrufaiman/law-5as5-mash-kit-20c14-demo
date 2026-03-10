@@ -576,7 +576,7 @@ export default function Home() {
                   onCheckedChange={setDeepResearch}
                   className="scale-75"
                 />
-                <span className="text-[10px] text-muted-foreground">Deep</span>
+                <span className="text-[10px] text-muted-foreground">Deep research</span>
               </div>
 
               <div className="flex-1" />
