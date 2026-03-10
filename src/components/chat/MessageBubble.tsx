@@ -504,7 +504,7 @@ export function MessageBubble({
           {followUpSection}
           {!isStreaming && cleanContent && (
             <div className="mt-2">
-              <ResponseActions content={cleanContent} messageId={message.id} onRegenerate={onRegenerate} />
+              <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
             </div>
           )}
         </div>
