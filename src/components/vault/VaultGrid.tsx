@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderOpen, BookOpen, Search, Plus, Shield, FileText, MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { FolderOpen, BookOpen, Search, Plus, Shield, FileText, MessageSquare, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -27,11 +27,13 @@ interface VaultGridProps {
   onDeleteVault?: (id: string) => void;
   onRenameVault?: (id: string, name: string) => void;
   userId?: string;
+  userEmail?: string;
+  sharedVaultIds?: string[];
 }
 
-export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault, onDeleteVault, onRenameVault, userId }: VaultGridProps) {
+export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault, onDeleteVault, onRenameVault, userId, userEmail, sharedVaultIds = [] }: VaultGridProps) {
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"all" | "yours">("all");
+  const [tab, setTab] = useState<"all" | "yours" | "shared">("all");
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -41,6 +43,7 @@ export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault, on
   const filtered = vaults
     .filter((v) => {
       if (tab === "yours" && userId && v.created_by !== userId) return false;
+      if (tab === "shared" && !sharedVaultIds.includes(v.id)) return false;
       return v.name.toLowerCase().includes(search.toLowerCase());
     });
 
@@ -137,6 +140,20 @@ export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault, on
         >
           Your vaults
         </button>
+        <button
+          onClick={() => setTab("shared")}
+          className={`pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+            tab === "shared" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Users className="h-3.5 w-3.5" />
+          Shared with me
+          {sharedVaultIds.length > 0 && (
+            <Badge variant="secondary" className="text-[9px] py-0 px-1.5 ml-0.5">
+              {sharedVaultIds.length}
+            </Badge>
+          )}
+        </button>
         <div className="flex-1" />
         <div className="relative pb-2">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -179,69 +196,80 @@ export function VaultGrid({ vaults, fileCounts, onSelectVault, onCreateVault, on
           <div className="flex flex-col items-center justify-center h-48 text-center">
             <FolderOpen className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="font-medium text-foreground">
-              {tab === "yours" ? "You haven't created any vaults" : "No vaults yet"}
+              {tab === "yours" ? "You haven't created any vaults" : tab === "shared" ? "No vaults shared with you yet" : "No vaults yet"}
             </p>
-            <p className="text-sm text-muted-foreground mt-1">Create a vault to get started</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {tab === "shared" ? "Ask a team member to share a vault with you" : "Create a vault to get started"}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((vault, i) => (
-              <Card
-                key={vault.id}
-                className="border border-border hover:border-primary/30 cursor-pointer transition-all group overflow-hidden relative"
-                onClick={() => onSelectVault(vault.id)}
-              >
-                {/* Gradient header area */}
-                <div className={`h-20 bg-gradient-to-br ${VAULT_GRADIENTS[i % VAULT_GRADIENTS.length]} flex items-center justify-center relative`}>
-                  <FolderOpen className="h-8 w-8 text-muted-foreground/40" />
-                  {(onDeleteVault || onRenameVault) && (
-                    <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 bg-background/80 hover:bg-background">
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                          {onRenameVault && (
-                            <DropdownMenuItem onClick={() => { setRenameId(vault.id); setRenameName(vault.name); }}>
-                              <Pencil className="h-3.5 w-3.5 mr-2" />
-                              Rename
-                            </DropdownMenuItem>
-                          )}
-                          {onDeleteVault && (
-                            <DropdownMenuItem className="text-destructive" onClick={() => onDeleteVault(vault.id)}>
-                              <Trash2 className="h-3.5 w-3.5 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+            {filtered.map((vault, i) => {
+              const isShared = sharedVaultIds.includes(vault.id);
+              return (
+                <Card
+                  key={vault.id}
+                  className="border border-border hover:border-primary/30 cursor-pointer transition-all group overflow-hidden relative"
+                  onClick={() => onSelectVault(vault.id)}
+                >
+                  {/* Gradient header area */}
+                  <div className={`h-20 bg-gradient-to-br ${VAULT_GRADIENTS[i % VAULT_GRADIENTS.length]} flex items-center justify-center relative`}>
+                    <FolderOpen className="h-8 w-8 text-muted-foreground/40" />
+                    {isShared && (
+                      <Badge variant="secondary" className="absolute top-1.5 left-1.5 text-[8px] py-0 px-1.5 gap-0.5">
+                        <Users className="h-2.5 w-2.5" />
+                        Shared
+                      </Badge>
+                    )}
+                    {(onDeleteVault || onRenameVault) && !isShared && (
+                      <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 bg-background/80 hover:bg-background">
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                            {onRenameVault && (
+                              <DropdownMenuItem onClick={() => { setRenameId(vault.id); setRenameName(vault.name); }}>
+                                <Pencil className="h-3.5 w-3.5 mr-2" />
+                                Rename
+                              </DropdownMenuItem>
+                            )}
+                            {onDeleteVault && (
+                              <DropdownMenuItem className="text-destructive" onClick={() => onDeleteVault(vault.id)}>
+                                <Trash2 className="h-3.5 w-3.5 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )}
+                  </div>
+                  <CardContent className="pt-3 pb-3 px-3">
+                    <p className="font-medium text-foreground text-sm truncate">{vault.name}</p>
+                    {vault.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{vault.description}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-2">
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <FileText className="h-3 w-3" />
+                        {fileCounts[vault.id] ?? 0} files
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <MessageSquare className="h-3 w-3" />
+                        0 queries
+                      </span>
                     </div>
-                  )}
-                </div>
-                <CardContent className="pt-3 pb-3 px-3">
-                  <p className="font-medium text-foreground text-sm truncate">{vault.name}</p>
-                  {vault.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{vault.description}</p>
-                  )}
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <FileText className="h-3 w-3" />
-                      {fileCounts[vault.id] ?? 0} files
-                    </span>
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <MessageSquare className="h-3 w-3" />
-                      0 queries
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 mt-2">
-                    <Shield className="h-2.5 w-2.5 text-primary" />
-                    <span className="text-[9px] text-primary font-medium">Secured by LawKit Vault</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    <div className="flex items-center gap-1 mt-2">
+                      <Shield className="h-2.5 w-2.5 text-primary" />
+                      <span className="text-[9px] text-primary font-medium">Secured by LawKit Vault</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>

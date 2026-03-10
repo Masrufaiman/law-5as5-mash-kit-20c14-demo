@@ -913,6 +913,41 @@ export type Database = {
           },
         ]
       }
+      vault_shares: {
+        Row: {
+          created_at: string
+          id: string
+          permission: string
+          shared_by: string | null
+          shared_with_email: string
+          vault_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          permission?: string
+          shared_by?: string | null
+          shared_with_email: string
+          vault_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          permission?: string
+          shared_by?: string | null
+          shared_with_email?: string
+          vault_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_shares_vault_id_fkey"
+            columns: ["vault_id"]
+            isOneToOne: false
+            referencedRelation: "vaults"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vaults: {
         Row: {
           created_at: string

@@ -437,9 +437,14 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
                           </span>
                         )}
                         {changed && prevVal && (
-                          <span className="text-[9px] text-destructive line-through block truncate">
-                            {prevVal}
-                          </span>
+                          <div className="mt-0.5 space-y-0.5">
+                            <span className="text-[9px] bg-destructive/15 text-destructive line-through block truncate rounded px-1 py-0.5">
+                              {prevVal}
+                            </span>
+                            <span className="text-[9px] bg-chart-2/15 text-chart-2 block truncate rounded px-1 py-0.5">
+                              {val}
+                            </span>
+                          </div>
                         )}
                       </td>
                     );
