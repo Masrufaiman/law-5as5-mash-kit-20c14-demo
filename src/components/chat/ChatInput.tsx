@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Sparkles, Send, Plus, Zap, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, Upload, FolderOpen, Scale, BookOpen } from "lucide-react";
+import { Sparkles, Send, Plus, Zap, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, Upload, FolderOpen, Scale, BookOpen, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
