@@ -484,7 +484,7 @@ export default function Chat() {
               )}
               {promptMode && (
                 <Badge variant="secondary" className="text-[9px] py-0 px-1.5">
-                  {promptMode === "red_flags" ? "Red Flag" : promptMode === "drafting" ? "Drafting" : "Chat"}
+                  {promptMode === "red_flags" ? "Red Flag" : promptMode === "drafting" ? "Drafting" : promptMode === "review" ? "Review Table" : "Chat"}
                 </Badge>
               )}
             </div>
