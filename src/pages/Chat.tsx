@@ -49,6 +49,9 @@ export default function Chat() {
     searchSources,
     isStreaming,
     error,
+    plan,
+    thinkingText,
+    fileRefs,
     sendMessage,
     cancelStream,
     clearMessages,
@@ -109,7 +112,6 @@ export default function Chat() {
       setConversationTitle(conv.title);
       if (conv.vault_id) {
         setVaultId(conv.vault_id);
-        // Load vault name
         const { data: vaultData } = await supabase.from("vaults").select("name").eq("id", conv.vault_id).single();
         if (vaultData) setVaultName(vaultData.name);
       }
@@ -183,7 +185,6 @@ export default function Chat() {
         return;
       }
 
-      // Check if selection is within an assistant message
       const anchorNode = selection.anchorNode;
       const focusNode = selection.focusNode;
       if (!anchorNode || !focusNode) return;
@@ -205,7 +206,6 @@ export default function Chat() {
     };
 
     const handleMouseDown = (e: MouseEvent) => {
-      // Hide tooltip if clicking outside of it
       const target = e.target as HTMLElement;
       if (!target.closest("[data-reply-tooltip]")) {
         setSelectionTooltip(null);
@@ -274,6 +274,7 @@ export default function Chat() {
       deepResearch: deep,
       sources: srcs,
       useCase: pMode,
+      currentSheetState: sheetDoc,
     };
     lastStreamOptions.current = opts;
     sendMessage(msg, opts);
@@ -295,6 +296,7 @@ export default function Chat() {
         deepResearch,
         sources: activeSources,
         useCase: promptMode,
+        currentSheetState: sheetDoc,
       };
       lastStreamOptions.current = opts;
       sendMessage(msg, opts);
@@ -305,7 +307,6 @@ export default function Chat() {
     handleSend(text);
   }, [conversationId, profile?.organization_id, vaultId, deepResearch, activeSources, promptMode, isStreaming]);
 
-  // Preserve scroll when toggling editor
   const handleDocumentOpen = useCallback((title: string, content: string) => {
     const container = scrollContainerRef.current;
     const scrollTop = container?.scrollTop || 0;
@@ -314,7 +315,6 @@ export default function Chat() {
       editorDoc?.title === title ? null : { title, content }
     );
 
-    // Restore scroll after re-render
     requestAnimationFrame(() => {
       if (container) container.scrollTop = scrollTop;
     });
@@ -323,7 +323,13 @@ export default function Chat() {
   const handleSheetOpen = useCallback((data: SheetData) => {
     const container = scrollContainerRef.current;
     const scrollTop = container?.scrollTop || 0;
-    setSheetDoc(sheetDoc?.title === data.title ? null : data);
+    
+    // If same title, merge as new version
+    if (sheetDoc && sheetDoc.title === data.title && JSON.stringify(sheetDoc) !== JSON.stringify(data)) {
+      setSheetDoc(data); // SheetEditor will auto-version
+    } else {
+      setSheetDoc(sheetDoc?.title === data.title ? null : data);
+    }
     setEditorDoc(null);
     requestAnimationFrame(() => {
       if (container) container.scrollTop = scrollTop;
@@ -346,7 +352,6 @@ export default function Chat() {
     navigate("/chat", { replace: true });
   };
 
-  // Rename conversation
   const startEditTitle = () => {
     if (!conversationId) return;
     setEditTitleValue(conversationTitle);
@@ -367,7 +372,6 @@ export default function Chat() {
       .eq("id", conversationId);
   };
 
-  // Export conversation as markdown
   const handleExport = () => {
     if (!messages.length) return;
     const md = messages
@@ -383,7 +387,6 @@ export default function Chat() {
     toast({ title: "Exported", description: "Conversation downloaded as Markdown" });
   };
 
-  // Share conversation
   const handleShare = async () => {
     if (!conversationId) return;
 
@@ -403,16 +406,13 @@ export default function Chat() {
     toast({ title: "Link copied!", description: "Public share link copied to clipboard" });
   };
 
-  // Collect all citations
   const allCitations: Citation[] = messages
     .filter((m) => m.role === "assistant" && m.citations)
     .flatMap((m) => m.citations || []);
 
-  // Find last assistant message index
   const lastAssistantIdx = messages.reduce((acc, m, i) => m.role === "assistant" ? i : acc, -1);
   const lastUserIdx = messages.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
 
-  // Show streaming indicator when waiting for assistant response
   const lastMsg = messages[messages.length - 1];
   const showStreamingIndicator = isStreaming && lastMsg?.role === "user";
 
@@ -447,7 +447,6 @@ export default function Chat() {
   return (
     <AppLayout rightPanel={rightPanel}>
       <div className="flex h-full">
-        {/* Main chat area */}
         <div className="flex flex-1 flex-col min-w-0">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
@@ -579,7 +578,6 @@ export default function Chat() {
           ) : (
             <ScrollArea className="flex-1" ref={scrollContainerRef as any}>
               <div className="mx-auto max-w-3xl px-6 py-6 space-y-6 relative" ref={messagesContainerRef}>
-                {/* Reply tooltip for text selection */}
                 {selectionTooltip && (
                   <div
                     data-reply-tooltip
@@ -607,13 +605,12 @@ export default function Chat() {
                   const isLastUser = msg.role === "user" && i === lastUserIdx;
                   const nextMsg = messages[i + 1] || undefined;
 
-                  // Only pass steps to the last assistant message
-                    const showSteps = msg.role === "assistant" && i === messages.length - 1;
-                    const showSearchSources = showSteps ? searchSources : undefined;
+                  const showSteps = msg.role === "assistant" && i === messages.length - 1;
+                  const showSearchSources = showSteps ? searchSources : undefined;
 
                   return (
                     <div key={msg.id}>
-                    <MessageBubble
+                      <MessageBubble
                         message={msg}
                         nextMessage={nextMsg}
                         isStreaming={
@@ -630,9 +627,11 @@ export default function Chat() {
                         isStreamingSteps={isStreaming}
                         searchSources={showSearchSources}
                         onFollowUp={handleChoiceSelect}
+                        plan={showSteps ? plan : undefined}
+                        thinkingText={showSteps ? thinkingText : undefined}
+                        fileRefs={showSteps ? fileRefs : undefined}
                       />
 
-                      {/* Streaming indicator: skeleton or steps, always shows LawKit AI branding */}
                       {isLastUser && showStreamingIndicator && (
                         <div className="mt-6">
                           <div className="flex items-center gap-2 mb-2">
@@ -642,8 +641,15 @@ export default function Chat() {
                             <span className="text-xs font-semibold text-foreground">LawKit AI</span>
                           </div>
                           <div className="pl-8">
-                            {steps.length > 0 ? (
-                              <StepTracker steps={steps} isStreaming={true} searchSources={searchSources} />
+                            {steps.length > 0 || plan.length > 0 ? (
+                              <StepTracker
+                                steps={steps}
+                                isStreaming={true}
+                                searchSources={searchSources}
+                                plan={plan}
+                                thinkingText={thinkingText}
+                                fileRefs={fileRefs}
+                              />
                             ) : (
                               <div className="space-y-3">
                                 <Skeleton className="h-4 w-3/4" />
@@ -663,7 +669,6 @@ export default function Chat() {
             </ScrollArea>
           )}
 
-          {/* Cancel button */}
           {isStreaming && (
             <div className="flex justify-center py-2">
               <Button
@@ -678,7 +683,6 @@ export default function Chat() {
             </div>
           )}
 
-          {/* Input */}
           <div className="px-6 py-4">
             <div className="mx-auto max-w-3xl">
               <ChatInput
@@ -704,7 +708,6 @@ export default function Chat() {
           </div>
         </div>
 
-        {/* Sources panel */}
         {showSources && allCitations.length > 0 && (
           <SourcesPanel
             citations={allCitations}

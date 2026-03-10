@@ -19,6 +19,11 @@ interface ChatRequest {
   useCase?: string;
   vaultName?: string;
   promptMode?: string;
+  currentSheetState?: any;
+  // Column fill specific
+  columnMeta?: { name: string; type: string; query: string };
+  fileNames?: string[];
+  existingSheet?: any;
 }
 
 // ---------- Multi-model Perplexity selection ----------
@@ -75,11 +80,49 @@ const SOURCE_DOMAIN_MAP: Record<string, string[]> = {
   "Web Search": [],
 };
 
-// Helper to emit a single SSE step event
-function emitStep(controller: ReadableStreamDefaultController, encoder: TextEncoder, step: { name: string; status: string }) {
+function emitStep(controller: ReadableStreamDefaultController, encoder: TextEncoder, step: { name: string; status: string; detail?: string; duration?: string }) {
   controller.enqueue(
     encoder.encode(`data: ${JSON.stringify({ type: "step", step })}\n\n`)
   );
+}
+
+function emitPlan(controller: ReadableStreamDefaultController, encoder: TextEncoder, steps: string[]) {
+  controller.enqueue(
+    encoder.encode(`data: ${JSON.stringify({ type: "plan", steps })}\n\n`)
+  );
+}
+
+function emitThinking(controller: ReadableStreamDefaultController, encoder: TextEncoder, content: string) {
+  controller.enqueue(
+    encoder.encode(`data: ${JSON.stringify({ type: "thinking", content })}\n\n`)
+  );
+}
+
+// Generate a plan based on what the query needs
+function generatePlan(message: string, hasVault: boolean, hasSearch: boolean, deepResearch: boolean, effectiveMode?: string): string[] {
+  const plan: string[] = [];
+  
+  plan.push("Analyze query and identify intent");
+  
+  if (hasVault) {
+    plan.push("Search and analyze uploaded documents");
+  }
+  
+  if (hasSearch || deepResearch) {
+    plan.push(deepResearch ? "Deep research across 25+ legal sources" : "Research relevant legal sources");
+  }
+  
+  if (effectiveMode === "review") {
+    plan.push("Extract structured data into review table");
+  } else if (effectiveMode === "red_flags") {
+    plan.push("Analyze for risks and red flags");
+  } else if (effectiveMode === "drafting") {
+    plan.push("Draft legal document");
+  }
+  
+  plan.push("Synthesize comprehensive response");
+  
+  return plan;
 }
 
 serve(async (req) => {
@@ -130,7 +173,91 @@ serve(async (req) => {
 
     const orgId = profile.organization_id;
     const body: ChatRequest = await req.json();
-    const { conversationId, message, vaultId, deepResearch, attachedFileIds, attachedFileNames, sources, history, useCase, vaultName: clientVaultName, promptMode } = body;
+    const { conversationId, message, vaultId, deepResearch, attachedFileIds, attachedFileNames, sources, history, useCase, vaultName: clientVaultName, promptMode, currentSheetState, columnMeta, fileNames, existingSheet } = body;
+
+    // ---------- COLUMN FILL USE CASE (non-streaming) ----------
+    if (useCase === "column_fill" && columnMeta) {
+      let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+      let aiKey = Deno.env.get("LOVABLE_API_KEY") || "";
+      let modelId = "google/gemini-2.5-flash";
+
+      const { data: llmConfigs } = await adminClient
+        .from("llm_configs")
+        .select("*")
+        .or(`organization_id.eq.${orgId},organization_id.is.null`)
+        .eq("is_active", true)
+        .eq("use_case", "extraction")
+        .order("is_default", { ascending: false })
+        .limit(1);
+
+      if (llmConfigs?.[0]) {
+        let configuredModel = llmConfigs[0].model_id;
+        if (configuredModel && !configuredModel.includes("/")) {
+          if (configuredModel.startsWith("gemini")) configuredModel = `google/${configuredModel}`;
+          else if (configuredModel.startsWith("gpt")) configuredModel = `openai/${configuredModel}`;
+        }
+        modelId = configuredModel || modelId;
+      }
+
+      const fileNamesList = fileNames || existingSheet?.rows?.map((r: any) => r.fileName) || [];
+      
+      const colFillPrompt = `You are a data extraction AI. Given a column definition, extract the value for each file/document.
+
+Column Name: ${columnMeta.name}
+Column Type: ${columnMeta.type}
+Extraction Query: ${columnMeta.query}
+
+Files to extract from:
+${fileNamesList.map((f: string, i: number) => `${i + 1}. ${f}`).join("\n")}
+
+Respond with ONLY a JSON object mapping file names to extracted values:
+{
+  "filename1.pdf": "extracted value 1",
+  "filename2.pdf": "extracted value 2"
+}
+
+If you cannot determine a value, use "N/A". Be concise but accurate.`;
+
+      try {
+        const resp = await fetch(aiUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${aiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: modelId,
+            messages: [
+              { role: "system", content: "You extract structured data from document names and context. Respond only with valid JSON." },
+              { role: "user", content: colFillPrompt },
+            ],
+            max_tokens: 2048,
+            temperature: 0.1,
+          }),
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          const content = data.choices?.[0]?.message?.content || "{}";
+          // Extract JSON from response
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          const values = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+          
+          return new Response(JSON.stringify({ values }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        } else {
+          return new Response(JSON.stringify({ error: "AI extraction failed", values: {} }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (err) {
+        console.error("Column fill error:", err);
+        return new Response(JSON.stringify({ error: "Column fill failed", values: {} }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     // Load org info for personalization
     const { data: orgData } = await adminClient
@@ -152,9 +279,9 @@ serve(async (req) => {
     const openaiConf = agentConf.openai || {};
     const embeddingModel = agentConf.document_analysis?.embedding_model || "text-embedding-3-small";
 
-    // ---- SERVER-SIDE CONVERSATION HISTORY (Issue #2, #12) ----
+    // ---- SERVER-SIDE CONVERSATION HISTORY ----
     let conversationHistory: { role: string; content: string }[] = [];
-    if (conversationId) {
+    if (conversationId && conversationId !== "column-fill") {
       const { data: dbMessages } = await adminClient
         .from("messages")
         .select("role, content")
@@ -165,19 +292,54 @@ serve(async (req) => {
         conversationHistory = dbMessages.map((m: any) => ({ role: m.role, content: m.content }));
       }
     }
-    // Fallback to client-sent history for new conversations
     if (conversationHistory.length === 0 && history?.length) {
       conversationHistory = history;
     }
 
-    // Create SSE response - we stream steps progressively
+    // Extract existing sheet state from conversation history or client
+    let existingSheetJson = "";
+    if (currentSheetState) {
+      existingSheetJson = JSON.stringify(currentSheetState);
+    } else {
+      // Search conversation history for SHEET blocks
+      for (const msg of conversationHistory) {
+        const sheetMatch = msg.content.match(/<!--\s*SHEET:\s*(.+?)\s*-->\s*```json\s*([\s\S]*?)```/);
+        if (sheetMatch) {
+          existingSheetJson = sheetMatch[2];
+        }
+      }
+    }
+
     const encoder = new TextEncoder();
+    const effectiveMode = promptMode || useCase;
+    const needsSearch = (sources && sources.length > 0) || deepResearch;
+    const hasVault = !!(vaultId || attachedFileIds?.length);
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // ---- IMMEDIATE STEP: Analyzing query ----
-          emitStep(controller, encoder, { name: "Analyzing your query", status: "working" });
+          const stepStartTimes: Map<string, number> = new Map();
+          
+          const trackStep = (name: string, status: string, detail?: string) => {
+            if (status === "working") {
+              stepStartTimes.set(name, Date.now());
+            }
+            let duration: string | undefined;
+            if (status === "done") {
+              const start = stepStartTimes.get(name);
+              if (start) {
+                duration = `${Math.round((Date.now() - start) / 1000)}s`;
+              }
+            }
+            emitStep(controller, encoder, { name, status, detail, duration });
+          };
+
+          // ---- EMIT PLAN FIRST ----
+          const planSteps = generatePlan(message, hasVault, !!needsSearch, !!deepResearch, effectiveMode);
+          emitPlan(controller, encoder, planSteps);
+
+          // ---- STEP 1: Analyze query ----
+          trackStep("Analyzing your query", "working");
 
           // Load knowledge base
           const { data: knowledgeEntries } = await adminClient
@@ -189,18 +351,18 @@ serve(async (req) => {
           if (knowledgeEntries?.length) {
             knowledgeContext = "\n\n## Knowledge Base\n" +
               knowledgeEntries.map((e: any) => `### ${e.title} (${e.category || "general"})\n${e.content}`).join("\n\n");
-            emitStep(controller, encoder, { name: "Analyzing your query", status: "done" });
-            emitStep(controller, encoder, { name: `Loaded ${knowledgeEntries.length} knowledge entries`, status: "done" });
+            trackStep("Analyzing your query", "done", `Loaded ${knowledgeEntries.length} knowledge entries`);
           } else {
-            emitStep(controller, encoder, { name: "Analyzing your query", status: "done" });
+            trackStep("Analyzing your query", "done");
           }
 
           // --- RAG: Qdrant vector search ---
           let ragContext = "";
           let ragCitations: { index: number; source: string; excerpt: string }[] = [];
 
-          if ((vaultId || attachedFileIds?.length) && qdrantConf.url && qdrantConf.api_key && openaiConf.api_key) {
-            emitStep(controller, encoder, { name: "Searching your documents", status: "working" });
+          if (hasVault && qdrantConf.url && qdrantConf.api_key && openaiConf.api_key) {
+            trackStep("Searching your documents", "working");
+            emitThinking(controller, encoder, "Embedding query and searching document vectors for relevant passages...");
 
             try {
               const queryEmbedding = await embedQuery(message, openaiConf.api_key, embeddingModel);
@@ -219,6 +381,20 @@ serve(async (req) => {
                     key: "file_id",
                     match: { any: vaultFiles.map((f: any) => f.id) },
                   });
+                  
+                  // Emit file refs
+                  const { data: fileDetails } = await adminClient
+                    .from("files")
+                    .select("id, name")
+                    .eq("vault_id", vaultId)
+                    .eq("organization_id", orgId)
+                    .limit(10);
+                  
+                  if (fileDetails?.length) {
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({ type: "file_refs", files: fileDetails.map((f: any) => ({ name: f.name, id: f.id })) })}\n\n`)
+                    );
+                  }
                 }
               }
               if (attachedFileIds?.length) {
@@ -257,18 +433,19 @@ serve(async (req) => {
                       excerpt: (p.content || "").substring(0, 200),
                     });
                   });
-                  emitStep(controller, encoder, { name: `Found ${results.length} relevant sections`, status: "done" });
+                  emitThinking(controller, encoder, `Found ${results.length} relevant document sections. Analyzing content for the most relevant information.`);
+                  trackStep("Searching your documents", "done", `Found ${results.length} relevant sections`);
                 } else {
-                  emitStep(controller, encoder, { name: "No matching sections found", status: "done" });
+                  trackStep("Searching your documents", "done", "No matching sections found");
                 }
               } else {
                 const errText = await searchResp.text();
                 console.error("Qdrant search failed:", searchResp.status, errText);
-                emitStep(controller, encoder, { name: "Reading documents directly", status: "done" });
+                trackStep("Reading documents directly", "done");
               }
             } catch (ragErr: any) {
               console.error("RAG error:", ragErr.message);
-              emitStep(controller, encoder, { name: "Reading documents directly", status: "done" });
+              trackStep("Reading documents directly", "done");
             }
           }
 
@@ -279,10 +456,10 @@ serve(async (req) => {
             vaultName = vaultData?.name || "";
           }
 
-          // Fallback: direct file text if no Qdrant results
+          // Fallback: direct file text
           let vaultContext = "";
-          if (!ragContext && (vaultId || attachedFileIds?.length)) {
-            emitStep(controller, encoder, { name: "Reading vault documents", status: "working" });
+          if (!ragContext && hasVault) {
+            trackStep("Reading vault documents", "working");
             const fileQuery = adminClient.from("files").select("id, name, extracted_text, extracted_text_r2_key, status").eq("organization_id", orgId);
             if (vaultId) fileQuery.eq("vault_id", vaultId);
             if (attachedFileIds?.length) fileQuery.in("id", attachedFileIds);
@@ -294,26 +471,25 @@ serve(async (req) => {
                   .filter((f: any) => f.extracted_text)
                   .map((f: any, i: number) => `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, 15000)}`)
                   .join("\n\n");
-              emitStep(controller, encoder, { name: `Analyzed ${files.length} documents`, status: "done" });
+              emitThinking(controller, encoder, `Loaded ${files.length} documents directly. Reading through content to find relevant information.`);
+              trackStep("Reading vault documents", "done", `Analyzed ${files.length} documents`);
             } else {
-              emitStep(controller, encoder, { name: "No documents found", status: "done" });
+              trackStep("Reading vault documents", "done", "No documents found");
             }
           }
 
           // ---- PERPLEXITY SEARCH ----
           let perplexityContext = "";
           let perplexityCitations: { index: number; source: string; excerpt: string; url?: string }[] = [];
-          const needsSearch = (sources && sources.length > 0) || deepResearch;
           let searchSourceDomains: string[] = [];
 
           if (needsSearch) {
             const pplxModel = selectPerplexityModel(message, !!deepResearch, useCase);
-
-            // User-friendly step labels — NEVER expose model names
             const stepLabel = deepResearch
               ? "Deep analysis across 25+ sources"
               : "Researching relevant sources";
-            emitStep(controller, encoder, { name: stepLabel, status: "working" });
+            trackStep(stepLabel, "working");
+            emitThinking(controller, encoder, "Searching across legal databases and research sources...");
 
             const pplxConfig = MODEL_CONFIG[pplxModel] || MODEL_CONFIG.sonar;
 
@@ -377,7 +553,6 @@ serve(async (req) => {
                   perplexityContext = `\n\n## Research Results\n${pplxContent}`;
 
                   if (pplxCitationUrls.length > 0) {
-                    // Re-index starting AFTER ragCitations count (sequential: ragCount+1, ragCount+2, ...)
                     const startIdx = ragCitations.length;
                     perplexityContext += "\n\n### Sources:\n" +
                       pplxCitationUrls.map((url: string, i: number) => `[${startIdx + i + 1}] ${url}`).join("\n");
@@ -393,15 +568,14 @@ serve(async (req) => {
                       };
                     });
 
-                    // Collect domains for the "sources" SSE event
                     searchSourceDomains = pplxCitationUrls.map((url: string) => {
                       try { return new URL(url).hostname.replace("www.", ""); } catch { return url; }
                     });
                   }
 
-                  emitStep(controller, encoder, { name: `${stepLabel} — ${pplxCitationUrls.length} sources`, status: "done" });
+                  emitThinking(controller, encoder, `Found ${pplxCitationUrls.length} authoritative sources. Cross-referencing findings with document analysis.`);
+                  trackStep(stepLabel, "done", `${pplxCitationUrls.length} sources analyzed`);
 
-                  // Emit sources event for favicon pills in StepTracker
                   if (searchSourceDomains.length > 0) {
                     controller.enqueue(
                       encoder.encode(`data: ${JSON.stringify({
@@ -414,24 +588,22 @@ serve(async (req) => {
                 } else {
                   const errText = await pplxResp.text();
                   console.error("Perplexity error:", pplxResp.status, errText);
-                  emitStep(controller, encoder, { name: "Research unavailable — continuing", status: "done" });
+                  trackStep("Research unavailable — continuing", "done");
                 }
               } catch (pplxErr) {
                 console.error("Perplexity call failed:", pplxErr);
-                emitStep(controller, encoder, { name: "Research failed — continuing", status: "done" });
+                trackStep("Research failed — continuing", "done");
               }
             } else {
-              emitStep(controller, encoder, { name: "No search configured — skipping", status: "done" });
+              trackStep("No search configured — skipping", "done");
             }
           }
 
-          // Build system prompt with personalized context
-          const effectiveMode = promptMode || useCase;
+          // Build system prompt
           let customPrompt = "";
           if (effectiveMode && agentConf.prompts?.[effectiveMode]) {
             customPrompt = agentConf.prompts[effectiveMode];
           } else if (effectiveMode === "review") {
-            // Built-in review mode prompt
             customPrompt = "";
           } else {
             customPrompt = agentConf.prompts?.chat || "";
@@ -443,6 +615,17 @@ serve(async (req) => {
 You are LawKit AI, an expert legal data extraction assistant.
 
 CRITICAL: You MUST output your result using the EXACT format below. Do NOT use markdown tables. Do NOT output plain text tables. You MUST use the <!-- SHEET: --> format.
+
+${existingSheetJson ? `## CURRENT SHEET STATE (Modify this — do NOT create a new table)
+The user already has an existing table. When they ask to add/remove/modify columns or rows, output the FULL updated table with ALL existing data preserved plus the requested changes.
+
+Current table data:
+\`\`\`json
+${existingSheetJson}
+\`\`\`
+
+IMPORTANT: Preserve all existing columns and their data. Only modify what the user asked for. Output the complete updated table.
+` : ""}
 
 ## Output Format (MANDATORY)
 
@@ -466,10 +649,12 @@ First write a brief 1-2 sentence intro, then output EXACTLY this structure:
 ## Rules
 - Column types: "free_response", "date", "classification", "verbatim", "number"
 - Every row MUST have a "values" object with keys matching EXACTLY the column names
-- If modifying an existing table (e.g., "remove column X"), output the FULL updated table in the same format — do NOT create a new table
+- If modifying an existing table, output the FULL updated table — preserve all existing data
 - NEVER use markdown table syntax (|---|). ALWAYS use <!-- SHEET: --> JSON format
 - Include 3-5 meaningful columns based on the user's request
 - If the user doesn't specify columns, infer appropriate ones from the document content
+
+IMPORTANT: Output ONLY the <!-- SHEET: --> format. NEVER use markdown tables. This is mandatory.
 ` : "";
 
           const basePrompt = customPrompt || `You are LawKit AI, an expert legal research and drafting assistant. You provide accurate, well-reasoned legal analysis with proper citations.
@@ -502,7 +687,7 @@ First write a brief 1-2 sentence intro, then output EXACTLY this structure:
 
 ## Formatting Rules
 - Format responses with markdown: headers, lists, bold for key terms
-- When creating tables, use proper markdown table syntax
+- When creating tables, use proper markdown table syntax with | separators
 - Always structure your analysis clearly with sections
 - NEVER use placeholder text like [Firm Name], [Contact Person], etc.
 - Do not include "---" horizontal rules or "References:" sections at the end
@@ -547,7 +732,7 @@ ${perplexityContext}`;
             modelId = configuredModel || modelId;
           }
 
-          // Build messages array with server-side history
+          // Build messages array
           const aiMessages = [
             { role: "system", content: systemPrompt },
             ...conversationHistory.map((m: any) => ({ role: m.role, content: m.content })),
@@ -555,7 +740,7 @@ ${perplexityContext}`;
           ];
 
           // Save user message
-          if (conversationId) {
+          if (conversationId && conversationId !== "column-fill") {
             await adminClient.from("messages").insert({
               conversation_id: conversationId,
               organization_id: orgId,
@@ -565,7 +750,7 @@ ${perplexityContext}`;
           }
 
           // ---- STEP: Synthesizing ----
-          emitStep(controller, encoder, { name: "Synthesizing response", status: "working" });
+          trackStep("Synthesizing response", "working");
 
           const aiResponse = await fetch(aiUrl, {
             method: "POST",
@@ -595,7 +780,7 @@ ${perplexityContext}`;
             return;
           }
 
-          emitStep(controller, encoder, { name: "Synthesizing response", status: "done" });
+          trackStep("Synthesizing response", "done");
 
           const reader = aiResponse.body!.getReader();
           const decoder = new TextDecoder();
@@ -622,7 +807,6 @@ ${perplexityContext}`;
                 const parsed = JSON.parse(jsonStr);
                 const content = parsed.choices?.[0]?.delta?.content;
                 if (content) {
-                  // Detect <think> blocks for reasoning
                   let remaining = content;
                   while (remaining.length > 0) {
                     if (inThinkBlock) {
@@ -669,7 +853,7 @@ ${perplexityContext}`;
             }
           }
 
-          // Extract follow-up questions from content
+          // Extract follow-up questions
           const followUps: string[] = [];
           const followUpLines = fullContent.split("\n").filter(line => line.startsWith(">>FOLLOWUP: "));
           followUpLines.forEach(line => {
@@ -677,14 +861,12 @@ ${perplexityContext}`;
             if (q) followUps.push(q);
           });
 
-          // Strip follow-up lines from content for storage
           const cleanedContent = fullContent.split("\n").filter(line => !line.startsWith(">>FOLLOWUP: ")).join("\n").trim();
 
-          // Merge citations — also match superscript numbers
+          // Merge citations
           const vaultCitations = extractCitations(cleanedContent, ragContext || vaultContext);
           const allCitations = [...vaultCitations, ...ragCitations, ...perplexityCitations];
 
-          // Deduplicate citations by index
           const uniqueCitations = Array.from(
             new Map(allCitations.map(c => [c.index, c])).values()
           );
@@ -696,7 +878,7 @@ ${perplexityContext}`;
           );
 
           // Save assistant message
-          if (conversationId) {
+          if (conversationId && conversationId !== "column-fill") {
             await adminClient.from("messages").insert({
               conversation_id: conversationId,
               organization_id: orgId,
@@ -759,7 +941,6 @@ function extractCitations(content: string, vaultContext: string): { index: numbe
   const citations: { index: number; source: string; excerpt: string }[] = [];
   const seen = new Set<number>();
 
-  // Match [N] format
   const bracketMatches = content.matchAll(/\[(\d+)\]/g);
   for (const match of bracketMatches) {
     const idx = parseInt(match[1]);
@@ -773,7 +954,6 @@ function extractCitations(content: string, vaultContext: string): { index: numbe
     });
   }
 
-  // Match superscript numbers
   const superscriptPattern = /[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+/g;
   const superMatches = content.matchAll(superscriptPattern);
   for (const match of superMatches) {
@@ -792,7 +972,6 @@ function extractCitations(content: string, vaultContext: string): { index: numbe
   return citations;
 }
 
-// --- OpenAI Embedding for query ---
 async function embedQuery(text: string, apiKey: string, model: string): Promise<number[]> {
   const resp = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
