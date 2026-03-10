@@ -435,10 +435,11 @@ export default function Chat() {
       data={sheetDoc}
       onClose={() => {
         const container = scrollContainerRef.current;
-        const scrollTop = container?.scrollTop || 0;
+        const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+        const scrollTop = viewport?.scrollTop || 0;
         setSheetDoc(null);
         requestAnimationFrame(() => {
-          if (container) container.scrollTop = scrollTop;
+          if (viewport) viewport.scrollTop = scrollTop;
         });
       }}
       onUpdate={(updated) => setSheetDoc(updated)}
@@ -449,10 +450,11 @@ export default function Chat() {
       content={editorDoc.content}
       onClose={() => {
         const container = scrollContainerRef.current;
-        const scrollTop = container?.scrollTop || 0;
+        const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+        const scrollTop = viewport?.scrollTop || 0;
         setEditorDoc(null);
         requestAnimationFrame(() => {
-          if (container) container.scrollTop = scrollTop;
+          if (viewport) viewport.scrollTop = scrollTop;
         });
       }}
     />
