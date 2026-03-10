@@ -1044,6 +1044,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_conversation_shared_with_user: {
+        Args: { _conversation_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_org_admin: { Args: { _user_id: string }; Returns: boolean }
       is_superadmin: { Args: { _user_id: string }; Returns: boolean }
     }

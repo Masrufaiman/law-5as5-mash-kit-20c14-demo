@@ -233,21 +233,126 @@ export default function Home() {
       });
   }, [profile?.organization_id]);
 
-  const handleSend = () => {
-    if (!message.trim()) return;
-    // Clear session state on send
+  const [isSendingWithFiles, setIsSendingWithFiles] = useState(false);
+
+  const processAttachedFilesForHome = async (files: File[]): Promise<{ fileIds: string[]; fileNames: string[]; vaultId: string }> => {
+    if (!profile?.organization_id) throw new Error("No org");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Not authenticated");
+
+    // Find or create an "Uploads" vault
+    let { data: pVault } = await supabase
+      .from("vaults")
+      .select("id")
+      .eq("organization_id", profile.organization_id)
+      .eq("name", "Uploads")
+      .maybeSingle();
+
+    if (!pVault) {
+      const { data: legacyVault } = await supabase
+        .from("vaults")
+        .select("id")
+        .eq("organization_id", profile.organization_id)
+        .eq("name", "Prompt Uploads")
+        .maybeSingle();
+
+      if (legacyVault) {
+        pVault = legacyVault;
+      } else {
+        const { data: newVault, error: vErr } = await supabase
+          .from("vaults")
+          .insert({ name: "Uploads", organization_id: profile.organization_id, created_by: profile.id, description: "Default vault for uploaded documents" })
+          .select()
+          .single();
+        if (vErr || !newVault) throw new Error("Failed to create upload vault");
+        pVault = newVault;
+      }
+    }
+
+    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    const fileIds: string[] = [];
+    const fileNames: string[] = [];
+
+    for (const file of files) {
+      const fileId = crypto.randomUUID();
+      const sanitizedName = file.name.replace(/\s+/g, "_").replace(/[()]/g, "");
+      const r2Key = `${profile.organization_id}/${pVault.id}/${fileId}-${sanitizedName}`;
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("orgId", profile.organization_id);
+      formData.append("r2Key", r2Key);
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/r2-upload`,
+        { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` }, body: formData }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(err.error || "Upload failed");
+      }
+
+      const result = await response.json();
+
+      await supabase.from("files").insert({
+        id: fileId,
+        name: file.name,
+        original_name: file.name,
+        mime_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+        storage_path: result.r2_key || r2Key,
+        vault_id: pVault.id,
+        organization_id: profile.organization_id!,
+        uploaded_by: profile.id,
+        status: "processing",
+      });
+
+      supabase.functions.invoke("document-processor", { body: { fileId } }).catch(() => {});
+
+      fileIds.push(fileId);
+      fileNames.push(file.name);
+    }
+
+    return { fileIds, fileNames, vaultId: pVault.id };
+  };
+
+  const handleSend = async () => {
+    if (!message.trim() || isSendingWithFiles) return;
     sessionStorage.removeItem(SS_KEY);
-    navigate("/chat", {
-      state: {
-        initialMessage: message,
-        deepResearch,
-        selectedVault,
-        attachedFiles,
-        activeSources,
-        promptMode,
-        workflowTag: selectedWorkflow,
-      },
-    });
+
+    if (attachedFiles.length > 0) {
+      setIsSendingWithFiles(true);
+      try {
+        const { fileIds, fileNames, vaultId: uploadVaultId } = await processAttachedFilesForHome(attachedFiles);
+        navigate("/chat", {
+          state: {
+            initialMessage: message,
+            deepResearch,
+            selectedVault: selectedVault || { id: uploadVaultId, name: "Uploads" },
+            activeSources,
+            promptMode,
+            workflowTag: selectedWorkflow,
+            attachedFileIds: fileIds,
+            attachedFileNames: fileNames,
+          },
+        });
+      } catch (err: any) {
+        toast({ title: "File upload failed", description: err.message, variant: "destructive" });
+        setIsSendingWithFiles(false);
+      }
+    } else {
+      navigate("/chat", {
+        state: {
+          initialMessage: message,
+          deepResearch,
+          selectedVault,
+          activeSources,
+          promptMode,
+          workflowTag: selectedWorkflow,
+        },
+      });
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -609,10 +714,19 @@ export default function Home() {
                 size="sm"
                 className="h-7 px-4 text-xs gap-1.5"
                 onClick={handleSend}
-                disabled={!message.trim()}
+                disabled={!message.trim() || isSendingWithFiles}
               >
-                Ask LawKit
-                <Send className="h-3 w-3" />
+                {isSendingWithFiles ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Uploading files...
+                  </>
+                ) : (
+                  <>
+                    Ask LawKit
+                    <Send className="h-3 w-3" />
+                  </>
+                )}
               </Button>
             </div>
           </div>
