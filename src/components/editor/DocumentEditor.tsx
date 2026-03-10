@@ -29,7 +29,7 @@ interface DocumentEditorProps {
 const modules = {
   toolbar: [
     [{ header: [1, 2, 3, false] }],
-    [{ font: [false, "serif", "monospace", "inter", "georgia", "times-new-roman", "courier-new", "garamond", "palatino"] }],
+    [{ font: [false, "serif", "monospace", "playfair-display", "ibm-plex-mono", "georgia", "times-new-roman"] }],
     [{ size: ["small", false, "large", "huge"] }],
     ["bold", "italic", "underline", "strike"],
     [{ color: [] }, { background: [] }],
