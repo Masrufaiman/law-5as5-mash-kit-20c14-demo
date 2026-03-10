@@ -753,7 +753,7 @@ IMPORTANT: Output ONLY the <!-- SHEET: --> format. NEVER use markdown tables. Th
           }
 
           // Workflow system prompt override
-          let effectiveBasePrompt = reviewModePrompt || basePrompt;
+          let effectiveBasePrompt = draftingModePrompt || reviewModePrompt || basePrompt;
           if (workflowSystemPrompt) {
             effectiveBasePrompt = workflowSystemPrompt + "\n\n" + effectiveBasePrompt;
           }
