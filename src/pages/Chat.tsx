@@ -158,9 +158,10 @@ export default function Chat() {
       setDeepResearch(deep);
       setActiveSources(srcs);
       setPromptMode(pMode);
+      setWorkflowTag(wfTag);
 
       navigate("/chat", { replace: true, state: {} });
-      createConversationAndSend(msg, vault, deep, srcs, pMode, vName);
+      createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
     }
   }, [location.state, profile?.organization_id]);
 
