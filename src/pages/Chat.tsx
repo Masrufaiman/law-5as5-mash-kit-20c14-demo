@@ -450,9 +450,10 @@ export default function Chat() {
         {/* Main chat area */}
         <div className="flex flex-1 flex-col min-w-0">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-3 border-b border-border/50">
+          <div className="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs text-muted-foreground">Assistant /</span>
+              <span className="text-xs text-muted-foreground">Assist</span>
+              <span className="text-xs text-muted-foreground">·</span>
               {isEditingTitle ? (
                 <div className="flex items-center gap-1 flex-1 min-w-0">
                   <Input

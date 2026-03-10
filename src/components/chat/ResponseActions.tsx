@@ -54,65 +54,71 @@ export function ResponseActions({ content, messageId, onRegenerate }: ResponseAc
   const handleRegenerate = () => {
     if (onRegenerate) {
       onRegenerate();
-    } else {
-      toast({ title: "Regenerate", description: "No regenerate handler available" });
     }
   };
 
   return (
-    <div className="flex items-center gap-0.5 mt-2 opacity-50 group-hover:opacity-100 transition-opacity">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-        onClick={copyToClipboard}
-        title="Copy"
-      >
-        <Copy className="h-3 w-3" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-        onClick={exportAsMarkdown}
-        title="Export"
-      >
-        <Download className="h-3 w-3" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-        onClick={handleRegenerate}
-        title="Regenerate"
-      >
-        <RefreshCw className="h-3 w-3" />
-      </Button>
-      <div className="mx-1 h-3 w-px bg-border" />
-      <Button
-        variant="ghost"
-        size="sm"
-        className={cn(
-          "h-7 w-7 p-0 hover:text-foreground",
-          feedback === "up" ? "text-primary" : "text-muted-foreground"
+    <div className="flex items-center justify-between mt-2 opacity-50 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-0.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+          onClick={copyToClipboard}
+          title="Copy"
+        >
+          <Copy className="h-3 w-3" />
+          Copy
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+          onClick={exportAsMarkdown}
+          title="Download"
+        >
+          <Download className="h-3 w-3" />
+          Download
+        </Button>
+        {onRegenerate && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={handleRegenerate}
+            title="Regenerate"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Regenerate
+          </Button>
         )}
-        onClick={() => handleFeedback("up")}
-        title="Helpful"
-      >
-        <ThumbsUp className="h-3 w-3" fill={feedback === "up" ? "currentColor" : "none"} />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        className={cn(
-          "h-7 w-7 p-0 hover:text-foreground",
-          feedback === "down" ? "text-destructive" : "text-muted-foreground"
-        )}
-        onClick={() => handleFeedback("down")}
-        title="Not helpful"
-      >
-        <ThumbsDown className="h-3 w-3" fill={feedback === "down" ? "currentColor" : "none"} />
-      </Button>
+      </div>
+      <div className="flex items-center gap-0.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "h-7 w-7 p-0 hover:text-foreground",
+            feedback === "up" ? "text-primary" : "text-muted-foreground"
+          )}
+          onClick={() => handleFeedback("up")}
+          title="Helpful"
+        >
+          <ThumbsUp className="h-3 w-3" fill={feedback === "up" ? "currentColor" : "none"} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "h-7 w-7 p-0 hover:text-foreground",
+            feedback === "down" ? "text-destructive" : "text-muted-foreground"
+          )}
+          onClick={() => handleFeedback("down")}
+          title="Not helpful"
+        >
+          <ThumbsDown className="h-3 w-3" fill={feedback === "down" ? "currentColor" : "none"} />
+        </Button>
+      </div>
     </div>
   );
 }
