@@ -531,8 +531,9 @@ RULES:
     // Fallback
     const plan: string[] = ["Analyze query"];
     if (hasVault) plan.push("Search uploaded documents");
-    if (hasSources) plan.push("Research relevant sources");
-    plan.push("Synthesize response");
+    plan.push("Research relevant legal sources");
+    plan.push("Cross-reference and verify findings");
+    plan.push("Synthesize comprehensive response");
     return {
       taskType: effectiveMode || "chat",
       jurisdictions: [],
