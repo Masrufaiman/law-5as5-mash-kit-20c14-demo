@@ -113,7 +113,7 @@ export function StepTracker({
         onClick={() => setCollapsed(false)}
         className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-lg bg-muted/30 border border-border/40 px-3 py-2 w-full text-left group"
       >
-        <Check className="h-3.5 w-3.5 text-agent-blue shrink-0" />
+        <Check className="h-3.5 w-3.5 text-primary shrink-0" />
         <span className="flex-1 truncate">
           Analyzed in {completedCount} step{completedCount !== 1 ? "s" : ""}
           {totalTime > 0 && ` · ${totalTime}s`}
