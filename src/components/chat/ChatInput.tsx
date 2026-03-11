@@ -373,21 +373,23 @@ export function ChatInput({
                     <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
                       Vaults
                     </p>
-                    {effectiveVaults.map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => onVaultSelect?.(selectedVault?.id === v.id ? null : v)}
-                        className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                      >
-                        <span className="flex items-center gap-2.5">
-                          <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                          {v.name}
-                        </span>
-                        {selectedVault?.id === v.id && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                        )}
-                      </button>
-                    ))}
+                    <div className="max-h-[140px] overflow-y-auto">
+                      {effectiveVaults.map((v) => (
+                        <button
+                          key={v.id}
+                          onClick={() => onVaultSelect?.(selectedVault?.id === v.id ? null : v)}
+                          className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                        >
+                          <span className="flex items-center gap-2.5 truncate">
+                            <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">{v.name}</span>
+                          </span>
+                          {selectedVault?.id === v.id && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
                     <div className="my-1 h-px bg-border" />
                   </>
                 )}
