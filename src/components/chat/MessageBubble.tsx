@@ -387,8 +387,11 @@ export function MessageBubble({
 
   const isInteractive = isLastAssistant && !alreadySelected;
 
-  const docInfo = !isUser && !isStreaming ? detectDocument(cleanContent) : null;
-  const sheetInfo = !isUser && !isStreaming ? detectSheet(cleanContent) : null;
+  const detectedDocs = !isUser && !isStreaming ? detectDocuments(cleanContent) : [];
+  const detectedSheets = !isUser && !isStreaming ? detectSheets(cleanContent) : [];
+  const redFlagData = !isUser && !isStreaming ? parseRedFlags(cleanContent) : null;
+  const docInfo = detectedDocs.length > 0 ? detectedDocs[0] : null;
+  const sheetInfo = detectedSheets.length > 0 ? detectedSheets[0] : null;
 
   const citeComponents = React.useMemo(() => {
     if (!citations.length) return {};
