@@ -49,20 +49,24 @@ export default function Onboarding() {
         throw orgError;
       }
 
-      // Role is always 'admin' for org creators; superadmin is assigned server-side only
-      const role = "admin" as const;
-
-      // Upsert profile — handles both new and existing profiles atomically
+      // Upsert profile as member first (RLS requires role = 'member' on insert)
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert({
           id: user.id,
           email: user.email!,
           organization_id: orgId,
-          role,
+          role: "member" as const,
           full_name: user.user_metadata?.full_name || user.email?.split("@")[0],
         }, { onConflict: "id" });
       if (profileError) throw profileError;
+
+      // Promote to admin via server-side security definer function
+      const { error: promoteError } = await supabase.rpc("promote_org_creator", {
+        _user_id: user.id,
+        _org_id: orgId,
+      });
+      if (promoteError) throw promoteError;
 
       // Create default vault
       await supabase.from("vaults").insert({
