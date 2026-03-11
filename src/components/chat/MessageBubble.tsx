@@ -655,7 +655,7 @@ export function MessageBubble({
           })()}
           <Card
             className="cursor-pointer border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-all duration-200 p-0"
-            onClick={() => onDocumentOpen(docInfo.title, cleanContent)}
+            onClick={() => onDocumentOpen(docInfo.title, docContentForEditor)}
           >
             <div className="flex items-center gap-3 p-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -667,6 +667,11 @@ export function MessageBubble({
               </div>
             </div>
           </Card>
+          {draftingNotes && (
+            <div className="text-sm text-foreground/90 leading-relaxed prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{draftingNotes}</ReactMarkdown>
+            </div>
+          )}
           {followUpSection}
           {!isStreaming && cleanContent && (
              <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
