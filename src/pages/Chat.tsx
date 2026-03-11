@@ -105,6 +105,7 @@ export default function Chat() {
   const [highlightExcerpt, setHighlightExcerpt] = useState<string | undefined>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isReplyingRef = useRef(false);
 
   // Load vaults for sources dropdown
   useEffect(() => {
