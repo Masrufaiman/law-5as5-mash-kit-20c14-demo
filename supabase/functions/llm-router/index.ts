@@ -322,7 +322,8 @@ OUTPUT ONLY THIS JSON (no markdown, no backticks):
   "replan_reason": "if REPLAN why",
   "verify_claim": "if VERIFY what to check",
   "contradiction": null,
-  "inline_data": null
+  "inline_data": null,
+  "vault_result_relevant": true
 }
 
 RULES:
@@ -332,7 +333,9 @@ RULES:
 - Never FINISH on first iteration for complex tasks (5+ plan steps)
 - If same tool called 3 times with same params → REPLAN
 - For contradiction, use: {"claim":"...", "sourceA":"...", "sourceB":"..."}
-- For inline_data, use: {"headers":["col1","col2"], "rows":[["val1","val2"]]}`;
+- For inline_data, use: {"headers":["col1","col2"], "rows":[["val1","val2"]]}
+- VAULT FALLBACK RULE: If vault_search returned empty results, irrelevant results (invoices, receipts, wrong file types), or results unrelated to the query → set vault_result_relevant to false and next_action to TOOL with next_tool "web_search". NEVER FINISH after irrelevant vault results when web search is available. Always fall back to web_search before answering from training data.
+- Only cite sources that actually contributed to your answer. Never cite vault documents if the answer came from web search or training data.`;
 
 async function innerMonologue(
   aiUrl: string, aiKey: string, modelId: string, headers: Record<string, string>,
