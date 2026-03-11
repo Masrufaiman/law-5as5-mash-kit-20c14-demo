@@ -618,7 +618,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
                     });
                   }
 
-                  emitThinking(controller, encoder, `Found ${pplxCitationUrls.length} authoritative sources. Cross-referencing findings with document analysis.`);
+                  emitThinkingAndAccumulate(`Found ${pplxCitationUrls.length} authoritative sources. Cross-referencing findings with document analysis.`);
                   trackStep(stepLabel, "done", `${pplxCitationUrls.length} sources analyzed`);
 
                   if (searchSourceDomains.length > 0) {
