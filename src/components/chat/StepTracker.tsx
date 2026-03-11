@@ -463,7 +463,7 @@ export function StepTracker({
 
       {/* Thinking text */}
       {hasThinking && (
-        <div className="ml-1 text-[11px] text-muted-foreground/70 leading-relaxed italic font-mono border-l-2 border-agent-blue/20 pl-2.5 py-1 bg-muted/20 rounded-r">
+        <div className="ml-1 text-[10px] text-muted-foreground/50 leading-relaxed italic border-l border-border/40 pl-2 py-0.5">
           {thinkingText}
         </div>
       )}

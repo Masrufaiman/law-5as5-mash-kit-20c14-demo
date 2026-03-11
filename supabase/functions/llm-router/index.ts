@@ -566,7 +566,6 @@ ${orgKnowledge ? `## Organization Knowledge\n${orgKnowledge}\n` : ""}
 ## Formatting
 - Use markdown: headers, lists, bold for key terms
 - Use tables for comparative data
-- At the end, suggest 3 follow-up questions starting with ">>FOLLOWUP: "
 - Do NOT include a "References:", "Citations:", or "Sources:" section at the end — citations are handled automatically by the UI
 - Use comparison tables aggressively when analyzing multiple documents, jurisdictions, or options
 - At the end, suggest 3 follow-up questions starting with ">>FOLLOWUP: "`;
