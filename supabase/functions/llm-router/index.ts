@@ -214,29 +214,44 @@ async function toolVaultSearch(
 // ──────────────────────────────────────────────
 async function toolReadFiles(orgId: string, vaultId: string | undefined, attachedFileIds: string[] | undefined, adminClient: any): Promise<ToolResult> {
   // If explicit file IDs are provided, prioritize them over vault-wide query
-  const fileQuery = adminClient.from("files").select("id, name, extracted_text").eq("organization_id", orgId);
+  const fileQuery = adminClient.from("files").select("id, name, extracted_text, status").eq("organization_id", orgId);
   if (attachedFileIds?.length) {
     fileQuery.in("id", attachedFileIds);
   } else if (vaultId) {
     fileQuery.eq("vault_id", vaultId);
   }
-  const { data: files } = await fileQuery.not("extracted_text", "is", null).limit(10);
+  let { data: files } = await fileQuery.limit(10);
 
-  if (!files?.length) {
+  // If attached files exist but none have extracted_text, poll up to 30s for readiness
+  if (attachedFileIds?.length && files?.length && files.every((f: any) => !f.extracted_text)) {
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 3000));
+      const { data: refreshed } = await adminClient.from("files").select("id, name, extracted_text, status").in("id", attachedFileIds).limit(10);
+      if (refreshed?.some((f: any) => f.extracted_text)) {
+        files = refreshed;
+        break;
+      }
+      if (refreshed?.every((f: any) => f.status === "error")) break;
+    }
+  }
+
+  const readyFiles = (files || []).filter((f: any) => f.extracted_text);
+  if (!readyFiles.length) {
     return { context: "", citations: [], domains: [], fileRefs: [], summary: "No documents found" };
   }
 
   let context = "\n\n## Document Contents\n";
   const citations: ToolResult["citations"] = [];
   const fileRefs: { name: string; id?: string }[] = [];
-  files.filter((f: any) => f.extracted_text).forEach((f: any, i: number) => {
-    const charLimit = 50000; // Read more text for thorough analysis
+  readyFiles.forEach((f: any, i: number) => {
+    const charLimit = 50000;
     context += `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, charLimit)}\n\n`;
     citations.push({ index: i + 1, source: f.name, excerpt: (f.extracted_text || "").substring(0, 200) });
     fileRefs.push({ name: f.name, id: f.id });
   });
 
-  return { context, citations, domains: [], fileRefs, summary: `Read ${files.length} documents directly` };
+  return { context, citations, domains: [], fileRefs, summary: `Read ${readyFiles.length} documents directly` };
 }
 
 // ──────────────────────────────────────────────
@@ -1065,6 +1080,39 @@ Format:
 {"columns":[{"name":"Col","type":"free_response","query":"..."}],"rows":[{"fileName":"f.pdf","status":"completed","values":{"Col":"val"}}]}
 \`\`\`
 Column types: "free_response", "date", "classification", "verbatim", "number"
+
+## EXTRACTION GROUNDING RULES (MANDATORY)
+
+### Rule 1 — NOT FOUND (prevents all fabrication)
+For every cell you extract, you MUST be able to quote a verbatim sentence from the document.
+If you cannot quote a verbatim sentence → the value does not exist in this document.
+If a field is absent, return the value as: "NOT FOUND IN DOCUMENT"
+NEVER infer, estimate, or use training data to fill a cell.
+NEVER populate a cell you cannot directly quote from the document.
+
+### Rule 2 — Governing Law Grounding (prevents jurisdiction hallucination)
+WHEN extracting Governing Law:
+Only read the explicit governing law clause — typically in a final section titled "Governing Law" or "Governing Law and Jurisdiction".
+DO NOT infer governing law from the investor's address, the LP's name or nationality, the currency used, or any other contextual signal.
+If no explicit clause exists → return NOT FOUND IN DOCUMENT.
+
+### Rule 3 — Document Type Awareness (prevents inventing clauses)
+WHEN processing LP side letters:
+These documents contain: economic terms, MFN rights, co-investment rights, reporting rights, key person provisions, governing law.
+These documents DO NOT contain: liability caps, auto-renewal clauses, termination notice periods, indemnification terms. These live in the LPA itself.
+If asked to extract an absent clause type → return NOT FOUND IN DOCUMENT.
+DO NOT invent typical values. DO NOT infer from the LPA.
+
+### Rule 4 — Payment Term Precision
+WHEN extracting payment terms, extract all sub-values separately:
+- Management fee (Investment Period)
+- Management fee (post-Investment Period)
+- Carried interest rate
+- Hurdle / preferred return rate
+- Management fee offset % (only if explicitly stated)
+DO NOT use industry-standard or typical values.
+Omit any sub-value not stated in the document.
+
 ${followUpInstruction}
 ` : "";
 

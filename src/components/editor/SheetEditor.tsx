@@ -435,8 +435,14 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
                             autoFocus
                           />
                         ) : (
-                          <span className={cn("block truncate max-w-[200px]", !val && "text-muted-foreground italic")}>
-                            {val || "—"}
+                          <span className={cn(
+                            "block truncate max-w-[200px]",
+                            !val && "text-muted-foreground italic",
+                            (val && (val.toLowerCase().includes("not found in document") || val.toLowerCase() === "not found")) && "text-muted-foreground italic"
+                          )}>
+                            {(val && (val.toLowerCase().includes("not found in document") || val.toLowerCase() === "not found"))
+                              ? "Not found in document"
+                              : val || "—"}
                           </span>
                         )}
                         {changed && prevVal && (

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Bot, Copy, Pencil, Database, Paperclip, Table2, BookOpen, ChevronDown, ChevronRight, Shield, Loader2 } from "lucide-react";
+import { FileText, Bot, Copy, Pencil, Database, Paperclip, Table2, BookOpen, ChevronDown, ChevronRight, Shield, Loader2, Check, X } from "lucide-react";
 import type { ChatMessage, Citation, AgentStep, SearchSource, FileRef, InlineDataTable, Contradiction, Verification, Escalation, IntentData } from "@/hooks/useStreamChat";
 import type { SheetData } from "@/components/editor/SheetEditor";
 import { RedFlagCard, parseRedFlags } from "./RedFlagCard";
@@ -346,6 +346,7 @@ export function MessageBubble({
   isStreamingSteps,
   searchSources,
   onFollowUp,
+  onEditMessage,
   plan,
   thinkingText,
   fileRefs,
@@ -363,6 +364,8 @@ export function MessageBubble({
   const isUser = message.role === "user";
   const citations = message.citations || [];
   const followUps = message.followUps || [];
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(message.content);
 
   // Client-side follow-up extraction fallback
   let rawContent = message.content;
@@ -762,11 +765,60 @@ export function MessageBubble({
         )}
 
         {isUser ? (
-          <div>
-            <p className="text-sm text-foreground whitespace-pre-wrap">{message.content}</p>
-            <AttachmentBadges attachments={message.attachments} />
-            <UserMessageActions content={message.content} />
-          </div>
+          isEditing ? (
+            <div className="space-y-2">
+              <textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="w-full text-sm text-foreground bg-muted/50 border border-border rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-ring min-h-[60px]"
+                rows={3}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (editText.trim() && onEditMessage) {
+                      onEditMessage(message.id, editText.trim());
+                      setIsEditing(false);
+                    }
+                  }
+                  if (e.key === "Escape") setIsEditing(false);
+                }}
+              />
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  className="h-6 text-[10px] px-2.5 gap-1"
+                  onClick={() => {
+                    if (editText.trim() && onEditMessage) {
+                      onEditMessage(message.id, editText.trim());
+                      setIsEditing(false);
+                    }
+                  }}
+                >
+                  <Check className="h-2.5 w-2.5" />
+                  Save & Resend
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[10px] px-2.5 gap-1"
+                  onClick={() => { setIsEditing(false); setEditText(message.content); }}
+                >
+                  <X className="h-2.5 w-2.5" />
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm text-foreground whitespace-pre-wrap">{message.content}</p>
+              <AttachmentBadges attachments={message.attachments} />
+              <UserMessageActions
+                content={message.content}
+                onEdit={onEditMessage ? () => { setEditText(message.content); setIsEditing(true); } : undefined}
+              />
+            </div>
+          )
         ) : isStreamingSpecialContent ? (
           <div className="space-y-3">
             <div className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/30">
