@@ -718,14 +718,22 @@ serve(async (req) => {
             knowledgeContext = "\n\n## Knowledge Base\n" + knowledgeEntries.map((e: any) => `### ${e.title} (${e.category || "general"})\n${e.content}`).join("\n\n");
           }
 
-          let vaultName = "";
+          let vaultName = clientVaultName || "";
           let vaultInventory = "";
+          const isUploadsVault = vaultName === "Uploads" || clientVaultName === "Uploads";
           if (vaultId) {
-            const { data: vaultData } = await adminClient.from("vaults").select("name").eq("id", vaultId).single();
-            vaultName = vaultData?.name || "";
-            const { data: vaultFiles } = await adminClient.from("files").select("name, status, size_bytes, mime_type").eq("vault_id", vaultId).eq("organization_id", orgId).order("created_at", { ascending: false }).limit(50);
-            if (vaultFiles?.length) {
-              vaultInventory = `\n\n## Available Documents in Vault "${vaultName}"\n` + vaultFiles.map((f: any) => `- ${f.name} (${f.status}, ${Math.round(f.size_bytes / 1024)}KB)`).join("\n");
+            if (!vaultName) {
+              const { data: vaultData } = await adminClient.from("vaults").select("name").eq("id", vaultId).single();
+              vaultName = vaultData?.name || "";
+            }
+            // For Uploads vault without explicit attachedFileIds, skip vault-wide search
+            if (isUploadsVault && (!attachedFileIds || attachedFileIds.length === 0)) {
+              // Don't load vault inventory — user didn't attach files this message
+            } else {
+              const { data: vaultFiles } = await adminClient.from("files").select("name, status, size_bytes, mime_type").eq("vault_id", vaultId).eq("organization_id", orgId).order("created_at", { ascending: false }).limit(50);
+              if (vaultFiles?.length) {
+                vaultInventory = `\n\n## Available Documents in Vault "${vaultName}"\n` + vaultFiles.map((f: any) => `- ${f.name} (${f.status}, ${Math.round(f.size_bytes / 1024)}KB)`).join("\n");
+              }
             }
           }
 
