@@ -232,17 +232,8 @@ export function ChatInput({
         e.preventDefault();
         setIsDraggingOver(false);
         const files = Array.from(e.dataTransfer.files);
-        if (files.length && onFileSelect) {
-          // Trigger file processing via the parent's hidden input approach
-          // We dispatch a custom event or call onFileSelect directly
-          const dataTransfer = new DataTransfer();
-          files.forEach(f => dataTransfer.items.add(f));
-          // Find the hidden file input and set its files
-          const fileInput = e.currentTarget.closest('.mx-auto')?.querySelector('input[type="file"]') as HTMLInputElement;
-          if (fileInput) {
-            fileInput.files = dataTransfer.files;
-            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-          }
+        if (files.length && onFilesDropped) {
+          onFilesDropped(files);
         }
       }}
     >

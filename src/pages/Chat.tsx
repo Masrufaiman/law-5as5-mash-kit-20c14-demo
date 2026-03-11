@@ -989,6 +989,7 @@ export default function Chat() {
                 onRemoveReply={() => setReplyContext(null)}
                 isProcessingFiles={isProcessingFiles}
                 onFileSelect={handleFileSelect}
+                onFilesDropped={handleFilesSelected}
                 attachedFiles={attachedFiles}
                 onRemoveFile={removeAttachedFile}
               />

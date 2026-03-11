@@ -150,7 +150,7 @@ export function StepTracker({
           <span className="font-medium text-foreground">
             {isWorking
               ? currentStep?.name || (hasReasoning ? "Thinking..." : "Working...")
-              : `Completed in ${steps.length} steps`}
+              : `Completed in ${totalSteps} steps`}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
