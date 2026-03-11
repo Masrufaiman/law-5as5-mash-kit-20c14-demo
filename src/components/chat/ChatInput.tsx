@@ -90,7 +90,7 @@ export function ChatInput({
   value, onChange, onSend, disabled, deepResearch = false, onDeepResearchChange,
   promptMode, onPromptModeChange, vaults, selectedVault, onVaultSelect, activeSources, onSourceToggle,
   workflowTag, onWorkflowTagRemove, replyContext, onRemoveReply,
-  attachedFiles, onFileSelect, onRemoveFile, isProcessingFiles, kbSources,
+  attachedFiles, onFileSelect, onRemoveFile, isProcessingFiles, kbSources, onFilesDropped,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { profile } = useAuth();
