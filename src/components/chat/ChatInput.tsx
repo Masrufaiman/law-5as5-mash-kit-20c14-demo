@@ -98,7 +98,25 @@ export function ChatInput({
   const [searchFilter, setSearchFilter] = useState("");
   const [localVaults, setLocalVaults] = useState<VaultItem[]>([]);
   const [localKbSources, setLocalKbSources] = useState<KBSource[]>([]);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [uploadStatusIdx, setUploadStatusIdx] = useState(0);
 
+  const UPLOAD_STATUSES = [
+    "Uploading files...",
+    "Processing documents...",
+    "Extracting text...",
+    "Analyzing content...",
+    "Almost ready...",
+  ];
+
+  useEffect(() => {
+    if (!isProcessingFiles) { setUploadStatusIdx(0); return; }
+    const interval = setInterval(() => {
+      setUploadStatusIdx(prev => (prev + 1) % UPLOAD_STATUSES.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isProcessingFiles]);
+  
   useEffect(() => {
     if (vaults) return;
     if (!profile?.organization_id) return;
