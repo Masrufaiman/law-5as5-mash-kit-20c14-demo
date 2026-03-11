@@ -426,8 +426,13 @@ export default function Chat() {
   };
 
   const handleSend = async (text?: string) => {
-    const msg = (text || input).trim();
+    let msg = (text || input).trim();
     if (!msg || isStreaming) return;
+    // Prepend reply context if present
+    if (replyContext && !text) {
+      msg = `Regarding: "${replyContext.slice(0, 200)}"\n\n${msg}`;
+      setReplyContext(null);
+    }
     if (!profile?.organization_id) {
       toast({ title: "Not ready", description: "Your profile is still loading. Please wait a moment.", variant: "destructive" });
       return;

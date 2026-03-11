@@ -65,12 +65,21 @@ export function StepTracker({
   const completedCount = steps.filter((s) => s.status === "done").length;
   const totalSteps = hasPlan ? plan.length : steps.length;
 
+  const hasAutoCollapsedRef = useRef(false);
+
   useEffect(() => {
-    if (allDone && !isStreaming && hasSteps) {
-      const timer = setTimeout(() => setCollapsed(true), 800);
+    if (isStreaming) {
+      hasAutoCollapsedRef.current = false;
+      setCollapsed(false);
+      return;
+    }
+    if (allDone && hasSteps && !hasAutoCollapsedRef.current) {
+      const timer = setTimeout(() => {
+        setCollapsed(true);
+        hasAutoCollapsedRef.current = true;
+      }, 800);
       return () => clearTimeout(timer);
     }
-    if (isStreaming) setCollapsed(false);
   }, [allDone, isStreaming, hasSteps]);
 
   if (!hasSteps && !hasReasoning && !hasPlan && !hasThinking) return null;
