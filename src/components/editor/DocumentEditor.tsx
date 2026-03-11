@@ -285,11 +285,19 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
     <div className="flex flex-col h-full bg-card" ref={editorContainerRef}>
       {/* Font face CSS for app fonts */}
       <style>{`
-        .ql-editor { font-family: 'Instrument Sans', sans-serif; line-height: 1.8; }
-        .ql-editor h1 { font-size: 1.5rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.75rem; color: hsl(var(--foreground)); border-bottom: 2px solid hsl(var(--border)); padding-bottom: 0.5rem; }
-        .ql-editor h2 { font-size: 1.25rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; color: hsl(var(--foreground)); }
-        .ql-editor h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; color: hsl(var(--foreground)); }
+        .ql-editor { font-family: 'Instrument Sans', sans-serif; line-height: 1.8; padding: 2rem 2.5rem; max-width: 800px; margin: 0 auto; }
+        .ql-editor h1 { font-size: 1.5rem; font-weight: 700; margin-top: 2rem; margin-bottom: 1rem; color: hsl(var(--foreground)); border-bottom: 2px solid hsl(var(--border)); padding-bottom: 0.5rem; letter-spacing: -0.01em; }
+        .ql-editor h2 { font-size: 1.25rem; font-weight: 600; margin-top: 1.75rem; margin-bottom: 0.75rem; color: hsl(var(--foreground)); }
+        .ql-editor h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; color: hsl(var(--foreground)); }
         .ql-editor blockquote { border-left: 3px solid hsl(var(--primary)); padding-left: 1rem; color: hsl(var(--muted-foreground)); font-style: italic; margin: 0.75rem 0; }
+        .ql-editor strong { color: hsl(var(--foreground)); }
+        .ql-editor ol, .ql-editor ul { padding-left: 1.5rem; margin: 0.5rem 0; }
+        .ql-editor li { margin-bottom: 0.25rem; }
+        .ql-editor table.legal-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.875rem; }
+        .ql-editor table.legal-table th, .ql-editor table.legal-table td { border: 1px solid hsl(var(--border)); padding: 0.5rem 0.75rem; text-align: left; }
+        .ql-editor table.legal-table th { background: hsl(var(--muted)); font-weight: 600; }
+        .ql-editor hr { border: none; border-top: 1px solid hsl(var(--border)); margin: 1.5rem 0; }
+        .ql-editor p { margin-bottom: 0.5rem; }
         .ql-font-playfair-display { font-family: 'Playfair Display', serif; }
         .ql-font-ibm-plex-mono { font-family: 'IBM Plex Mono', monospace; }
         .ql-font-georgia { font-family: 'Georgia', serif; }
