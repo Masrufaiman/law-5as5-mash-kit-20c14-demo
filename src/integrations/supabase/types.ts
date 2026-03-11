@@ -1050,6 +1050,10 @@ export type Database = {
       }
       is_org_admin: { Args: { _user_id: string }; Returns: boolean }
       is_superadmin: { Args: { _user_id: string }; Returns: boolean }
+      promote_org_creator: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "member" | "admin" | "superadmin"
