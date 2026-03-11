@@ -208,6 +208,8 @@ export default function Chat() {
 
   const loadConversation = async (convId: string) => {
     setIsLoadingConversation(true);
+    setEditorDoc(null);
+    setSheetDoc(null);
     try {
       const { data: conv } = await supabase
         .from("conversations")
