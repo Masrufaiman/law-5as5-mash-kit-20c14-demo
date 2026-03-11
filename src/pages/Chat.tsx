@@ -834,6 +834,7 @@ export default function Chat() {
                         intent={isCurrentlyStreaming ? intent : msg.frozenIntent}
                         planUpdateReason={isCurrentlyStreaming ? planUpdateReason : null}
                         progress={isCurrentlyStreaming ? progress : null}
+                        onFileClick={handleFileClick}
                       />
 
                       {isLastUser && showStreamingIndicator && (
