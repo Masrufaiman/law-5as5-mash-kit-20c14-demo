@@ -852,8 +852,9 @@ serve(async (req) => {
 
             emitThinking(monologue.thinking_narration);
 
-            // Emit progress
-            emit(controller, encoder, { type: "progress", current: iteration, total: currentPlan.length });
+            // Emit progress — cap current to never exceed total
+            const progressTotal = Math.max(iteration, currentPlan.length);
+            emit(controller, encoder, { type: "progress", current: Math.min(iteration, progressTotal), total: progressTotal });
 
             // Handle escalation
             if (monologue.search_model && monologue.search_model !== currentSearchModel && perplexityKey) {
