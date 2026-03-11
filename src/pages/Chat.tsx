@@ -488,8 +488,13 @@ export default function Chat() {
     }
     if (!text) setInput("");
 
+    // If user has pending attached files that haven't been uploaded yet, process them now
+    if (attachedFiles.length > 0 && conversationAttachedFileIds.length === 0) {
+      await processAndSendWithFiles(msg);
+      return;
+    }
+
     if (!conversationId) {
-      // Pass attached file IDs if we have them (e.g. files uploaded in prompt box)
       const fileIds = conversationAttachedFileIds.length > 0 ? conversationAttachedFileIds : undefined;
       const fileNames = attachedFiles.length > 0 ? attachedFiles.map(f => f.name) : undefined;
       await createConversationAndSend(msg, vaultId, deepResearch, activeSources, promptMode, vaultName, workflowTag?.systemPrompt, fileIds, fileNames);
