@@ -125,7 +125,7 @@ export function StepTracker({
       >
         <Check className="h-3.5 w-3.5 text-primary shrink-0" />
         <span className="flex-1 truncate">
-          Analyzed in {completedCount} step{completedCount !== 1 ? "s" : ""}
+          Analyzed in {totalSteps} step{totalSteps !== 1 ? "s" : ""}
           {totalTime > 0 && ` · ${totalTime}s`}
           {hasCitations && ` · ${totalCited} sources`}
           {stepNames && <span className="text-muted-foreground/60 ml-1">— {stepNames}</span>}
