@@ -227,12 +227,12 @@ export function StepTracker({
                   )}
                 >
                   {step.status === "done" ? (
-                    <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-agent-blue/15">
-                      <Check className="h-2.5 w-2.5 text-agent-blue" />
+                    <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                      <Check className="h-2.5 w-2.5 text-primary" />
                     </div>
                   ) : (
                     <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                      <Loader2 className="h-3 w-3 text-agent-blue animate-spin" />
+                      <Loader2 className="h-3 w-3 text-primary animate-spin" />
                     </div>
                   )}
                   <span className={cn("flex-1", step.status === "done" ? "text-muted-foreground" : "text-foreground font-medium")}>
