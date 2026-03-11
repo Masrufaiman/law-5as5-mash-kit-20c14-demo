@@ -564,7 +564,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
 
             const { data: perplexityConfig } = await adminClient
               .from("api_integrations")
-              .select("api_key_encrypted, config")
+              .select("api_key_encrypted, api_key_iv, config")
               .eq("organization_id", orgId)
               .eq("provider", "perplexity")
               .eq("is_active", true)
