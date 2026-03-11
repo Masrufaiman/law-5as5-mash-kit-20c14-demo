@@ -939,6 +939,9 @@ serve(async (req) => {
           // ════════════════════════════════════
           // PHASE 5: BUILD SYSTEM PROMPT & SYNTHESIZE
           // ════════════════════════════════════
+          // Emit final progress count
+          emit(controller, encoder, { type: "progress", current: currentPlan.length, total: currentPlan.length });
+
           trackStep("Synthesizing response", "working");
 
           // Mode-specific prompts (preserved from original)

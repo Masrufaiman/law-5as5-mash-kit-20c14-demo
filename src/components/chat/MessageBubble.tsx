@@ -598,6 +598,11 @@ export function MessageBubble({
           <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom rounded-full" />
         )}
 
+        {/* Collapsible References */}
+        {!isUser && !isStreaming && citations.length > 0 && (
+          <CollapsibleReferences citations={citations} onFileClick={onFileClick} />
+        )}
+
         {!isUser && !isStreaming && followUpSection}
 
         {!isUser && !isStreaming && cleanContent && (
