@@ -213,9 +213,13 @@ async function toolVaultSearch(
 // Tool: Read Files Directly
 // ──────────────────────────────────────────────
 async function toolReadFiles(orgId: string, vaultId: string | undefined, attachedFileIds: string[] | undefined, adminClient: any): Promise<ToolResult> {
+  // If explicit file IDs are provided, prioritize them over vault-wide query
   const fileQuery = adminClient.from("files").select("id, name, extracted_text").eq("organization_id", orgId);
-  if (vaultId) fileQuery.eq("vault_id", vaultId);
-  if (attachedFileIds?.length) fileQuery.in("id", attachedFileIds);
+  if (attachedFileIds?.length) {
+    fileQuery.in("id", attachedFileIds);
+  } else if (vaultId) {
+    fileQuery.eq("vault_id", vaultId);
+  }
   const { data: files } = await fileQuery.not("extracted_text", "is", null).limit(10);
 
   if (!files?.length) {
