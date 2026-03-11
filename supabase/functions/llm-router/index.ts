@@ -788,7 +788,7 @@ serve(async (req) => {
 
             const stepLabel =
               nextTool === "vault_search" ? "Searching your documents" :
-              nextTool === "web_search" ? `Researching sources (${currentSearchModel})` :
+              nextTool === "web_search" ? "Researching sources" :
               nextTool === "read_files" ? "Reading vault documents" :
               "Processing";
 
