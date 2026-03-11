@@ -27,15 +27,15 @@ export function ResponseActions({ content, messageId, conversationId, onRegenera
     toast({ title: "Copied", description: "Response copied to clipboard" });
   };
 
-  const exportAsMarkdown = () => {
-    const blob = new Blob([content], { type: "text/markdown" });
+  const exportAsText = () => {
+    const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "lawkit-response.md";
+    a.download = "lawkit-response.txt";
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Exported", description: "Downloaded as Markdown file" });
+    toast({ title: "Exported", description: "Downloaded as text file" });
   };
 
   const handleFeedback = async (type: "up" | "down") => {
@@ -107,7 +107,7 @@ export function ResponseActions({ content, messageId, conversationId, onRegenera
           variant="ghost"
           size="sm"
           className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-          onClick={exportAsMarkdown}
+          onClick={exportAsText}
           title="Download"
         >
           <Download className="h-3 w-3" />

@@ -213,9 +213,13 @@ async function toolVaultSearch(
 // Tool: Read Files Directly
 // ──────────────────────────────────────────────
 async function toolReadFiles(orgId: string, vaultId: string | undefined, attachedFileIds: string[] | undefined, adminClient: any): Promise<ToolResult> {
+  // If explicit file IDs are provided, prioritize them over vault-wide query
   const fileQuery = adminClient.from("files").select("id, name, extracted_text").eq("organization_id", orgId);
-  if (vaultId) fileQuery.eq("vault_id", vaultId);
-  if (attachedFileIds?.length) fileQuery.in("id", attachedFileIds);
+  if (attachedFileIds?.length) {
+    fileQuery.in("id", attachedFileIds);
+  } else if (vaultId) {
+    fileQuery.eq("vault_id", vaultId);
+  }
   const { data: files } = await fileQuery.not("extracted_text", "is", null).limit(10);
 
   if (!files?.length) {
@@ -684,7 +688,7 @@ serve(async (req) => {
     const effectiveMode = promptMode || useCase;
     const needsSearch = (sources && sources.length > 0) || deepResearch;
     const isUploadsVaultEarly = clientVaultName === "Uploads";
-    // For Uploads vault, only treat as "has vault" if we have explicit file IDs
+    // Treat as "has vault" if explicit file IDs exist OR a non-Uploads vault is selected
     const hasVault = !!(attachedFileIds?.length) || !!(vaultId && !isUploadsVaultEarly);
 
     // ──────── RESOLVE AI CONFIG ────────
@@ -794,10 +798,13 @@ serve(async (req) => {
           let webSearchDone = false;
 
           // Determine first action: always vault first if available
-          // For red_flags mode, force read_files first to get full document content
+          // For red_flags mode OR when explicit files are attached, force read_files first
           // Auto-trigger web search when Perplexity is available, even without explicit source selection
           let nextTool: string;
-          if (effectiveMode === "red_flags" && hasVault) {
+          if (attachedFileIds?.length) {
+            // Explicit files attached — always read them first, regardless of mode
+            nextTool = "read_files";
+          } else if (effectiveMode === "red_flags" && hasVault) {
             nextTool = "read_files";
           } else if (intent.needsVaultSearch) {
             nextTool = "vault_search";

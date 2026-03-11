@@ -259,36 +259,39 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
     return computeDiff(versions[currentVersion - 1], versions[currentVersion]);
   }, [showEdits, versions, currentVersion]);
 
-  const handleExportMarkdown = () => {
-    // Convert HTML back to simple markdown
-    const md = editorContent
-      .replace(/<h1[^>]*>(.*?)<\/h1>/gi, "# $1\n\n")
-      .replace(/<h2[^>]*>(.*?)<\/h2>/gi, "## $1\n\n")
-      .replace(/<h3[^>]*>(.*?)<\/h3>/gi, "### $1\n\n")
-      .replace(/<strong>(.*?)<\/strong>/gi, "**$1**")
-      .replace(/<em>(.*?)<\/em>/gi, "*$1*")
-      .replace(/<li>(.*?)<\/li>/gi, "- $1\n")
+  const handleExportTxt = () => {
+    // Convert HTML to plain text
+    const txt = editorContent
+      .replace(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/gi, "$1\n\n")
+      .replace(/<strong>(.*?)<\/strong>/gi, "$1")
+      .replace(/<em>(.*?)<\/em>/gi, "$1")
+      .replace(/<li>(.*?)<\/li>/gi, "• $1\n")
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<hr\s*\/?>/gi, "\n---\n")
       .replace(/<\/?(p|ul|ol|div|blockquote|table|thead|tbody|tr|td|th|code|pre|span)[^>]*>/gi, "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
-    const blob = new Blob([md], { type: "text/markdown" });
+    const blob = new Blob([txt], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${title.replace(/[^a-zA-Z0-9]/g, "_")}.md`;
+    a.download = `${title.replace(/[^a-zA-Z0-9]/g, "_")}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleExportHtml = () => {
-    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Instrument Sans',system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.8;color:#1a1a1a;}h1{font-size:1.5rem;font-weight:700;border-bottom:2px solid #e5e5e5;padding-bottom:0.5rem;margin-top:2rem;}h2{font-size:1.25rem;font-weight:600;margin-top:1.75rem;}h3{font-size:1.1rem;font-weight:600;margin-top:1.25rem;}blockquote{border-left:3px solid #6366f1;padding-left:1rem;color:#666;font-style:italic;}table{width:100%;border-collapse:collapse;margin:1rem 0;}th,td{border:1px solid #e5e5e5;padding:0.5rem 0.75rem;text-align:left;}th{background:#f5f5f5;font-weight:600;}</style></head><body>${editorContent}</body></html>`;
-    const blob = new Blob([fullHtml], { type: "text/html" });
+  const handleExportDocx = () => {
+    // Export as .doc (HTML-based, opens in Word)
+    const fullHtml = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Calibri',sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.8;color:#1a1a1a;}h1{font-size:1.5rem;font-weight:700;border-bottom:2px solid #e5e5e5;padding-bottom:0.5rem;margin-top:2rem;}h2{font-size:1.25rem;font-weight:600;margin-top:1.75rem;}h3{font-size:1.1rem;font-weight:600;margin-top:1.25rem;}table{width:100%;border-collapse:collapse;margin:1rem 0;}th,td{border:1px solid #e5e5e5;padding:0.5rem 0.75rem;text-align:left;}th{background:#f5f5f5;font-weight:600;}</style></head><body>${editorContent}</body></html>`;
+    const blob = new Blob([fullHtml], { type: "application/msword" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${title.replace(/[^a-zA-Z0-9]/g, "_")}.html`;
+    a.download = `${title.replace(/[^a-zA-Z0-9]/g, "_")}.doc`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -399,16 +402,16 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
             </PopoverTrigger>
             <PopoverContent className="w-36 p-1" align="end">
               <button
-                onClick={handleExportMarkdown}
+                onClick={handleExportTxt}
                 className="flex w-full items-center rounded px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors"
               >
-                Export as .md
+                Export as .txt
               </button>
               <button
-                onClick={handleExportHtml}
+                onClick={handleExportDocx}
                 className="flex w-full items-center rounded px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors"
               >
-                Export as .html
+                Export as .doc
               </button>
             </PopoverContent>
           </Popover>

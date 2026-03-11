@@ -68,6 +68,11 @@ export function parseMultiStepQuestions(content: string): { preamble: string; qu
   const hasFileExtensions = /\.\w{2,4}\b/.test(allText);
   if (hasMonetaryValues || hasFileExtensions) return null;
 
+  // Guard: don't trigger on long analytical content or legal analysis
+  const hasLegalTerms = /\b(clause|section|article|provision|obligation|liability|indemnity|warranty|termination|governing\s+law|jurisdiction|force\s+majeure|confidentiality|arbitration|red\s*flag)\b/i.test(allText);
+  const isLongContent = content.length > 1000;
+  if ((hasLegalTerms || isLongContent) && !allText.includes("?")) return null;
+
   if (questionStartIdx > 0) {
     preamble = lines.slice(0, questionStartIdx).join("\n").trim();
   }
