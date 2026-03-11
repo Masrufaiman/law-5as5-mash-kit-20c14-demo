@@ -43,7 +43,7 @@ interface MessageBubbleProps {
   intent?: IntentData | null;
   planUpdateReason?: string | null;
   progress?: { current: number; total: number } | null;
-  onFileClick?: (fileName: string, fileId?: string) => void;
+  onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void;
 }
 
 /** User message action bar (edit, copy) */
