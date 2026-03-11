@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Bot, Copy, Pencil, Database, Paperclip, Table2, BookOpen, ChevronDown, ChevronRight, Shield } from "lucide-react";
+import { FileText, Bot, Copy, Pencil, Database, Paperclip, Table2, BookOpen, ChevronDown, ChevronRight, Shield, Loader2 } from "lucide-react";
 import type { ChatMessage, Citation, AgentStep, SearchSource, FileRef, InlineDataTable, Contradiction, Verification, Escalation, IntentData } from "@/hooks/useStreamChat";
 import type { SheetData } from "@/components/editor/SheetEditor";
 import { RedFlagCard, parseRedFlags } from "./RedFlagCard";
@@ -82,21 +82,42 @@ function UserMessageActions({ content, onEdit }: { content: string; onEdit?: () 
   );
 }
 
-/** Attachment badges (vault, files) shown under user messages */
+/** Attachment badges (vault, files, config tags) shown under user messages */
 function AttachmentBadges({ attachments }: { attachments: ChatMessage["attachments"] }) {
   if (!attachments) return null;
-  const { vaultName, fileNames } = attachments;
-  if (!vaultName && (!fileNames || fileNames.length === 0)) return null;
+  const { vaultName, fileNames, promptMode, sources, deepResearch, workflowTitle } = attachments as any;
+  const hasAnything = vaultName || (fileNames && fileNames.length > 0) || promptMode || (sources && sources.length > 0) || deepResearch || workflowTitle;
+  if (!hasAnything) return null;
 
   return (
     <div className="flex flex-wrap gap-1.5 mt-1.5">
+      {promptMode && (
+        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
+          {promptMode}
+        </Badge>
+      )}
+      {deepResearch && (
+        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-normal bg-primary/10 text-primary border-primary/20">
+          Deep Research
+        </Badge>
+      )}
+      {workflowTitle && (
+        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
+          {workflowTitle}
+        </Badge>
+      )}
       {vaultName && (
         <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
           <Database className="h-2.5 w-2.5" />
           {vaultName}
         </Badge>
       )}
-      {fileNames?.map((name, i) => (
+      {sources?.map((src: string, i: number) => (
+        <Badge key={`src-${i}`} variant="outline" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
+          {src}
+        </Badge>
+      ))}
+      {fileNames?.map((name: string, i: number) => (
         <Badge key={i} variant="outline" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
           <Paperclip className="h-2.5 w-2.5" />
           {name}
@@ -387,11 +408,27 @@ export function MessageBubble({
 
   const isInteractive = isLastAssistant && !alreadySelected;
 
+  // During streaming, detect markers early to show skeleton
+  const isStreamingSpecialContent = isStreaming && !isUser && (
+    cleanContent.includes("<!-- SHEET:") || cleanContent.includes("<!-- REDFLAGS:") 
+  );
+
   const detectedDocs = !isUser && !isStreaming ? detectDocuments(cleanContent) : [];
   const detectedSheets = !isUser && !isStreaming ? detectSheets(cleanContent) : [];
   const redFlagData = !isUser && !isStreaming ? parseRedFlags(cleanContent) : null;
   const docInfo = detectedDocs.length > 0 ? detectedDocs[0] : null;
   const sheetInfo = detectedSheets.length > 0 ? detectedSheets[0] : null;
+
+  // Separate Drafting Notes from document content
+  let docContentForEditor = docInfo ? cleanContent : "";
+  let draftingNotes = "";
+  if (docInfo) {
+    const notesMatch = cleanContent.match(/\n##\s*Drafting Notes[\s\S]*$/i);
+    if (notesMatch) {
+      docContentForEditor = cleanContent.slice(0, notesMatch.index).trim();
+      draftingNotes = notesMatch[0].trim();
+    }
+  }
 
   const citeComponents = React.useMemo(() => {
     if (!citations.length) return {};
@@ -618,7 +655,7 @@ export function MessageBubble({
           })()}
           <Card
             className="cursor-pointer border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-all duration-200 p-0"
-            onClick={() => onDocumentOpen(docInfo.title, cleanContent)}
+            onClick={() => onDocumentOpen(docInfo.title, docContentForEditor)}
           >
             <div className="flex items-center gap-3 p-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -630,6 +667,11 @@ export function MessageBubble({
               </div>
             </div>
           </Card>
+          {draftingNotes && (
+            <div className="text-sm text-foreground/90 leading-relaxed prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{draftingNotes}</ReactMarkdown>
+            </div>
+          )}
           {followUpSection}
           {!isStreaming && cleanContent && (
              <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
@@ -723,11 +765,28 @@ export function MessageBubble({
             <AttachmentBadges attachments={message.attachments} />
             <UserMessageActions content={message.content} />
           </div>
+        ) : isStreamingSpecialContent ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/30">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">
+                  {cleanContent.includes("<!-- SHEET:") ? "Generating review table..." : "Analyzing document for red flags..."}
+                </p>
+                <p className="text-xs text-muted-foreground">Results will open in the sidebar</p>
+              </div>
+            </div>
+            <div className="space-y-2 animate-pulse">
+              <div className="h-3.5 bg-muted rounded w-full" />
+              <div className="h-3.5 bg-muted rounded w-5/6" />
+              <div className="h-3.5 bg-muted rounded w-3/4" />
+            </div>
+          </div>
         ) : (
           markdownContent
         )}
 
-        {isStreaming && !isUser && cleanContent.length > 0 && (
+        {isStreaming && !isUser && !isStreamingSpecialContent && cleanContent.length > 0 && (
           <div className="space-y-0">
             <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom rounded-full" />
             {cleanContent.length < 300 && (

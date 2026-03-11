@@ -468,6 +468,7 @@ export default function Chat() {
       currentDocumentContent: editorDoc?.content,
       attachedFileIds,
       attachedFileNames,
+      workflowTitle: workflowTag?.title,
     };
     lastStreamOptions.current = opts;
     sendMessage(msg, opts);
@@ -488,7 +489,10 @@ export default function Chat() {
     if (!text) setInput("");
 
     if (!conversationId) {
-      await createConversationAndSend(msg, vaultId, deepResearch, activeSources, promptMode);
+      // Pass attached file IDs if we have them (e.g. files uploaded in prompt box)
+      const fileIds = conversationAttachedFileIds.length > 0 ? conversationAttachedFileIds : undefined;
+      const fileNames = attachedFiles.length > 0 ? attachedFiles.map(f => f.name) : undefined;
+      await createConversationAndSend(msg, vaultId, deepResearch, activeSources, promptMode, vaultName, workflowTag?.systemPrompt, fileIds, fileNames);
     } else {
       const opts: any = {
         conversationId,
