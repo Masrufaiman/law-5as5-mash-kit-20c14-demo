@@ -348,7 +348,14 @@ export function MessageBubble({
   }
 
   // Preprocess: ensure blank lines around pipe tables for remark-gfm
-  const preprocessed = !isUser ? rawContent.replace(/([^\n])\n(\|)/g, '$1\n\n$2').replace(/(\|)\n([^\n|])/g, '$1\n\n$2') : rawContent;
+  const preprocessed = !isUser ? rawContent
+    // Ensure blank line before table start (line starting with |)
+    .replace(/([^\n])\n(\|[^\n]*\|)/g, '$1\n\n$2')
+    // Ensure blank line after table end (| line followed by non-| non-empty line)
+    .replace(/(\|[^\n]*\|)\n([^\n|])/g, '$1\n\n$2')
+    // Also handle case where table is right after a heading or paragraph with no gap
+    .replace(/(^|\n)([^\n|]+)\n(\|[^\n]*\|[^\n]*\n\|[-:| ]+\|)/gm, '$1$2\n\n$3')
+    : rawContent;
   const cleanContent = !isUser ? stripCitationsBlock(preprocessed) : preprocessed;
 
   const alreadySelected = nextMessage?.role === "user" ? nextMessage.content : null;

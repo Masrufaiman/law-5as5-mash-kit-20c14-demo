@@ -125,7 +125,7 @@ export function StepTracker({
       >
         <Check className="h-3.5 w-3.5 text-primary shrink-0" />
         <span className="flex-1 truncate">
-          Analyzed in {completedCount} step{completedCount !== 1 ? "s" : ""}
+          Analyzed in {totalSteps} step{totalSteps !== 1 ? "s" : ""}
           {totalTime > 0 && ` · ${totalTime}s`}
           {hasCitations && ` · ${totalCited} sources`}
           {stepNames && <span className="text-muted-foreground/60 ml-1">— {stepNames}</span>}
@@ -150,18 +150,18 @@ export function StepTracker({
           <span className="font-medium text-foreground">
             {isWorking
               ? currentStep?.name || (hasReasoning ? "Thinking..." : "Working...")
-              : `Completed in ${steps.length} steps`}
+              : `Completed in ${totalSteps} steps`}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          {progress && isWorking && (
+          {progress && (
             <span className="text-[10px] font-mono text-agent-blue font-medium">
-              {Math.min(progress.current, progress.total)} / {Math.max(progress.current, progress.total)}
+              {isWorking ? `${Math.min(progress.current, progress.total)} / ${progress.total}` : `${progress.total} / ${progress.total}`}
             </span>
           )}
           {!progress && totalSteps > 0 && (
             <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-mono">
-              {completedCount} / {totalSteps}
+              {isWorking ? completedCount : totalSteps} / {totalSteps}
             </Badge>
           )}
           {planUpdateReason && (
