@@ -927,6 +927,21 @@ export default function Chat() {
                 onWorkflowTagRemove={() => setWorkflowTag(null)}
                 replyContext={replyContext}
                 onRemoveReply={() => setReplyContext(null)}
+                isProcessingFiles={isProcessingFiles}
+                onFilesAttach={async (files) => {
+                  setIsProcessingFiles(true);
+                  try {
+                    const result = await processAttachedFiles(files);
+                    setConversationAttachedFileIds(prev => [...prev, ...result.fileIds]);
+                    setVaultId(result.vaultId);
+                    setVaultName("Uploads");
+                    toast({ title: "Files attached", description: `${files.length} file${files.length > 1 ? 's' : ''} uploaded and processing.` });
+                  } catch (err: any) {
+                    toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                  } finally {
+                    setIsProcessingFiles(false);
+                  }
+                }}
               />
             </div>
           </div>

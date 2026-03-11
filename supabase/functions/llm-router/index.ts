@@ -279,7 +279,7 @@ async function toolWebSearch(
   const content = data.choices?.[0]?.message?.content || "";
   const citationUrls: string[] = data.citations || [];
 
-  let context = `\n\n## Research Results (${model})\n${content}`;
+  let context = `\n\n## Research Results\n${content}`;
   const citations: ToolResult["citations"] = [];
   const domains: string[] = [];
 

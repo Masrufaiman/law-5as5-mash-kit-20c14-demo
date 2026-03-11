@@ -225,8 +225,40 @@ export function ChatInput({
         />
       </div>
 
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.xls,.pptx,.png,.jpg,.jpeg,.webp"
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          if (files.length > 0 && onFilesAttach) onFilesAttach(files);
+          e.target.value = "";
+        }}
+      />
+
       {/* Bottom toolbar */}
       <div className="flex items-center gap-1 px-3 py-2 border-t border-border bg-muted/30">
+        {/* File attach button */}
+        {onFilesAttach && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled || isProcessingFiles}
+          >
+            {isProcessingFiles ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Paperclip className="h-3.5 w-3.5" />
+            )}
+            Attach
+          </Button>
+        )}
+
         {/* Sources button */}
         <Popover>
           <PopoverTrigger asChild>
