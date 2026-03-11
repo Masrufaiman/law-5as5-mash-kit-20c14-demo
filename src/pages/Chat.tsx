@@ -435,7 +435,7 @@ export default function Chat() {
     if (!conversationId) {
       await createConversationAndSend(msg, vaultId, deepResearch, activeSources, promptMode);
     } else {
-      const opts = {
+      const opts: any = {
         conversationId,
         organizationId: profile.organization_id!,
         vaultId,
@@ -447,6 +447,10 @@ export default function Chat() {
         workflowSystemPrompt: workflowTag?.systemPrompt,
         currentDocumentContent: editorDoc?.content,
       };
+      // For Uploads vault, scope to the originally attached files
+      if (vaultName === "Uploads" && conversationAttachedFileIds.length > 0) {
+        opts.attachedFileIds = conversationAttachedFileIds;
+      }
       lastStreamOptions.current = opts;
       sendMessage(msg, opts);
     }

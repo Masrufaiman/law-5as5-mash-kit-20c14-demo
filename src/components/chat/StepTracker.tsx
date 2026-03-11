@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Check, Loader2, ChevronDown, ChevronRight, Brain, FileText, Circle, Clock, AlertTriangle, Shield, ArrowUpCircle, Table2 } from "lucide-react";
-import type { AgentStep, SearchSource, FileRef, InlineDataTable, Contradiction, Verification, Escalation, IntentData } from "@/hooks/useStreamChat";
+import { Check, Loader2, ChevronDown, ChevronRight, Brain, FileText, Circle, Clock, AlertTriangle, Shield, ArrowUpCircle, Table2, BookOpen, ExternalLink } from "lucide-react";
+import type { AgentStep, SearchSource, FileRef, InlineDataTable, Contradiction, Verification, Escalation, IntentData, Citation } from "@/hooks/useStreamChat";
 import { cn } from "@/lib/utils";
 import {
   Collapsible,
@@ -25,6 +25,8 @@ interface StepTrackerProps {
   intent?: IntentData | null;
   planUpdateReason?: string | null;
   progress?: { current: number; total: number } | null;
+  citations?: Citation[];
+  onFileClick?: (fileName: string, fileId?: string) => void;
 }
 
 function isPlanStepDone(planStep: string, steps: AgentStep[]): boolean {
@@ -34,14 +36,23 @@ function isPlanStepDone(planStep: string, steps: AgentStep[]): boolean {
   );
 }
 
+function getDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace("www.", "");
+  } catch {
+    return url;
+  }
+}
+
 export function StepTracker({
   steps, isStreaming, reasoning, searchSources, plan, thinkingText, fileRefs,
   inlineData, contradictions, verifications, escalations, selfCheckStatus,
-  intent, planUpdateReason, progress,
+  intent, planUpdateReason, progress, citations, onFileClick,
 }: StepTrackerProps) {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const [showAllFileRefs, setShowAllFileRefs] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
 
   const hasSteps = steps.length > 0;
   const hasReasoning = !!reasoning?.trim();
@@ -75,6 +86,20 @@ export function StepTracker({
   const visibleFileRefs = fileRefs || [];
   const displayedRefs = showAllFileRefs ? visibleFileRefs : visibleFileRefs.slice(0, 5);
 
+  // Citations for sources section
+  const webSources = citations?.filter((c) => c.url) || [];
+  const docSources = citations?.filter((c) => !c.url) || [];
+  const hasCitations = webSources.length > 0 || docSources.length > 0;
+  const totalCited = citations?.length || 0;
+
+  // Deduplicate web sources by domain
+  const uniqueDomains = new Map<string, Citation>();
+  webSources.forEach((c) => {
+    const domain = c.url ? getDomain(c.url) : c.source;
+    if (!uniqueDomains.has(domain)) uniqueDomains.set(domain, c);
+  });
+  const uniqueWebSources = Array.from(uniqueDomains.values());
+
   // Collapsed summary
   if (collapsed && !isWorking) {
     const stepNames = steps.slice(0, 3).map(s => s.name).join(", ");
@@ -92,6 +117,7 @@ export function StepTracker({
         <span className="flex-1 truncate">
           Analyzed in {completedCount} step{completedCount !== 1 ? "s" : ""}
           {totalTime > 0 && ` · ${totalTime}s`}
+          {hasCitations && ` · ${totalCited} sources`}
           {stepNames && <span className="text-muted-foreground/60 ml-1">— {stepNames}</span>}
         </span>
         <ChevronRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0" />
@@ -118,7 +144,6 @@ export function StepTracker({
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          {/* Progress counter */}
           {progress && isWorking && (
             <span className="text-[10px] font-mono text-agent-blue font-medium">
               {progress.current} / {progress.total}
@@ -321,7 +346,12 @@ export function StepTracker({
       {visibleFileRefs.length > 0 && (
         <div className="flex flex-wrap gap-1.5 py-1 ml-1">
           {displayedRefs.map((ref, i) => (
-            <Badge key={i} variant="secondary" className="text-[10px] py-0 px-2 gap-1 font-normal cursor-pointer bg-agent-chip text-agent-blue border border-agent-blue/20 hover:bg-agent-blue/10 transition-colors">
+            <Badge
+              key={i}
+              variant="secondary"
+              className="text-[10px] py-0 px-2 gap-1 font-normal cursor-pointer bg-agent-chip text-agent-blue border border-agent-blue/20 hover:bg-agent-blue/10 transition-colors"
+              onClick={() => onFileClick?.(ref.name, ref.id)}
+            >
               <FileText className="h-2.5 w-2.5" />
               {ref.name}
             </Badge>
@@ -359,6 +389,65 @@ export function StepTracker({
               </table>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Sources section (moved from SourcesFooter) */}
+      {hasCitations && !isStreaming && (
+        <div className="mt-1">
+          <button
+            onClick={() => setSourcesExpanded(!sourcesExpanded)}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            <span>
+              Sources{" — "}
+              <span className="font-medium text-foreground">{totalCited} cited</span>
+            </span>
+            {sourcesExpanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+          </button>
+
+          {sourcesExpanded && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {uniqueWebSources.map((c) => {
+                const domain = c.url ? getDomain(c.url) : c.source;
+                return (
+                  <a
+                    key={c.index}
+                    href={c.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:bg-accent/50 transition-colors"
+                  >
+                    <img
+                      src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`}
+                      alt=""
+                      className="h-3.5 w-3.5 rounded-sm"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                    <span className="truncate max-w-[140px]">{domain}</span>
+                    <ExternalLink className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+                  </a>
+                );
+              })}
+              {docSources.map((c) => (
+                <button
+                  key={c.index}
+                  onClick={() => onFileClick?.(c.source)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:bg-accent/50 transition-colors cursor-pointer"
+                >
+                  <span className="h-3.5 w-3.5 rounded-sm bg-primary/10 flex items-center justify-center text-primary text-[8px] font-bold shrink-0">
+                    {c.index}
+                  </span>
+                  <span className="truncate max-w-[140px]">{c.source}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
