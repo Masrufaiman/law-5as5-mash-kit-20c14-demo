@@ -794,8 +794,18 @@ serve(async (req) => {
           let webSearchDone = false;
 
           // Determine first action: always vault first if available
+          // For red_flags mode, force read_files first to get full document content
           // Auto-trigger web search when Perplexity is available, even without explicit source selection
-          let nextTool = intent.needsVaultSearch ? "vault_search" : ((intent.needsWebSearch || perplexityKey) && perplexityKey ? "web_search" : "");
+          let nextTool: string;
+          if (effectiveMode === "red_flags" && hasVault) {
+            nextTool = "read_files";
+          } else if (intent.needsVaultSearch) {
+            nextTool = "vault_search";
+          } else if ((intent.needsWebSearch || perplexityKey) && perplexityKey) {
+            nextTool = "web_search";
+          } else {
+            nextTool = "";
+          }
           let nextInput: any = { query: message };
 
           while (iteration < MAX_ITERATIONS && nextTool) {

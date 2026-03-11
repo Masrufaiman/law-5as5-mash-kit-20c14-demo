@@ -558,13 +558,6 @@ function ColumnBuilderDialog({
               rows={2}
             />
           </div>
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-muted-foreground">AI Auto-fill</label>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground">{fillMode === "ai" ? "AI fills" : "Manual"}</span>
-              <Switch checked={fillMode === "ai"} onCheckedChange={(v) => setFillMode(v ? "ai" : "manual")} />
-            </div>
-          </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>

@@ -82,21 +82,42 @@ function UserMessageActions({ content, onEdit }: { content: string; onEdit?: () 
   );
 }
 
-/** Attachment badges (vault, files) shown under user messages */
+/** Attachment badges (vault, files, config tags) shown under user messages */
 function AttachmentBadges({ attachments }: { attachments: ChatMessage["attachments"] }) {
   if (!attachments) return null;
-  const { vaultName, fileNames } = attachments;
-  if (!vaultName && (!fileNames || fileNames.length === 0)) return null;
+  const { vaultName, fileNames, promptMode, sources, deepResearch, workflowTitle } = attachments as any;
+  const hasAnything = vaultName || (fileNames && fileNames.length > 0) || promptMode || (sources && sources.length > 0) || deepResearch || workflowTitle;
+  if (!hasAnything) return null;
 
   return (
     <div className="flex flex-wrap gap-1.5 mt-1.5">
+      {promptMode && (
+        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
+          {promptMode}
+        </Badge>
+      )}
+      {deepResearch && (
+        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-normal bg-primary/10 text-primary border-primary/20">
+          Deep Research
+        </Badge>
+      )}
+      {workflowTitle && (
+        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
+          {workflowTitle}
+        </Badge>
+      )}
       {vaultName && (
         <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
           <Database className="h-2.5 w-2.5" />
           {vaultName}
         </Badge>
       )}
-      {fileNames?.map((name, i) => (
+      {sources?.map((src: string, i: number) => (
+        <Badge key={`src-${i}`} variant="outline" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
+          {src}
+        </Badge>
+      ))}
+      {fileNames?.map((name: string, i: number) => (
         <Badge key={i} variant="outline" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
           <Paperclip className="h-2.5 w-2.5" />
           {name}
