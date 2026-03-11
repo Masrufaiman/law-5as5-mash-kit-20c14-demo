@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { FileText, Bot, Copy, Pencil, Database, Paperclip, Table2 } from "lucide-react";
-import type { ChatMessage, Citation, AgentStep, SearchSource, FileRef } from "@/hooks/useStreamChat";
+import type { ChatMessage, Citation, AgentStep, SearchSource, FileRef, InlineDataTable, Contradiction, Verification, Escalation, IntentData } from "@/hooks/useStreamChat";
 import type { SheetData } from "@/components/editor/SheetEditor";
 
 interface MessageBubbleProps {
