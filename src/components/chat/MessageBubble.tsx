@@ -408,11 +408,27 @@ export function MessageBubble({
 
   const isInteractive = isLastAssistant && !alreadySelected;
 
+  // During streaming, detect markers early to show skeleton
+  const isStreamingSpecialContent = isStreaming && !isUser && (
+    cleanContent.includes("<!-- SHEET:") || cleanContent.includes("<!-- REDFLAGS:") 
+  );
+
   const detectedDocs = !isUser && !isStreaming ? detectDocuments(cleanContent) : [];
   const detectedSheets = !isUser && !isStreaming ? detectSheets(cleanContent) : [];
   const redFlagData = !isUser && !isStreaming ? parseRedFlags(cleanContent) : null;
   const docInfo = detectedDocs.length > 0 ? detectedDocs[0] : null;
   const sheetInfo = detectedSheets.length > 0 ? detectedSheets[0] : null;
+
+  // Separate Drafting Notes from document content
+  let docContentForEditor = docInfo ? cleanContent : "";
+  let draftingNotes = "";
+  if (docInfo) {
+    const notesMatch = cleanContent.match(/\n##\s*Drafting Notes[\s\S]*$/i);
+    if (notesMatch) {
+      docContentForEditor = cleanContent.slice(0, notesMatch.index).trim();
+      draftingNotes = notesMatch[0].trim();
+    }
+  }
 
   const citeComponents = React.useMemo(() => {
     if (!citations.length) return {};
