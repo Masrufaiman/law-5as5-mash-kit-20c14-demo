@@ -98,6 +98,7 @@ export default function Chat() {
   const [chatVaults, setChatVaults] = useState<{ id: string; name: string }[]>([]);
   const [workflowTag, setWorkflowTag] = useState<{ title: string; systemPrompt?: string } | null>(null);
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
+  const [replyContext, setReplyContext] = useState<string | null>(null);
   // Track attached file IDs for Uploads vault scoping across messages
   const [conversationAttachedFileIds, setConversationAttachedFileIds] = useState<string[]>([]);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -208,6 +209,8 @@ export default function Chat() {
 
   const loadConversation = async (convId: string) => {
     setIsLoadingConversation(true);
+    setEditorDoc(null);
+    setSheetDoc(null);
     try {
       const { data: conv } = await supabase
         .from("conversations")
@@ -358,8 +361,7 @@ export default function Chat() {
 
   const handleReplyWithSelection = () => {
     if (!selectionTooltip) return;
-    const quoted = `> ${selectionTooltip.text.replace(/\n/g, "\n> ")}\n\n`;
-    setInput(quoted + input);
+    setReplyContext(selectionTooltip.text);
     setSelectionTooltip(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -424,8 +426,13 @@ export default function Chat() {
   };
 
   const handleSend = async (text?: string) => {
-    const msg = (text || input).trim();
+    let msg = (text || input).trim();
     if (!msg || isStreaming) return;
+    // Prepend reply context if present
+    if (replyContext && !text) {
+      msg = `Regarding: "${replyContext.slice(0, 200)}"\n\n${msg}`;
+      setReplyContext(null);
+    }
     if (!profile?.organization_id) {
       toast({ title: "Not ready", description: "Your profile is still loading. Please wait a moment.", variant: "destructive" });
       return;
@@ -898,7 +905,7 @@ export default function Chat() {
 
           <div className="px-6 py-4">
             <div className="mx-auto max-w-3xl">
-              <ChatInput
+            <ChatInput
                 value={input}
                 onChange={setInput}
                 onSend={handleSend}
@@ -918,6 +925,8 @@ export default function Chat() {
                 onSourceToggle={(s) => setActiveSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
                 workflowTag={workflowTag}
                 onWorkflowTagRemove={() => setWorkflowTag(null)}
+                replyContext={replyContext}
+                onRemoveReply={() => setReplyContext(null)}
               />
             </div>
           </div>
