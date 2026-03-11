@@ -452,14 +452,6 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2">
-                    <Badge
-                      variant={row.status === "completed" ? "secondary" : row.status === "error" ? "destructive" : "outline"}
-                      className="text-[8px] py-0 px-1.5"
-                    >
-                      {row.status}
-                    </Badge>
-                  </td>
                 </tr>
               ))}
             </tbody>
