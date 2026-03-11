@@ -136,7 +136,7 @@ function computeDiff(oldText: string, newText: string): string {
   const newWords = newText.replace(/<[^>]+>/g, " ").split(/\s+/).filter(Boolean);
   const m = oldWords.length;
   const n = newWords.length;
-  if (m > 500 || n > 500) return newText;
+  if (m > 3000 || n > 3000) return newText;
 
   const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
   for (let i = 1; i <= m; i++) {
