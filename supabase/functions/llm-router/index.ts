@@ -688,7 +688,7 @@ serve(async (req) => {
     const effectiveMode = promptMode || useCase;
     const needsSearch = (sources && sources.length > 0) || deepResearch;
     const isUploadsVaultEarly = clientVaultName === "Uploads";
-    // For Uploads vault, only treat as "has vault" if we have explicit file IDs
+    // Treat as "has vault" if explicit file IDs exist OR a non-Uploads vault is selected
     const hasVault = !!(attachedFileIds?.length) || !!(vaultId && !isUploadsVaultEarly);
 
     // ──────── RESOLVE AI CONFIG ────────
