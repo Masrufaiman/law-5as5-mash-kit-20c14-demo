@@ -293,7 +293,7 @@ async function toolWebSearch(
     });
   }
 
-  return { context, citations, domains: [...new Set(domains)], fileRefs: [], summary: `Found ${citationUrls.length} sources via ${model}` };
+  return { context, citations, domains: [...new Set(domains)], fileRefs: [], summary: `Found ${citationUrls.length} sources` };
 }
 
 // ──────────────────────────────────────────────
