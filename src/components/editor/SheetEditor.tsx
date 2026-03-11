@@ -579,7 +579,7 @@ function ColumnBuilderDialog({
         </div>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={handleAdd} disabled={!name.trim() || existingColumns.includes(name.trim())}>
+          <Button size="sm" onClick={handleAdd} disabled={!name.trim() || isDuplicate}>
             <Plus className="h-3 w-3 mr-1" />
             Add Column
           </Button>
