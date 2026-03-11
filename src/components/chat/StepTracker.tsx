@@ -131,10 +131,10 @@ export function StepTracker({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs">
           {isWorking ? (
-            <Loader2 className="h-3.5 w-3.5 text-agent-blue animate-spin shrink-0" />
+            <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
           ) : (
             <button onClick={() => setCollapsed(true)} className="shrink-0">
-              <Check className="h-3.5 w-3.5 text-agent-blue" />
+              <Check className="h-3.5 w-3.5 text-primary" />
             </button>
           )}
           <span className="font-medium text-foreground">
