@@ -358,6 +358,12 @@ If you cannot determine a value from the document content, use "N/A". Be concise
             emitStep(controller, encoder, { name, status, detail, duration });
           };
 
+          // Wrapper to also accumulate thinking text for metadata
+          const emitThinkingAndAccumulate = (content: string) => {
+            accumulatedThinkingText += (accumulatedThinkingText ? "\n" : "") + content;
+            emitThinking(controller, encoder, content);
+          };
+
           // ---- EMIT PLAN FIRST ----
           const planSteps = generatePlan(message, hasVault, !!needsSearch, !!deepResearch, effectiveMode);
           emitPlan(controller, encoder, planSteps);
