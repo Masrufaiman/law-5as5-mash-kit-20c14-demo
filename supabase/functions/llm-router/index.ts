@@ -946,6 +946,8 @@ serve(async (req) => {
             customPrompt = agentConf.prompts?.chat || "";
           }
 
+          const followUpInstruction = `\n\nIMPORTANT: At the end of your response, always suggest 3 relevant follow-up questions the user might want to ask. Format each as ">>FOLLOWUP: [question]" on its own line. Make them specific and actionable based on the conversation context.`;
+
           const draftingModePrompt = effectiveMode === "drafting" ? `
 You are LawKit AI, an expert legal document drafting assistant.
 CRITICAL RULES:
@@ -954,7 +956,7 @@ CRITICAL RULES:
 - Use proper legal formatting: numbered sections, subsections, defined terms in bold, signature blocks.
 - Fill in ALL details using user info and org context. NEVER use placeholder text.
 - Include all standard clauses expected for the document type.
-- At the end, suggest 3 follow-up questions starting with ">>FOLLOWUP: "
+${followUpInstruction}
 ` : "";
 
           const reviewModePrompt = effectiveMode === "review" ? `
@@ -967,6 +969,7 @@ Format:
 {"columns":[{"name":"Col","type":"free_response","query":"..."}],"rows":[{"fileName":"f.pdf","status":"completed","values":{"Col":"val"}}]}
 \`\`\`
 Column types: "free_response", "date", "classification", "verbatim", "number"
+${followUpInstruction}
 ` : "";
 
           let documentEditingContext = "";
