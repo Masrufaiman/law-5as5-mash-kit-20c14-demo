@@ -113,7 +113,7 @@ export function StepTracker({
         onClick={() => setCollapsed(false)}
         className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-lg bg-muted/30 border border-border/40 px-3 py-2 w-full text-left group"
       >
-        <Check className="h-3.5 w-3.5 text-agent-blue shrink-0" />
+        <Check className="h-3.5 w-3.5 text-primary shrink-0" />
         <span className="flex-1 truncate">
           Analyzed in {completedCount} step{completedCount !== 1 ? "s" : ""}
           {totalTime > 0 && ` · ${totalTime}s`}
@@ -126,15 +126,15 @@ export function StepTracker({
   }
 
   return (
-    <div className="rounded-lg bg-muted/30 border border-border/40 p-3 space-y-2">
+    <div className="space-y-2">
       {/* Header with progress */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs">
           {isWorking ? (
-            <Loader2 className="h-3.5 w-3.5 text-agent-blue animate-spin shrink-0" />
+            <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
           ) : (
             <button onClick={() => setCollapsed(true)} className="shrink-0">
-              <Check className="h-3.5 w-3.5 text-agent-blue" />
+              <Check className="h-3.5 w-3.5 text-primary" />
             </button>
           )}
           <span className="font-medium text-foreground">
@@ -195,13 +195,13 @@ export function StepTracker({
                 style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
               >
                 {done ? (
-                  <Check className="h-3 w-3 text-agent-blue shrink-0" />
+                  <Check className="h-3 w-3 text-primary shrink-0" />
                 ) : isActive ? (
-                  <Loader2 className="h-3 w-3 text-agent-blue animate-spin shrink-0" />
+                  <Loader2 className="h-3 w-3 text-primary animate-spin shrink-0" />
                 ) : (
                   <Circle className="h-3 w-3 text-muted-foreground/50 shrink-0" />
                 )}
-                <span className={cn(done && "line-through")}>{item}</span>
+                <span>{item}</span>
               </div>
             );
           })}
@@ -227,12 +227,12 @@ export function StepTracker({
                   )}
                 >
                   {step.status === "done" ? (
-                    <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-agent-blue/15">
-                      <Check className="h-2.5 w-2.5 text-agent-blue" />
+                    <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                      <Check className="h-2.5 w-2.5 text-primary" />
                     </div>
                   ) : (
                     <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                      <Loader2 className="h-3 w-3 text-agent-blue animate-spin" />
+                      <Loader2 className="h-3 w-3 text-primary animate-spin" />
                     </div>
                   )}
                   <span className={cn("flex-1", step.status === "done" ? "text-muted-foreground" : "text-foreground font-medium")}>
@@ -250,7 +250,7 @@ export function StepTracker({
                     {step.detail && <p className="text-[11px] text-muted-foreground/80 leading-relaxed">{step.detail}</p>}
                     {step.substeps?.map((sub, j) => (
                       <div key={j} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        {sub.status === "done" ? <Check className="h-2.5 w-2.5 text-agent-blue" /> : <Loader2 className="h-2.5 w-2.5 text-agent-blue animate-spin" />}
+                        {sub.status === "done" ? <Check className="h-2.5 w-2.5 text-primary" /> : <Loader2 className="h-2.5 w-2.5 text-primary animate-spin" />}
                         <span>{sub.name}</span>
                       </div>
                     ))}
@@ -434,18 +434,19 @@ export function StepTracker({
                   </a>
                 );
               })}
-              {docSources.map((c) => (
-                <button
-                  key={c.index}
-                  onClick={() => onFileClick?.(c.source)}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:bg-accent/50 transition-colors cursor-pointer"
-                >
-                  <span className="h-3.5 w-3.5 rounded-sm bg-primary/10 flex items-center justify-center text-primary text-[8px] font-bold shrink-0">
-                    {c.index}
-                  </span>
-                  <span className="truncate max-w-[140px]">{c.source}</span>
-                </button>
-              ))}
+              {docSources.map((c) => {
+                const displayName = c.source.replace(/\s*[·\-–—]\s*(chunk|part|section|page)\s*\d+.*/i, "").trim();
+                return (
+                  <button
+                    key={c.index}
+                    onClick={() => onFileClick?.(displayName)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:bg-accent/50 transition-colors cursor-pointer"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="truncate max-w-[140px]">{displayName}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

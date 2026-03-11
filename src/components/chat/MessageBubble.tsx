@@ -133,14 +133,14 @@ function processChildren(
   });
 }
 
-const CITATION_PATTERN = /(\[\d+\]|\[[\u2070\u00b9\u00b2\u00b3\u2074-\u2079][,\s\u2070\u00b9\u00b2\u00b3\u2074-\u2079]*\]|[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+)/g;
+const CITATION_PATTERN = /(\[\*{0,2}\d+\*{0,2}\]|\[[\u2070\u00b9\u00b2\u00b3\u2074-\u2079][,\s\u2070\u00b9\u00b2\u00b3\u2074-\u2079]*\]|[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+)/g;
 
 function injectCitations(text: string, citations: Citation[]): React.ReactNode[] {
   const parts = text.split(CITATION_PATTERN);
   if (parts.length === 1) return [text];
 
   return parts.map((part, i) => {
-    const bracketMatch = part.match(/^\[(\d+)\]$/);
+    const bracketMatch = part.match(/^\[\*{0,2}(\d+)\*{0,2}\]$/);
     if (bracketMatch) {
       const idx = parseInt(bracketMatch[1], 10);
       const citation = citations.find((c) => c.index === idx);
@@ -353,7 +353,7 @@ export function MessageBubble({
 
   // Markdown components with remark-gfm for proper tables
   const markdownContent = (
-    <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/90 prose-strong:text-foreground prose-li:text-foreground/90 prose-td:text-foreground prose-th:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted prose-pre:border prose-pre:border-border">
+    <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/90 prose-p:leading-7 prose-strong:text-foreground prose-li:text-foreground/90 prose-li:leading-7 prose-td:text-foreground prose-th:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted prose-pre:border prose-pre:border-border">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

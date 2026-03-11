@@ -162,6 +162,16 @@ export function parseChoices(content: string): { preamble: string; choices: Choi
 
   if ((hasMonetaryValues || hasFileExtensions || hasDataPatterns) && !hasQuestion) return null;
 
+  // Guard: reject explanatory numbered lists (reasons, analysis, findings)
+  const hasExplanatoryPreamble = /(?:reasons?|analysis|findings|observations?|issues?|points?|factors?|considerations?)\s*:?\s*$/im.test(preamble);
+  const hasLongDescriptions = choices.some(c => (c.title + " " + c.description).length > 150);
+  const hasDocReferences = choices.some(c => /\.(docx?|pdf|xlsx?|txt)\b/i.test(c.title + " " + c.description));
+  const hasAnalyticalContent = choices.some(c =>
+    /\b(clause|section|article|paragraph|provision|period|term|duration|obligation|liability)\b/i.test(c.title + " " + c.description)
+  );
+
+  if ((hasExplanatoryPreamble || hasLongDescriptions || hasDocReferences || hasAnalyticalContent) && !hasQuestion) return null;
+
   return { preamble, choices };
 }
 
