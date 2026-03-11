@@ -154,14 +154,14 @@ export function StepTracker({
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          {progress && isWorking && (
+          {progress && (
             <span className="text-[10px] font-mono text-agent-blue font-medium">
-              {Math.min(progress.current, progress.total)} / {Math.max(progress.current, progress.total)}
+              {isWorking ? `${Math.min(progress.current, progress.total)} / ${progress.total}` : `${progress.total} / ${progress.total}`}
             </span>
           )}
           {!progress && totalSteps > 0 && (
             <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-mono">
-              {completedCount} / {totalSteps}
+              {isWorking ? completedCount : totalSteps} / {totalSteps}
             </Badge>
           )}
           {planUpdateReason && (
