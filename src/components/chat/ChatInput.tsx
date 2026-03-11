@@ -223,7 +223,34 @@ export function ChatInput({
   const hasChips = workflowTag || selectedVault || deepResearch || (activeSources && activeSources.length > 0) || (attachedFiles && attachedFiles.length > 0) || promptMode;
 
   return (
-    <div className="border border-border rounded-lg bg-card overflow-hidden">
+    <div
+      className={cn("border rounded-lg bg-card overflow-hidden transition-colors", isDraggingOver ? "border-primary border-dashed bg-primary/5" : "border-border")}
+      onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
+      onDragLeave={(e) => { e.preventDefault(); if (e.currentTarget.contains(e.relatedTarget as Node)) return; setIsDraggingOver(false); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDraggingOver(false);
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length && onFileSelect) {
+          // Trigger file processing via the parent's hidden input approach
+          // We dispatch a custom event or call onFileSelect directly
+          const dataTransfer = new DataTransfer();
+          files.forEach(f => dataTransfer.items.add(f));
+          // Find the hidden file input and set its files
+          const fileInput = e.currentTarget.closest('.mx-auto')?.querySelector('input[type="file"]') as HTMLInputElement;
+          if (fileInput) {
+            fileInput.files = dataTransfer.files;
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      }}
+    >
+      {isDraggingOver && (
+        <div className="flex items-center justify-center gap-2 px-3 py-2 text-xs text-primary font-medium">
+          <Upload className="h-3.5 w-3.5" />
+          Drop files here
+        </div>
+      )}
       {/* Chips area — exact clone of Home */}
       {hasChips && (
         <div className="flex flex-wrap gap-1.5 px-3 pt-3 bg-muted/30">
