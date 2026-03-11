@@ -182,7 +182,7 @@ export function StepTracker({
           {escalations.map((esc, i) => (
             <div key={i} className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded bg-accent/30 text-accent-foreground animate-in fade-in slide-in-from-left-2">
               <ArrowUpCircle className="h-3 w-3 shrink-0" />
-              <span>Upgrading to {esc.to === "sonar-deep-research" ? "Deep Research" : esc.to}...</span>
+              <span>Upgrading to {esc.to}...</span>
             </div>
           ))}
         </div>

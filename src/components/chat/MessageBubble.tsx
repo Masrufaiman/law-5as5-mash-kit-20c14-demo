@@ -341,9 +341,10 @@ export function MessageBubble({
         extractedFollowUps.push(match[1].trim());
       }
     }
-    if (extractedFollowUps.length > 0) {
-      rawContent = rawContent.replace(/>>?FOLLOWUP:\s*.+/g, "").trim();
-    }
+  }
+  // Always strip FOLLOWUP lines from displayed content (with or without >> prefix)
+  if (!isUser) {
+    rawContent = rawContent.replace(/^>>?FOLLOWUP:\s*.+$/gm, "").replace(/^FOLLOWUP:\s*.+$/gm, "").trim();
   }
 
   const cleanContent = !isUser ? stripCitationsBlock(rawContent) : rawContent;

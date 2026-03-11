@@ -279,7 +279,7 @@ async function toolWebSearch(
   const content = data.choices?.[0]?.message?.content || "";
   const citationUrls: string[] = data.citations || [];
 
-  let context = `\n\n## Research Results (${model})\n${content}`;
+  let context = `\n\n## Research Results\n${content}`;
   const citations: ToolResult["citations"] = [];
   const domains: string[] = [];
 
@@ -293,7 +293,7 @@ async function toolWebSearch(
     });
   }
 
-  return { context, citations, domains: [...new Set(domains)], fileRefs: [], summary: `Found ${citationUrls.length} sources via ${model}` };
+  return { context, citations, domains: [...new Set(domains)], fileRefs: [], summary: `Found ${citationUrls.length} sources` };
 }
 
 // ──────────────────────────────────────────────
@@ -322,7 +322,8 @@ OUTPUT ONLY THIS JSON (no markdown, no backticks):
   "replan_reason": "if REPLAN why",
   "verify_claim": "if VERIFY what to check",
   "contradiction": null,
-  "inline_data": null
+  "inline_data": null,
+  "vault_result_relevant": true
 }
 
 RULES:
@@ -332,7 +333,9 @@ RULES:
 - Never FINISH on first iteration for complex tasks (5+ plan steps)
 - If same tool called 3 times with same params → REPLAN
 - For contradiction, use: {"claim":"...", "sourceA":"...", "sourceB":"..."}
-- For inline_data, use: {"headers":["col1","col2"], "rows":[["val1","val2"]]}`;
+- For inline_data, use: {"headers":["col1","col2"], "rows":[["val1","val2"]]}
+- VAULT FALLBACK RULE: If vault_search returned empty results, irrelevant results (invoices, receipts, wrong file types), or results unrelated to the query → set vault_result_relevant to false and next_action to TOOL with next_tool "web_search". NEVER FINISH after irrelevant vault results when web search is available. Always fall back to web_search before answering from training data.
+- Only cite sources that actually contributed to your answer. Never cite vault documents if the answer came from web search or training data.`;
 
 async function innerMonologue(
   aiUrl: string, aiKey: string, modelId: string, headers: Record<string, string>,
@@ -785,7 +788,7 @@ serve(async (req) => {
 
             const stepLabel =
               nextTool === "vault_search" ? "Searching your documents" :
-              nextTool === "web_search" ? `Researching sources (${currentSearchModel})` :
+              nextTool === "web_search" ? "Researching sources" :
               nextTool === "read_files" ? "Reading vault documents" :
               "Processing";
 
@@ -805,7 +808,7 @@ serve(async (req) => {
                   if (!perplexityKey) {
                     toolResult = { context: "", citations: [], domains: [], fileRefs: [], summary: "No search API configured" };
                   } else {
-                    emitThinking(`Searching across legal databases using ${currentSearchModel}...`);
+                    emitThinking(`Searching across legal databases...`);
                     toolResult = await toolWebSearch(nextInput.query || message, perplexityKey, currentSearchModel, sources, intent.jurisdictions, currentRE);
                     webSearchDone = true;
                     if (toolResult.domains.length > 0) {
@@ -854,7 +857,9 @@ serve(async (req) => {
 
             // Handle escalation
             if (monologue.search_model && monologue.search_model !== currentSearchModel && perplexityKey) {
-              emit(controller, encoder, { type: "escalation", data: { from: currentSearchModel, to: monologue.search_model, reason: "Initial results insufficient" } });
+              const friendlyFrom = currentSearchModel === "sonar-deep-research" ? "Deep Research" : currentSearchModel === "sonar-pro" ? "Pro Search" : "Fast Search";
+              const friendlyTo = monologue.search_model === "sonar-deep-research" ? "Deep Research" : monologue.search_model === "sonar-pro" ? "Pro Search" : "Fast Search";
+              emit(controller, encoder, { type: "escalation", data: { from: friendlyFrom, to: friendlyTo, reason: "Initial results insufficient" } });
               currentSearchModel = monologue.search_model;
               currentRE = monologue.search_model === "sonar-deep-research" ? "high" : undefined;
             }
@@ -901,8 +906,18 @@ serve(async (req) => {
             }
 
             // Decide next action
-            if (monologue.next_action === "FINISH") {
+            // Check vault fallback: if vault returned irrelevant results, auto-switch to web
+            const vaultWasIrrelevant = monologue.vault_result_relevant === false;
+            if (monologue.next_action === "FINISH" && !vaultWasIrrelevant) {
               nextTool = "";
+            } else if (vaultWasIrrelevant && !webSearchDone && perplexityKey) {
+              // Vault results irrelevant — auto fallback to web search
+              nextTool = "web_search";
+              nextInput = monologue.next_tool_input || { query: message };
+              emitThinking("Document results not relevant to query. Searching online sources...");
+              // Clear irrelevant vault citations
+              allCitations = allCitations.filter(c => c.url);
+              allFileRefs = [];
             } else if (monologue.next_action === "TOOL" && monologue.next_tool) {
               nextTool = monologue.next_tool;
               nextInput = monologue.next_tool_input || { query: message };
@@ -1128,7 +1143,7 @@ ${followUpInstruction}
             iterations: iteration,
             complexity,
             jurisdictions: intent.jurisdictions,
-            searchModelsUsed: currentSearchModel,
+            searchModelsUsed: "internal",
             taskType: intent.taskType,
           };
 

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Sparkles, Send, Plus, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, FolderOpen, Scale, Table2, Zap, Reply, X } from "lucide-react";
+import { Sparkles, Send, Plus, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, FolderOpen, Scale, Table2, Zap, Reply, X, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -70,14 +70,17 @@ interface ChatInputProps {
   onWorkflowTagRemove?: () => void;
   replyContext?: string | null;
   onRemoveReply?: () => void;
+  onFilesAttach?: (files: File[]) => void;
+  isProcessingFiles?: boolean;
 }
 
 export function ChatInput({
   value, onChange, onSend, disabled, deepResearch = false, onDeepResearchChange,
   promptMode, onPromptModeChange, vaults, selectedVault, onVaultSelect, activeSources, onSourceToggle,
-  workflowTag, onWorkflowTagRemove, replyContext, onRemoveReply,
+  workflowTag, onWorkflowTagRemove, replyContext, onRemoveReply, onFilesAttach, isProcessingFiles,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { profile } = useAuth();
   const { toast } = useToast();
   const [improving, setImproving] = useState(false);
@@ -222,8 +225,40 @@ export function ChatInput({
         />
       </div>
 
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.xls,.pptx,.png,.jpg,.jpeg,.webp"
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          if (files.length > 0 && onFilesAttach) onFilesAttach(files);
+          e.target.value = "";
+        }}
+      />
+
       {/* Bottom toolbar */}
       <div className="flex items-center gap-1 px-3 py-2 border-t border-border bg-muted/30">
+        {/* File attach button */}
+        {onFilesAttach && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled || isProcessingFiles}
+          >
+            {isProcessingFiles ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Paperclip className="h-3.5 w-3.5" />
+            )}
+            Attach
+          </Button>
+        )}
+
         {/* Sources button */}
         <Popover>
           <PopoverTrigger asChild>
