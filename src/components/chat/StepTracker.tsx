@@ -126,7 +126,7 @@ export function StepTracker({
   }
 
   return (
-    <div className="rounded-lg bg-muted/30 border border-border/40 p-3 space-y-2">
+    <div className="space-y-2">
       {/* Header with progress */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs">
