@@ -112,8 +112,9 @@ export function StepTracker({
   // Collapsed summary
   if (collapsed && !isWorking) {
     const stepNames = steps.slice(0, 3).map(s => s.name).join(", ");
+    // Sum actual durations from step.duration strings like "72s"
     const totalTime = steps.reduce((sum, s) => {
-      if (s.duration) { const num = parseInt(s.duration); return sum + (isNaN(num) ? 0 : num); }
+      if (s.duration) { const num = parseInt(s.duration.replace(/[^\d]/g, '')); return sum + (isNaN(num) ? 0 : num); }
       return sum;
     }, 0);
 
@@ -155,7 +156,7 @@ export function StepTracker({
         <div className="flex items-center gap-1.5">
           {progress && isWorking && (
             <span className="text-[10px] font-mono text-agent-blue font-medium">
-              {Math.min(progress.current, Math.max(progress.current, progress.total))} / {Math.max(progress.current, progress.total)}
+              {Math.min(progress.current, progress.total)} / {Math.max(progress.current, progress.total)}
             </span>
           )}
           {!progress && totalSteps > 0 && (

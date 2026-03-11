@@ -347,7 +347,9 @@ export function MessageBubble({
     rawContent = rawContent.replace(/^>>?FOLLOWUP:\s*.+$/gm, "").replace(/^FOLLOWUP:\s*.+$/gm, "").trim();
   }
 
-  const cleanContent = !isUser ? stripCitationsBlock(rawContent) : rawContent;
+  // Preprocess: ensure blank lines around pipe tables for remark-gfm
+  const preprocessed = !isUser ? rawContent.replace(/([^\n])\n(\|)/g, '$1\n\n$2').replace(/(\|)\n([^\n|])/g, '$1\n\n$2') : rawContent;
+  const cleanContent = !isUser ? stripCitationsBlock(preprocessed) : preprocessed;
 
   const alreadySelected = nextMessage?.role === "user" ? nextMessage.content : null;
 
@@ -666,7 +668,16 @@ export function MessageBubble({
         )}
 
         {isStreaming && !isUser && cleanContent.length > 0 && (
-          <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom rounded-full" />
+          <div className="space-y-0">
+            <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom rounded-full" />
+            {cleanContent.length < 300 && (
+              <div className="mt-2 space-y-2 animate-pulse">
+                <div className="h-3.5 bg-muted rounded w-full" />
+                <div className="h-3.5 bg-muted rounded w-5/6" />
+                <div className="h-3.5 bg-muted rounded w-3/4" />
+              </div>
+            )}
+          </div>
         )}
 
         {/* Collapsible References */}

@@ -221,7 +221,11 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
     <div className="flex flex-col h-full bg-card" ref={editorContainerRef}>
       {/* Font face CSS for app fonts */}
       <style>{`
-        .ql-editor { font-family: 'Instrument Sans', sans-serif; }
+        .ql-editor { font-family: 'Instrument Sans', sans-serif; line-height: 1.8; }
+        .ql-editor h1 { font-size: 1.5rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.75rem; color: hsl(var(--foreground)); border-bottom: 2px solid hsl(var(--border)); padding-bottom: 0.5rem; }
+        .ql-editor h2 { font-size: 1.25rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; color: hsl(var(--foreground)); }
+        .ql-editor h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; color: hsl(var(--foreground)); }
+        .ql-editor blockquote { border-left: 3px solid hsl(var(--primary)); padding-left: 1rem; color: hsl(var(--muted-foreground)); font-style: italic; margin: 0.75rem 0; }
         .ql-font-playfair-display { font-family: 'Playfair Display', serif; }
         .ql-font-ibm-plex-mono { font-family: 'IBM Plex Mono', monospace; }
         .ql-font-georgia { font-family: 'Georgia', serif; }
@@ -236,6 +240,7 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
         .ql-picker.ql-font .ql-picker-item[data-value="georgia"]::before { content: 'Georgia'; font-family: 'Georgia', serif; }
         .ql-picker.ql-font .ql-picker-label[data-value="times-new-roman"]::before,
         .ql-picker.ql-font .ql-picker-item[data-value="times-new-roman"]::before { content: 'Times New Roman'; font-family: 'Times New Roman', serif; }
+        .ql-toolbar.ql-snow { transition: all 0.2s ease; }
       `}</style>
 
       {/* Compact header */}
