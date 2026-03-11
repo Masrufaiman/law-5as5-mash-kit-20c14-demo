@@ -765,11 +765,60 @@ export function MessageBubble({
         )}
 
         {isUser ? (
-          <div>
-            <p className="text-sm text-foreground whitespace-pre-wrap">{message.content}</p>
-            <AttachmentBadges attachments={message.attachments} />
-            <UserMessageActions content={message.content} />
-          </div>
+          isEditing ? (
+            <div className="space-y-2">
+              <textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="w-full text-sm text-foreground bg-muted/50 border border-border rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-ring min-h-[60px]"
+                rows={3}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (editText.trim() && onEditMessage) {
+                      onEditMessage(message.id, editText.trim());
+                      setIsEditing(false);
+                    }
+                  }
+                  if (e.key === "Escape") setIsEditing(false);
+                }}
+              />
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  className="h-6 text-[10px] px-2.5 gap-1"
+                  onClick={() => {
+                    if (editText.trim() && onEditMessage) {
+                      onEditMessage(message.id, editText.trim());
+                      setIsEditing(false);
+                    }
+                  }}
+                >
+                  <Check className="h-2.5 w-2.5" />
+                  Save & Resend
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[10px] px-2.5 gap-1"
+                  onClick={() => { setIsEditing(false); setEditText(message.content); }}
+                >
+                  <X className="h-2.5 w-2.5" />
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm text-foreground whitespace-pre-wrap">{message.content}</p>
+              <AttachmentBadges attachments={message.attachments} />
+              <UserMessageActions
+                content={message.content}
+                onEdit={onEditMessage ? () => { setEditText(message.content); setIsEditing(true); } : undefined}
+              />
+            </div>
+          )
         ) : isStreamingSpecialContent ? (
           <div className="space-y-3">
             <div className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/30">
