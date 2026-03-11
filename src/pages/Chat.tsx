@@ -316,6 +316,11 @@ export default function Chat() {
     if (!container) return;
 
     const handleMouseUp = () => {
+      // Don't clear tooltip if we just clicked Reply
+      if (isReplyingRef.current) {
+        isReplyingRef.current = false;
+        return;
+      }
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || !selection.toString().trim()) {
         setSelectionTooltip(null);
