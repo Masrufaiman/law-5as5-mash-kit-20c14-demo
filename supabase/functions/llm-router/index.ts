@@ -792,7 +792,8 @@ serve(async (req) => {
           let webSearchDone = false;
 
           // Determine first action: always vault first if available
-          let nextTool = intent.needsVaultSearch ? "vault_search" : (intent.needsWebSearch && perplexityKey ? "web_search" : "");
+          // Auto-trigger web search when Perplexity is available, even without explicit source selection
+          let nextTool = intent.needsVaultSearch ? "vault_search" : ((intent.needsWebSearch || perplexityKey) && perplexityKey ? "web_search" : "");
           let nextInput: any = { query: message };
 
           while (iteration < MAX_ITERATIONS && nextTool) {
