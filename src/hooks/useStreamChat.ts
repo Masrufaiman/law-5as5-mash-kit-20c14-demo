@@ -4,6 +4,10 @@ export interface MessageAttachments {
   vaultName?: string;
   vaultId?: string;
   fileNames?: string[];
+  promptMode?: string;
+  sources?: string[];
+  deepResearch?: boolean;
+  workflowTitle?: string;
 }
 
 export interface InlineDataTable {
