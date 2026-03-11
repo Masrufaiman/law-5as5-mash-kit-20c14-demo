@@ -195,13 +195,13 @@ export function StepTracker({
                 style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
               >
                 {done ? (
-                  <Check className="h-3 w-3 text-agent-blue shrink-0" />
+                  <Check className="h-3 w-3 text-primary shrink-0" />
                 ) : isActive ? (
-                  <Loader2 className="h-3 w-3 text-agent-blue animate-spin shrink-0" />
+                  <Loader2 className="h-3 w-3 text-primary animate-spin shrink-0" />
                 ) : (
                   <Circle className="h-3 w-3 text-muted-foreground/50 shrink-0" />
                 )}
-                <span className={cn(done && "line-through")}>{item}</span>
+                <span>{item}</span>
               </div>
             );
           })}
