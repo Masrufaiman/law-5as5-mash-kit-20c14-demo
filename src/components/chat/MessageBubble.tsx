@@ -140,7 +140,7 @@ function injectCitations(text: string, citations: Citation[]): React.ReactNode[]
   if (parts.length === 1) return [text];
 
   return parts.map((part, i) => {
-    const bracketMatch = part.match(/^\[(\d+)\]$/);
+    const bracketMatch = part.match(/^\[\*{0,2}(\d+)\*{0,2}\]$/);
     if (bracketMatch) {
       const idx = parseInt(bracketMatch[1], 10);
       const citation = citations.find((c) => c.index === idx);
