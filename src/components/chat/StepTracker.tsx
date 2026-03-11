@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Check, Loader2, ChevronDown, ChevronRight, Brain, FileText, Circle, Clock } from "lucide-react";
-import type { AgentStep, SearchSource, FileRef } from "@/hooks/useStreamChat";
+import { Check, Loader2, ChevronDown, ChevronRight, Brain, FileText, Circle, Clock, AlertTriangle, Shield, ArrowUpCircle, Table2 } from "lucide-react";
+import type { AgentStep, SearchSource, FileRef, InlineDataTable, Contradiction, Verification, Escalation, IntentData } from "@/hooks/useStreamChat";
 import { cn } from "@/lib/utils";
 import {
   Collapsible,
@@ -17,27 +17,27 @@ interface StepTrackerProps {
   plan?: string[];
   thinkingText?: string;
   fileRefs?: FileRef[];
+  inlineData?: InlineDataTable[];
+  contradictions?: Contradiction[];
+  verifications?: Verification[];
+  escalations?: Escalation[];
+  selfCheckStatus?: string | null;
+  intent?: IntentData | null;
+  planUpdateReason?: string | null;
+  progress?: { current: number; total: number } | null;
 }
 
-/** Match plan items to completed steps */
 function isPlanStepDone(planStep: string, steps: AgentStep[]): boolean {
   const lower = planStep.toLowerCase();
   return steps.some(
-    (s) =>
-      s.status === "done" &&
-      (s.name.toLowerCase().includes(lower.slice(0, 15)) ||
-        lower.includes(s.name.toLowerCase().slice(0, 15)))
+    (s) => s.status === "done" && (s.name.toLowerCase().includes(lower.slice(0, 15)) || lower.includes(s.name.toLowerCase().slice(0, 15)))
   );
 }
 
 export function StepTracker({
-  steps,
-  isStreaming,
-  reasoning,
-  searchSources,
-  plan,
-  thinkingText,
-  fileRefs,
+  steps, isStreaming, reasoning, searchSources, plan, thinkingText, fileRefs,
+  inlineData, contradictions, verifications, escalations, selfCheckStatus,
+  intent, planUpdateReason, progress,
 }: StepTrackerProps) {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const [showAllFileRefs, setShowAllFileRefs] = useState(false);
@@ -54,15 +54,12 @@ export function StepTracker({
   const completedCount = steps.filter((s) => s.status === "done").length;
   const totalSteps = hasPlan ? plan.length : steps.length;
 
-  // Auto-collapse when done
   useEffect(() => {
     if (allDone && !isStreaming && hasSteps) {
       const timer = setTimeout(() => setCollapsed(true), 800);
       return () => clearTimeout(timer);
     }
-    if (isStreaming) {
-      setCollapsed(false);
-    }
+    if (isStreaming) setCollapsed(false);
   }, [allDone, isStreaming, hasSteps]);
 
   if (!hasSteps && !hasReasoning && !hasPlan && !hasThinking) return null;
@@ -70,8 +67,7 @@ export function StepTracker({
   const toggleStep = (idx: number) => {
     setExpandedSteps((prev) => {
       const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
       return next;
     });
   };
@@ -83,10 +79,7 @@ export function StepTracker({
   if (collapsed && !isWorking) {
     const stepNames = steps.slice(0, 3).map(s => s.name).join(", ");
     const totalTime = steps.reduce((sum, s) => {
-      if (s.duration) {
-        const num = parseInt(s.duration);
-        return sum + (isNaN(num) ? 0 : num);
-      }
+      if (s.duration) { const num = parseInt(s.duration); return sum + (isNaN(num) ? 0 : num); }
       return sum;
     }, 0);
 
@@ -95,7 +88,7 @@ export function StepTracker({
         onClick={() => setCollapsed(false)}
         className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-lg bg-muted/30 border border-border/40 px-3 py-2 w-full text-left group"
       >
-        <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+        <Check className="h-3.5 w-3.5 text-agent-blue shrink-0" />
         <span className="flex-1 truncate">
           Analyzed in {completedCount} step{completedCount !== 1 ? "s" : ""}
           {totalTime > 0 && ` · ${totalTime}s`}
@@ -112,10 +105,10 @@ export function StepTracker({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs">
           {isWorking ? (
-            <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
+            <Loader2 className="h-3.5 w-3.5 text-agent-blue animate-spin shrink-0" />
           ) : (
             <button onClick={() => setCollapsed(true)} className="shrink-0">
-              <Check className="h-3.5 w-3.5 text-primary" />
+              <Check className="h-3.5 w-3.5 text-agent-blue" />
             </button>
           )}
           <span className="font-medium text-foreground">
@@ -125,28 +118,48 @@ export function StepTracker({
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          {totalSteps > 0 && (
+          {/* Progress counter */}
+          {progress && isWorking && (
+            <span className="text-[10px] font-mono text-agent-blue font-medium">
+              {progress.current} / {progress.total}
+            </span>
+          )}
+          {!progress && totalSteps > 0 && (
             <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-mono">
               {completedCount} / {totalSteps}
             </Badge>
           )}
+          {planUpdateReason && (
+            <Badge className="text-[9px] py-0 px-1.5 bg-accent text-accent-foreground border-0">
+              Plan updated
+            </Badge>
+          )}
           {!isWorking && (
-            <button
-              onClick={() => setCollapsed(true)}
-              className="text-muted-foreground/40 hover:text-muted-foreground"
-            >
+            <button onClick={() => setCollapsed(true)} className="text-muted-foreground/40 hover:text-muted-foreground">
               <ChevronDown className="h-3 w-3" />
             </button>
           )}
         </div>
       </div>
 
+      {/* Escalation notices */}
+      {escalations && escalations.length > 0 && (
+        <div className="space-y-1">
+          {escalations.map((esc, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded bg-accent/30 text-accent-foreground animate-in fade-in slide-in-from-left-2">
+              <ArrowUpCircle className="h-3 w-3 shrink-0" />
+              <span>Upgrading to {esc.to === "sonar-deep-research" ? "Deep Research" : esc.to}...</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Plan checklist */}
       {hasPlan && (
         <div className="space-y-1 ml-1">
           {plan.map((item, i) => {
-            // When all steps are done and not streaming, mark all plan items as done
             const done = (allDone && !isStreaming) || isPlanStepDone(item, steps);
+            const isActive = !done && isWorking && i === plan.findIndex(p => !isPlanStepDone(p, steps) || (allDone && isStreaming));
             return (
               <div
                 key={i}
@@ -157,7 +170,9 @@ export function StepTracker({
                 style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
               >
                 {done ? (
-                  <Check className="h-3 w-3 text-primary shrink-0" />
+                  <Check className="h-3 w-3 text-agent-blue shrink-0" />
+                ) : isActive ? (
+                  <Loader2 className="h-3 w-3 text-agent-blue animate-spin shrink-0" />
                 ) : (
                   <Circle className="h-3 w-3 text-muted-foreground/50 shrink-0" />
                 )}
@@ -181,53 +196,36 @@ export function StepTracker({
                   onClick={() => hasDetail && toggleStep(i)}
                   className={cn(
                     "flex items-center gap-2 text-xs w-full text-left rounded px-1.5 py-1 transition-colors",
+                    step.status === "working" ? "border-l-2 border-agent-blue" : "border-l-2 border-transparent",
                     hasDetail && "hover:bg-muted/50 cursor-pointer",
                     !hasDetail && "cursor-default"
                   )}
                 >
                   {step.status === "done" ? (
-                    <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/15">
-                      <Check className="h-2.5 w-2.5 text-primary" />
+                    <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-agent-blue/15">
+                      <Check className="h-2.5 w-2.5 text-agent-blue" />
                     </div>
                   ) : (
                     <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                      <Loader2 className="h-3 w-3 text-primary animate-spin" />
+                      <Loader2 className="h-3 w-3 text-agent-blue animate-spin" />
                     </div>
                   )}
-                  <span className={cn(
-                    "flex-1",
-                    step.status === "done" ? "text-muted-foreground" : "text-foreground font-medium"
-                  )}>
+                  <span className={cn("flex-1", step.status === "done" ? "text-muted-foreground" : "text-foreground font-medium")}>
                     {step.name}
                   </span>
                   {step.duration && (
                     <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
-                      <Clock className="h-2.5 w-2.5" />
-                      {step.duration}
+                      <Clock className="h-2.5 w-2.5" />{step.duration}
                     </span>
                   )}
-                  {hasDetail && (
-                    isExpanded
-                      ? <ChevronDown className="h-3 w-3 text-muted-foreground/40 shrink-0" />
-                      : <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
-                  )}
+                  {hasDetail && (isExpanded ? <ChevronDown className="h-3 w-3 text-muted-foreground/40 shrink-0" /> : <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />)}
                 </button>
-
-                {/* Expanded detail */}
                 {isExpanded && hasDetail && (
                   <div className="ml-7 pl-2 border-l border-border/50 mt-0.5 mb-1 space-y-1">
-                    {step.detail && (
-                      <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
-                        {step.detail}
-                      </p>
-                    )}
+                    {step.detail && <p className="text-[11px] text-muted-foreground/80 leading-relaxed">{step.detail}</p>}
                     {step.substeps?.map((sub, j) => (
                       <div key={j} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        {sub.status === "done" ? (
-                          <Check className="h-2.5 w-2.5 text-primary" />
-                        ) : (
-                          <Loader2 className="h-2.5 w-2.5 text-primary animate-spin" />
-                        )}
+                        {sub.status === "done" ? <Check className="h-2.5 w-2.5 text-agent-blue" /> : <Loader2 className="h-2.5 w-2.5 text-agent-blue animate-spin" />}
                         <span>{sub.name}</span>
                       </div>
                     ))}
@@ -239,22 +237,80 @@ export function StepTracker({
         </div>
       )}
 
+      {/* Contradiction blocks */}
+      {contradictions && contradictions.length > 0 && (
+        <div className="space-y-1.5">
+          {contradictions.map((c, i) => (
+            <Collapsible key={i}>
+              <CollapsibleTrigger className="flex items-center gap-1.5 text-[11px] w-full text-left rounded px-2 py-1.5 border-l-2 border-agent-orange bg-agent-orange/5 hover:bg-agent-orange/10 transition-colors cursor-pointer">
+                <AlertTriangle className="h-3 w-3 text-agent-orange shrink-0" />
+                <span className="text-foreground font-medium flex-1">Conflicting information found</span>
+                <ChevronDown className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="ml-4 mt-1 space-y-1 text-[11px] text-muted-foreground pl-2 border-l border-agent-orange/30">
+                  <p><strong>Claim:</strong> {c.claim}</p>
+                  <p><strong>Source A:</strong> {c.sourceA}</p>
+                  <p><strong>Source B:</strong> {c.sourceB}</p>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          ))}
+        </div>
+      )}
+
+      {/* Verification blocks */}
+      {verifications && verifications.length > 0 && (
+        <div className="space-y-1">
+          {verifications.map((v, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded animate-in fade-in">
+              {v.status === "checking" ? (
+                <>
+                  <Loader2 className="h-3 w-3 text-agent-blue animate-spin shrink-0" />
+                  <span className="text-muted-foreground">Cross-checking: {v.claim}...</span>
+                </>
+              ) : v.status === "verified" ? (
+                <>
+                  <Shield className="h-3 w-3 text-agent-blue shrink-0" />
+                  <span className="text-muted-foreground">✓ Verified: {v.claim}</span>
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="h-3 w-3 text-agent-orange shrink-0" />
+                  <span className="text-muted-foreground">⚠ Unverified: {v.claim}</span>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Self-check block */}
+      {selfCheckStatus && selfCheckStatus !== "passed" && (
+        <div className={cn(
+          "flex items-center gap-1.5 text-[11px] px-2 py-1.5 rounded border border-dashed",
+          selfCheckStatus === "running" ? "border-accent/60 text-muted-foreground" : "border-destructive/40 text-destructive"
+        )}>
+          {selfCheckStatus === "running" ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+              <span>Reviewing work...</span>
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="h-3 w-3 shrink-0" />
+              <span>Self-check flagged gaps — researching further...</span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Search source favicon pills */}
       {searchSources && searchSources.domains.length > 0 && (
         <div className="flex flex-wrap gap-1.5 py-1 ml-1">
           {searchSources.domains.slice(0, 8).map((domain) => (
-            <span
-              key={domain}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-0.5 text-[10px] text-muted-foreground"
-            >
-              <img
-                src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`}
-                alt=""
-                className="h-3 w-3 rounded-sm"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
+            <span key={domain} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-0.5 text-[10px] text-muted-foreground">
+              <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`} alt="" className="h-3 w-3 rounded-sm" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
               <span className="truncate max-w-[100px]">{domain}</span>
             </span>
           ))}
@@ -265,34 +321,55 @@ export function StepTracker({
       {visibleFileRefs.length > 0 && (
         <div className="flex flex-wrap gap-1.5 py-1 ml-1">
           {displayedRefs.map((ref, i) => (
-            <Badge
-              key={i}
-              variant="secondary"
-              className="text-[10px] py-0 px-2 gap-1 font-normal cursor-pointer hover:bg-primary/10 transition-colors"
-            >
+            <Badge key={i} variant="secondary" className="text-[10px] py-0 px-2 gap-1 font-normal cursor-pointer bg-agent-chip text-agent-blue border border-agent-blue/20 hover:bg-agent-blue/10 transition-colors">
               <FileText className="h-2.5 w-2.5" />
               {ref.name}
             </Badge>
           ))}
           {visibleFileRefs.length > 5 && !showAllFileRefs && (
-            <button
-              onClick={() => setShowAllFileRefs(true)}
-              className="text-[10px] text-primary hover:underline"
-            >
+            <button onClick={() => setShowAllFileRefs(true)} className="text-[10px] text-agent-blue hover:underline">
               View {visibleFileRefs.length - 5} more...
             </button>
           )}
         </div>
       )}
 
-      {/* Thinking text (visible reasoning between steps) */}
+      {/* Inline data tables */}
+      {inlineData && inlineData.length > 0 && (
+        <div className="space-y-2">
+          {inlineData.map((table, i) => (
+            <div key={i} className="overflow-x-auto rounded-md border border-border animate-in fade-in slide-in-from-bottom-1" style={{ animationDelay: `${i * 100}ms`, animationFillMode: "both" }}>
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr>
+                    {table.headers.map((h, j) => (
+                      <th key={j} className="bg-agent-blue text-white px-3 py-1.5 text-left font-medium text-[11px] whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {table.rows.map((row, ri) => (
+                    <tr key={ri} className={ri % 2 === 0 ? "bg-background" : "bg-secondary/30"}>
+                      {row.map((cell, ci) => (
+                        <td key={ci} className="px-3 py-1.5 text-[11px] text-foreground/80 border-b border-border/30">{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Thinking text */}
       {hasThinking && (
-        <div className="ml-1 text-[11px] text-muted-foreground/70 leading-relaxed italic border-l-2 border-primary/20 pl-2.5 py-1">
+        <div className="ml-1 text-[11px] text-muted-foreground/70 leading-relaxed italic font-mono border-l-2 border-agent-blue/20 pl-2.5 py-1 bg-muted/20 rounded-r">
           {thinkingText}
         </div>
       )}
 
-      {/* Internal reasoning (from <think> blocks) */}
+      {/* Internal reasoning */}
       {hasReasoning && (
         <Collapsible>
           <CollapsibleTrigger className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60 hover:text-muted-foreground ml-1 cursor-pointer">
