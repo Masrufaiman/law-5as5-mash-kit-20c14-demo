@@ -63,8 +63,9 @@ export function IntegrationsTab({ orgId }: IntegrationsTabProps) {
         is_active: true,
       };
       if (newApiKey) {
-        payload.api_key_encrypted = btoa(newApiKey);
-        payload.api_key_iv = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(12))));
+        const { api_key_encrypted, api_key_iv } = await encryptApiKey(newApiKey);
+        payload.api_key_encrypted = api_key_encrypted;
+        payload.api_key_iv = api_key_iv;
       }
       const { error } = await supabase.from("api_integrations").insert(payload);
       if (error) throw error;
