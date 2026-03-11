@@ -468,6 +468,7 @@ export default function Chat() {
       currentDocumentContent: editorDoc?.content,
       attachedFileIds,
       attachedFileNames,
+      workflowTitle: workflowTag?.title,
     };
     lastStreamOptions.current = opts;
     sendMessage(msg, opts);
