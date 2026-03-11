@@ -985,14 +985,56 @@ serve(async (req) => {
 
           const followUpInstruction = `\n\nIMPORTANT: At the end of your response, always suggest 3 relevant follow-up questions the user might want to ask. Format each as ">>FOLLOWUP: [question]" on its own line. Make them specific and actionable based on the conversation context.`;
 
+          const redFlagModePrompt = effectiveMode === "red_flags" ? `
+You are LawKit AI performing Red Flag Analysis.
+Read the ENTIRE document carefully. For every risky, unusual, or potentially unfavorable clause:
+
+OUTPUT FORMAT — you MUST use this exact format:
+<!-- REDFLAGS: [Document Title] -->
+\`\`\`json
+{
+  "flags": [
+    {
+      "clause_text": "exact verbatim quote from the document",
+      "risk_level": "CRITICAL|HIGH|MEDIUM|LOW",
+      "category": "liability|IP|termination|payment|governance|data_protection|confidentiality|indemnification|non_compete|representations",
+      "reason": "Clear explanation of why this clause is risky",
+      "suggested_edit": "Specific rewrite of the clause to address the risk"
+    }
+  ],
+  "summary": {
+    "total": N,
+    "critical": N,
+    "high": N,
+    "medium": N,
+    "low": N,
+    "risk_score": N
+  }
+}
+\`\`\`
+
+Risk levels:
+- CRITICAL = must fix before signing, creates serious legal exposure
+- HIGH = strongly recommended to fix, significant risk
+- MEDIUM = worth negotiating, moderate concern
+- LOW = minor issue, note only
+
+Before the REDFLAGS block, write a brief 2-3 sentence overview of the document and overall risk assessment.
+After the REDFLAGS block, write a brief conclusion with key recommendations.
+${followUpInstruction}
+` : "";
+
           const draftingModePrompt = effectiveMode === "drafting" ? `
 You are LawKit AI, an expert legal document drafting assistant.
 CRITICAL RULES:
 - You MUST generate a complete, properly formatted legal document. NEVER output JSON, extraction data, or structured data.
 - Start with "# [Document Title]" followed by the full document body.
-- Use proper legal formatting: numbered sections, subsections, defined terms in bold, signature blocks.
-- Fill in ALL details using user info and org context. NEVER use placeholder text.
+- Use proper legal formatting: numbered sections (1., 1.1, 1.2), subsections, defined terms in **bold**, signature blocks.
+- Fill in ALL details using user info and org context. NEVER use placeholder text like [PARTY NAME].
 - Include all standard clauses expected for the document type.
+- RESEARCH jurisdiction requirements BEFORE drafting — ensure compliance with applicable laws.
+- End the document with a "## Drafting Notes" section explaining key decisions, assumptions made, and any areas requiring client review.
+- Use clear modern legal language — avoid archaic legalese.
 ${followUpInstruction}
 ` : "";
 
