@@ -242,7 +242,7 @@ function CollapsibleReferences({ citations, onFileClick }: { citations: Citation
             return (
               <div key={source} className="space-y-1">
                 <button
-                  onClick={() => isFile && onFileClick?.(displayName)}
+                  onClick={() => isFile && onFileClick?.(displayName, undefined, cites[0]?.excerpt)}
                   className={cn(
                     "flex items-center gap-1.5 text-xs font-medium",
                     isFile ? "text-primary hover:underline cursor-pointer" : "text-foreground"
