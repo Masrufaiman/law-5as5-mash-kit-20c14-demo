@@ -98,6 +98,7 @@ export default function Chat() {
   const [chatVaults, setChatVaults] = useState<{ id: string; name: string }[]>([]);
   const [workflowTag, setWorkflowTag] = useState<{ title: string; systemPrompt?: string } | null>(null);
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
+  const [replyContext, setReplyContext] = useState<string | null>(null);
   // Track attached file IDs for Uploads vault scoping across messages
   const [conversationAttachedFileIds, setConversationAttachedFileIds] = useState<string[]>([]);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
