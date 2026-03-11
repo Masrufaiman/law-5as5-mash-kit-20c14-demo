@@ -81,6 +81,7 @@ interface ChatInputProps {
   onFileSelect?: () => void;
   onRemoveFile?: (index: number) => void;
   isProcessingFiles?: boolean;
+  onFilesDropped?: (files: File[]) => void;
   // Knowledge base
   kbSources?: KBSource[];
 }
