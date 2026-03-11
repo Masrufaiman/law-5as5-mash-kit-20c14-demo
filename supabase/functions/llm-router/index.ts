@@ -339,6 +339,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
 
     const stream = new ReadableStream({
       async start(controller) {
+        try {
           // Accumulators for metadata persistence
           let accumulatedThinkingText = "";
           const stepStartTimes: Map<string, number> = new Map();
