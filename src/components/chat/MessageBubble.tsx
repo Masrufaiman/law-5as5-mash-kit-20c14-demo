@@ -185,30 +185,46 @@ function stripCitationsBlock(content: string): string {
     .trim();
 }
 
-function detectDocument(content: string): { title: string } | null {
-  if (content.includes("<!-- SHEET:")) return null;
-  const headingMatch = content.match(/^#\s+(.+)/m) || content.match(/^##\s+(.+)/m);
-  if (headingMatch && content.length > 500) return { title: headingMatch[1] };
+function detectDocuments(content: string): { title: string; content: string }[] {
+  if (content.includes("<!-- SHEET:") || content.includes("<!-- REDFLAGS:")) return [];
+  // Find all top-level headings that could be documents
+  const docs: { title: string; content: string }[] = [];
+  const headingRegex = /^#{1,2}\s+(.+)/gm;
+  let match;
+  const headings: { title: string; index: number }[] = [];
+  while ((match = headingRegex.exec(content)) !== null) {
+    headings.push({ title: match[1], index: match.index });
+  }
+  
+  if (headings.length === 0) {
+    // Try bold title pattern
+    const boldMatch = content.match(/^\*\*([A-Z][A-Z\s\-–—,]+[A-Z])\*\*/m);
+    if (boldMatch && content.length > 500) return [{ title: boldMatch[1], content }];
+    return [];
+  }
 
-  const boldMatch = content.match(/^\*\*([A-Z][A-Z\s\-–—,]+[A-Z])\*\*/m);
-  if (boldMatch && content.length > 500) return { title: boldMatch[1] };
+  if (content.length < 500) return [];
 
-  return null;
+  // Single doc: first heading is the title
+  docs.push({ title: headings[0].title, content });
+  return docs;
 }
 
-function detectSheet(content: string): SheetData | null {
-  const match = content.match(/<!--\s*SHEET:\s*(.+?)\s*-->\s*```json\s*([\s\S]*?)```/);
-  if (!match) return null;
-  try {
-    const parsed = JSON.parse(match[2]);
-    return {
-      title: match[1].trim(),
-      columns: parsed.columns || [],
-      rows: parsed.rows || [],
-    };
-  } catch {
-    return null;
+function detectSheets(content: string): SheetData[] {
+  const sheets: SheetData[] = [];
+  const regex = /<!--\s*SHEET:\s*(.+?)\s*-->\s*```json\s*([\s\S]*?)```/g;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    try {
+      const parsed = JSON.parse(match[2]);
+      sheets.push({
+        title: match[1].trim(),
+        columns: parsed.columns || [],
+        rows: parsed.rows || [],
+      });
+    } catch { /* skip invalid */ }
   }
+  return sheets;
 }
 /** Collapsible References section */
 function CollapsibleReferences({ citations, onFileClick }: { citations: Citation[]; onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void }) {
