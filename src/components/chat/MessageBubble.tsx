@@ -176,6 +176,10 @@ function stripCitationsBlock(content: string): string {
     .replace(/\n{1,2}Sources?\s*:?\s*\n(?:\[?[\u2070\u00b9\u00b2\u00b3\u2074-\u2079\d][\s\S]*)?$/i, "")
     // Strip verbose inline references block: "References: [¹] filename — Page N: "excerpt" [²]..."
     .replace(/\n{0,3}References\s*:\s*\[[\u2070\u00b9\u00b2\u00b3\u2074-\u2079\d\*]+\][\s\S]*$/i, "")
+    // Strip verbose "Citations: 1 filename — Page N: ..." (numbers without brackets)
+    .replace(/\n{0,3}Citations\s*:\s*\d+\s+\S[\s\S]*$/i, "")
+    // Strip verbose "Citations: [1] filename ..." or "References: 1. filename ..."
+    .replace(/\n{0,3}(?:Citations|References)\s*:\s*(?:\[?\d+\]?\.?\s+\S[\s\S]*)$/i, "")
     .trim();
 }
 
