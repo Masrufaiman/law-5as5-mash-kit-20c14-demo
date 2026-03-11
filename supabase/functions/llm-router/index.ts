@@ -857,7 +857,9 @@ serve(async (req) => {
 
             // Handle escalation
             if (monologue.search_model && monologue.search_model !== currentSearchModel && perplexityKey) {
-              emit(controller, encoder, { type: "escalation", data: { from: currentSearchModel, to: monologue.search_model, reason: "Initial results insufficient" } });
+              const friendlyFrom = currentSearchModel === "sonar-deep-research" ? "Deep Research" : currentSearchModel === "sonar-pro" ? "Pro Search" : "Fast Search";
+              const friendlyTo = monologue.search_model === "sonar-deep-research" ? "Deep Research" : monologue.search_model === "sonar-pro" ? "Pro Search" : "Fast Search";
+              emit(controller, encoder, { type: "escalation", data: { from: friendlyFrom, to: friendlyTo, reason: "Initial results insufficient" } });
               currentSearchModel = monologue.search_model;
               currentRE = monologue.search_model === "sonar-deep-research" ? "high" : undefined;
             }
