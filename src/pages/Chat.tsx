@@ -589,12 +589,19 @@ export default function Chat() {
     fileInputRef.current?.click();
   }, []);
 
+  // Defer file upload — only add to local state on selection, upload on submit
   const handleFilesSelected = useCallback(async (files: File[]) => {
     if (!files.length) return;
     setAttachedFiles(prev => [...prev, ...files]);
+    // No upload, no toast — files will be processed on submit
+  }, []);
+
+  // Process files and send message — called from handleSend when attachedFiles exist
+  const processAndSendWithFiles = useCallback(async (msg: string) => {
+    if (!attachedFiles.length) return;
     setIsProcessingFiles(true);
     try {
-      const result = await processAttachedFiles(files);
+      const result = await processAttachedFiles(attachedFiles);
       setConversationAttachedFileIds(prev => [...prev, ...result.fileIds]);
       setVaultId(result.vaultId);
       setVaultName("Uploads");
@@ -615,15 +622,36 @@ export default function Chat() {
       }
       if (!allReady) {
         toast({ title: "Processing", description: "Some files are still processing. The AI may not see all content yet." });
+      }
+
+      // Now send the message with the processed file IDs
+      setAttachedFiles([]);
+      if (!conversationId) {
+        await createConversationAndSend(msg, result.vaultId, deepResearch, activeSources, promptMode, "Uploads", workflowTag?.systemPrompt, result.fileIds, result.fileIds.map((_, i) => attachedFiles[i]?.name || "file"));
       } else {
-        toast({ title: "Files ready", description: `${files.length} file${files.length > 1 ? 's' : ''} processed and ready.` });
+        const opts: any = {
+          conversationId,
+          organizationId: profile!.organization_id!,
+          vaultId: result.vaultId,
+          vaultName: "Uploads",
+          deepResearch,
+          sources: activeSources,
+          useCase: promptMode,
+          currentSheetState: sheetDoc,
+          workflowSystemPrompt: workflowTag?.systemPrompt,
+          currentDocumentContent: editorDoc?.content,
+          attachedFileIds: result.fileIds,
+          attachedFileNames: attachedFiles.map(f => f.name),
+        };
+        lastStreamOptions.current = opts;
+        sendMessage(msg, opts);
       }
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
       setIsProcessingFiles(false);
     }
-  }, [processAttachedFiles, toast]);
+  }, [attachedFiles, processAttachedFiles, toast, conversationId, deepResearch, activeSources, promptMode, workflowTag, sheetDoc, editorDoc, profile]);
 
   const removeAttachedFile = useCallback((index: number) => {
     setAttachedFiles(prev => prev.filter((_, i) => i !== index));
