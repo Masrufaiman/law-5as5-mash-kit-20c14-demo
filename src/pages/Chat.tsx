@@ -821,6 +821,14 @@ export default function Chat() {
                                 plan={plan}
                                 thinkingText={thinkingText}
                                 fileRefs={fileRefs}
+                                inlineData={inlineData}
+                                contradictions={contradictions}
+                                verifications={verifications}
+                                escalations={escalations}
+                                selfCheckStatus={selfCheckStatus}
+                                intent={intent}
+                                planUpdateReason={planUpdateReason}
+                                progress={progress}
                               />
                             ) : (
                               <div className="space-y-3">
