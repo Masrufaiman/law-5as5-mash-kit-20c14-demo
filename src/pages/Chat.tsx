@@ -908,7 +908,7 @@ export default function Chat() {
             <ChatInput
                 value={input}
                 onChange={setInput}
-                onSend={handleSend}
+                onSend={() => handleSend()}
                 disabled={isStreaming || !profile?.organization_id}
                 deepResearch={deepResearch}
                 onDeepResearchChange={setDeepResearch}

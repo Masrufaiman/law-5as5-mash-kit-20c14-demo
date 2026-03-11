@@ -566,8 +566,9 @@ ${orgKnowledge ? `## Organization Knowledge\n${orgKnowledge}\n` : ""}
 ## Formatting
 - Use markdown: headers, lists, bold for key terms
 - Use tables for comparative data
-- At the end, suggest 3 follow-up questions starting with ">>FOLLOWUP: "
-- Do not include horizontal rules or "References:" sections`;
+- Do NOT include a "References:", "Citations:", or "Sources:" section at the end — citations are handled automatically by the UI
+- Use comparison tables aggressively when analyzing multiple documents, jurisdictions, or options
+- At the end, suggest 3 follow-up questions starting with ">>FOLLOWUP: "`;
 }
 
 // ──────────────────────────────────────────────
@@ -938,6 +939,9 @@ serve(async (req) => {
           // ════════════════════════════════════
           // PHASE 5: BUILD SYSTEM PROMPT & SYNTHESIZE
           // ════════════════════════════════════
+          // Emit final progress count
+          emit(controller, encoder, { type: "progress", current: currentPlan.length, total: currentPlan.length });
+
           trackStep("Synthesizing response", "working");
 
           // Mode-specific prompts (preserved from original)
@@ -985,7 +989,7 @@ ${followUpInstruction}
           );
 
           const allContext = accumulatedContext.join("\n");
-          const effectiveBasePrompt = draftingModePrompt || reviewModePrompt || basePrompt;
+          const effectiveBasePrompt = draftingModePrompt || reviewModePrompt || (basePrompt + followUpInstruction);
           let finalSystemPrompt = effectiveBasePrompt;
           if (workflowSystemPrompt) finalSystemPrompt = workflowSystemPrompt + "\n\n" + finalSystemPrompt;
           finalSystemPrompt += `\n${knowledgeContext}\n${vaultInventory}\n${allContext}\n${documentEditingContext}`;
