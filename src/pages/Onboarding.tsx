@@ -49,8 +49,8 @@ export default function Onboarding() {
         throw orgError;
       }
 
-      const isSuperadmin = user.email === "mashcatg@gmail.com";
-      const role = isSuperadmin ? "superadmin" as const : "admin" as const;
+      // Role is always 'admin' for org creators; superadmin is assigned server-side only
+      const role = "admin" as const;
 
       // Upsert profile — handles both new and existing profiles atomically
       const { error: profileError } = await supabase
