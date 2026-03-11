@@ -534,7 +534,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
               ? "Deep analysis across 25+ sources"
               : "Researching relevant sources";
             trackStep(stepLabel, "working");
-            emitThinking(controller, encoder, "Searching across legal databases and research sources...");
+            emitThinkingAndAccumulate("Searching across legal databases and research sources...");
 
             const pplxConfig = MODEL_CONFIG[pplxModel] || MODEL_CONFIG.sonar;
 
