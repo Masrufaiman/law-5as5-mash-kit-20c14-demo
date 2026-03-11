@@ -107,6 +107,44 @@ export default function Chat() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isReplyingRef = useRef(false);
 
+  // Persist prompt state to sessionStorage
+  const storageKey = conversationId ? `chat_state_${conversationId}` : "chat_state_new";
+
+  // Save prompt state on changes
+  useEffect(() => {
+    const state = {
+      input,
+      deepResearch,
+      activeSources,
+      promptMode,
+      selectedVault,
+      workflowTag,
+    };
+    try { sessionStorage.setItem(storageKey, JSON.stringify(state)); } catch {}
+  }, [input, deepResearch, activeSources, promptMode, selectedVault, workflowTag, storageKey]);
+
+  // Restore prompt state on mount / conversation change
+  const hasRestoredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (hasRestoredRef.current === storageKey) return;
+    hasRestoredRef.current = storageKey;
+    try {
+      const saved = sessionStorage.getItem(storageKey);
+      if (!saved) return;
+      const state = JSON.parse(saved);
+      if (state.input) setInput(state.input);
+      if (state.deepResearch !== undefined) setDeepResearch(state.deepResearch);
+      if (state.activeSources?.length) setActiveSources(state.activeSources);
+      if (state.promptMode) setPromptMode(state.promptMode);
+      if (state.selectedVault) {
+        setSelectedVault(state.selectedVault);
+        setVaultId(state.selectedVault.id);
+        setVaultName(state.selectedVault.name);
+      }
+      if (state.workflowTag) setWorkflowTag(state.workflowTag);
+    } catch {}
+  }, [storageKey]);
+
   // Load vaults for sources dropdown
   useEffect(() => {
     if (!profile?.organization_id) return;
