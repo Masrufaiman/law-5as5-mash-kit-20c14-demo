@@ -519,8 +519,12 @@ function ColumnBuilderDialog({
   const [query, setQuery] = useState("");
   const [fillMode, setFillMode] = useState<"ai" | "manual">("ai");
 
+  const isDuplicate = existingColumns.some(
+    (c) => c.trim().toLowerCase() === name.trim().toLowerCase()
+  );
+
   const handleAdd = () => {
-    if (!name.trim() || existingColumns.includes(name.trim())) return;
+    if (!name.trim() || isDuplicate) return;
     onAdd({ name: name.trim(), type, query: query.trim() || undefined, fillMode });
     setName("");
     setQuery("");
@@ -538,6 +542,9 @@ function ColumnBuilderDialog({
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Column Name</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Effective Date" className="h-8 text-sm" />
+            {isDuplicate && (
+              <p className="text-[10px] text-destructive mt-1">A column with this name already exists</p>
+            )}
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Type</label>
@@ -572,7 +579,7 @@ function ColumnBuilderDialog({
         </div>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={handleAdd} disabled={!name.trim() || existingColumns.includes(name.trim())}>
+          <Button size="sm" onClick={handleAdd} disabled={!name.trim() || isDuplicate}>
             <Plus className="h-3 w-3 mr-1" />
             Add Column
           </Button>

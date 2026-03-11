@@ -339,9 +339,11 @@ If you cannot determine a value from the document content, use "N/A". Be concise
 
     const stream = new ReadableStream({
       async start(controller) {
-        try {
+          // Accumulators for metadata persistence
+          let accumulatedThinkingText = "";
           const stepStartTimes: Map<string, number> = new Map();
-          
+
+          const encoder = new TextEncoder();
           const trackStep = (name: string, status: string, detail?: string) => {
             if (status === "working") {
               stepStartTimes.set(name, Date.now());
@@ -354,6 +356,12 @@ If you cannot determine a value from the document content, use "N/A". Be concise
               }
             }
             emitStep(controller, encoder, { name, status, detail, duration });
+          };
+
+          // Wrapper to also accumulate thinking text for metadata
+          const emitThinkingAndAccumulate = (content: string) => {
+            accumulatedThinkingText += (accumulatedThinkingText ? "\n" : "") + content;
+            emitThinking(controller, encoder, content);
           };
 
           // ---- EMIT PLAN FIRST ----
@@ -384,7 +392,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
 
           if (hasVault && qdrantConf.url && qdrantConf.api_key && openaiConf.api_key) {
             trackStep("Searching your documents", "working");
-            emitThinking(controller, encoder, "Embedding query and searching document vectors for relevant passages...");
+            emitThinkingAndAccumulate("Embedding query and searching document vectors for relevant passages...");
 
             try {
               const queryEmbedding = await embedQuery(message, openaiConf.api_key, embeddingModel);
@@ -455,7 +463,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
                       excerpt: (p.content || "").substring(0, 200),
                     });
                   });
-                  emitThinking(controller, encoder, `Found ${results.length} relevant document sections. Analyzing content for the most relevant information.`);
+                  emitThinkingAndAccumulate(`Found ${results.length} relevant document sections. Analyzing content for the most relevant information.`);
                   trackStep("Searching your documents", "done", `Found ${results.length} relevant sections`);
                 } else {
                   trackStep("Searching your documents", "done", "No matching sections found");
@@ -508,7 +516,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
                   .filter((f: any) => f.extracted_text)
                   .map((f: any, i: number) => `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, 15000)}`)
                   .join("\n\n");
-              emitThinking(controller, encoder, `Loaded ${files.length} documents directly. Reading through content to find relevant information.`);
+              emitThinkingAndAccumulate(`Loaded ${files.length} documents directly. Reading through content to find relevant information.`);
               trackStep("Reading vault documents", "done", `Analyzed ${files.length} documents`);
             } else {
               trackStep("Reading vault documents", "done", "No documents found");
@@ -526,7 +534,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
               ? "Deep analysis across 25+ sources"
               : "Researching relevant sources";
             trackStep(stepLabel, "working");
-            emitThinking(controller, encoder, "Searching across legal databases and research sources...");
+            emitThinkingAndAccumulate("Searching across legal databases and research sources...");
 
             const pplxConfig = MODEL_CONFIG[pplxModel] || MODEL_CONFIG.sonar;
 
@@ -610,7 +618,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
                     });
                   }
 
-                  emitThinking(controller, encoder, `Found ${pplxCitationUrls.length} authoritative sources. Cross-referencing findings with document analysis.`);
+                  emitThinkingAndAccumulate(`Found ${pplxCitationUrls.length} authoritative sources. Cross-referencing findings with document analysis.`);
                   trackStep(stepLabel, "done", `${pplxCitationUrls.length} sources analyzed`);
 
                   if (searchSourceDomains.length > 0) {
@@ -967,7 +975,8 @@ ${documentEditingContext}`;
           const messageMetadata: any = {};
           if (collectedSteps.length > 0) messageMetadata.frozenSteps = collectedSteps;
           if (planSteps.length > 0) messageMetadata.frozenPlan = planSteps;
-          if (reasoningContent) messageMetadata.frozenThinkingText = reasoningContent;
+          if (accumulatedThinkingText) messageMetadata.frozenThinkingText = accumulatedThinkingText;
+          if (reasoningContent) messageMetadata.frozenReasoning = reasoningContent;
           if (followUps.length > 0) messageMetadata.followUps = followUps;
           if (searchSourceDomains.length > 0) {
             messageMetadata.frozenSearchSources = {
