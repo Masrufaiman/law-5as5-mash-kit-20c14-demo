@@ -229,6 +229,7 @@ export default function Chat() {
               id: m.id,
               role: m.role as "user" | "assistant",
               content: m.content,
+              reasoning: meta.frozenReasoning || undefined,
               citations: (m.citations as any) || undefined,
               model: m.model_used || undefined,
               followUps: meta.followUps || undefined,
