@@ -506,9 +506,8 @@ export default function Chat() {
     });
   }, [sheetDoc]);
 
-  const handleFileClick = useCallback(async (fileName: string, fileId?: string) => {
+  const handleFileClick = useCallback(async (fileName: string, fileId?: string, excerpt?: string) => {
     if (!profile?.organization_id) return;
-    // Try to fetch file content by ID or name
     const query = supabase.from("files").select("name, extracted_text").eq("organization_id", profile.organization_id);
     if (fileId) {
       query.eq("id", fileId);
@@ -517,9 +516,34 @@ export default function Chat() {
     }
     const { data } = await query.maybeSingle();
     if (data?.extracted_text) {
-      handleDocumentOpen(data.name || fileName, data.extracted_text);
+      handleDocumentOpen(data.name || fileName, data.extracted_text, excerpt);
     }
   }, [profile?.organization_id, handleDocumentOpen]);
+
+  const handleFileSelect = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFilesSelected = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    setAttachedFiles(prev => [...prev, ...files]);
+    setIsProcessingFiles(true);
+    try {
+      const result = await processAttachedFiles(files);
+      setConversationAttachedFileIds(prev => [...prev, ...result.fileIds]);
+      setVaultId(result.vaultId);
+      setVaultName("Uploads");
+      toast({ title: "Files attached", description: `${files.length} file${files.length > 1 ? 's' : ''} uploaded and processing.` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsProcessingFiles(false);
+    }
+  }, [processAttachedFiles, toast]);
+
+  const removeAttachedFile = useCallback((index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  }, []);
 
   const handleRegenerate = () => {
     if (!lastStreamOptions.current || isStreaming) return;
