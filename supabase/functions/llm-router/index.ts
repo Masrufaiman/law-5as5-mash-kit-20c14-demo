@@ -549,7 +549,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
 
             if (perplexityConfig?.api_key_encrypted) {
               try {
-                const perplexityKey = atob(perplexityConfig.api_key_encrypted);
+                const perplexityKey = await decryptApiKey(perplexityConfig.api_key_encrypted, perplexityConfig.api_key_iv || "");
 
                 const domainFilter: string[] = [];
                 if (sources) {
