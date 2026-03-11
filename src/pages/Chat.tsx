@@ -105,6 +105,7 @@ export default function Chat() {
   const [highlightExcerpt, setHighlightExcerpt] = useState<string | undefined>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isReplyingRef = useRef(false);
 
   // Load vaults for sources dropdown
   useEffect(() => {
@@ -315,6 +316,11 @@ export default function Chat() {
     if (!container) return;
 
     const handleMouseUp = () => {
+      // Don't clear tooltip if we just clicked Reply
+      if (isReplyingRef.current) {
+        isReplyingRef.current = false;
+        return;
+      }
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || !selection.toString().trim()) {
         setSelectionTooltip(null);
@@ -364,6 +370,7 @@ export default function Chat() {
 
   const handleReplyWithSelection = () => {
     if (!selectionTooltip) return;
+    isReplyingRef.current = true;
     setReplyContext(selectionTooltip.text);
     setSelectionTooltip(null);
     window.getSelection()?.removeAllRanges();

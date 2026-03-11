@@ -469,7 +469,18 @@ async function analyzeIntent(
       body: JSON.stringify({
         model: modelId,
         messages: [
-          { role: "system", content: "Analyze this legal query. Output structured plan." },
+          { role: "system", content: `You are a legal AI planning engine. Analyze the user's legal query and generate a detailed, multi-step execution plan.
+
+RULES:
+- Always generate 3-7 specific, actionable steps
+- If vault documents are available, include a "Search uploaded documents for [specific topic]" step
+- If web search is available, include a "Research [specific aspect] via legal databases" step  
+- Always end with a "Synthesize findings into comprehensive response" step
+- Each step should be specific to the query, not generic
+- For research queries: include vault search + web search + cross-reference + synthesis
+- For drafting queries: include research relevant templates + draft document + review clauses
+- For analysis queries: include document analysis + identify key provisions + compare against standards
+- IMPORTANT: When the AI needs to ask for clarification, it MUST generate context-relevant numbered options in the response (not generic ones). Each option should relate to the specific topic being discussed.` },
           { role: "user", content: `Query: "${query}"\nHas vault documents: ${hasVault}\nHas search sources: ${hasSources}\nMode: ${effectiveMode || "chat"}` },
         ],
         tools: [{
@@ -513,15 +524,16 @@ async function analyzeIntent(
       plan: args.plan || ["Analyze query", "Synthesize response"],
       approach: args.approach || "",
       needsVaultSearch: hasVault ? (args.needs_vault_search !== false) : false,
-      needsWebSearch: hasSources ? (args.needs_web_search !== false) : false,
+      needsWebSearch: args.needs_web_search !== false,
     };
   } catch (err) {
     console.error("Intent analysis error:", err);
     // Fallback
     const plan: string[] = ["Analyze query"];
     if (hasVault) plan.push("Search uploaded documents");
-    if (hasSources) plan.push("Research relevant sources");
-    plan.push("Synthesize response");
+    plan.push("Research relevant legal sources");
+    plan.push("Cross-reference and verify findings");
+    plan.push("Synthesize comprehensive response");
     return {
       taskType: effectiveMode || "chat",
       jurisdictions: [],
@@ -780,7 +792,8 @@ serve(async (req) => {
           let webSearchDone = false;
 
           // Determine first action: always vault first if available
-          let nextTool = intent.needsVaultSearch ? "vault_search" : (intent.needsWebSearch && perplexityKey ? "web_search" : "");
+          // Auto-trigger web search when Perplexity is available, even without explicit source selection
+          let nextTool = intent.needsVaultSearch ? "vault_search" : ((intent.needsWebSearch || perplexityKey) && perplexityKey ? "web_search" : "");
           let nextInput: any = { query: message };
 
           while (iteration < MAX_ITERATIONS && nextTool) {
@@ -852,8 +865,9 @@ serve(async (req) => {
 
             emitThinking(monologue.thinking_narration);
 
-            // Emit progress
-            emit(controller, encoder, { type: "progress", current: iteration, total: currentPlan.length });
+            // Emit progress — cap current to never exceed total
+            const progressTotal = Math.max(iteration, currentPlan.length);
+            emit(controller, encoder, { type: "progress", current: Math.min(iteration, progressTotal), total: progressTotal });
 
             // Handle escalation
             if (monologue.search_model && monologue.search_model !== currentSearchModel && perplexityKey) {
@@ -924,7 +938,7 @@ serve(async (req) => {
             } else {
               // Default: if vault not searched and available, do that; else if web not searched, do that; else finish
               if (!vaultSearchDone && hasVault) { nextTool = "vault_search"; }
-              else if (!webSearchDone && needsSearch && perplexityKey) { nextTool = "web_search"; }
+              else if (!webSearchDone && perplexityKey) { nextTool = "web_search"; }
               else { nextTool = ""; }
             }
           }
