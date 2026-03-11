@@ -43,6 +43,11 @@
 
     --radius: 0.5rem;
 
+    --agent-blue: 199 71% 44%;
+    --agent-chip: 199 60% 90%;
+    --agent-divider: 207 35% 91%;
+    --agent-orange: 25 90% 55%;
+
     --sidebar-background: 174 48% 10%;
     --sidebar-foreground: 72 100% 93%;
     --sidebar-primary: 75 97% 74%;
@@ -81,6 +86,11 @@
     --border: 174 20% 16%;
     --input: 174 20% 16%;
     --ring: 75 97% 74%;
+
+    --agent-blue: 199 71% 50%;
+    --agent-chip: 199 40% 20%;
+    --agent-divider: 207 20% 20%;
+    --agent-orange: 25 80% 50%;
 
     --sidebar-background: 174 48% 6%;
     --sidebar-foreground: 72 100% 93%;

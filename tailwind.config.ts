@@ -52,6 +52,12 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        agent: {
+          blue: "hsl(var(--agent-blue))",
+          chip: "hsl(var(--agent-chip))",
+          divider: "hsl(var(--agent-divider))",
+          orange: "hsl(var(--agent-orange))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

@@ -64,6 +64,14 @@ export default function Chat() {
     plan,
     thinkingText,
     fileRefs,
+    inlineData,
+    contradictions,
+    verifications,
+    escalations,
+    selfCheckStatus,
+    intent,
+    planUpdateReason,
+    progress,
     sendMessage,
     cancelStream,
     clearMessages,
@@ -794,6 +802,14 @@ export default function Chat() {
                         thinkingText={msgThinking}
                         fileRefs={msgFileRefs}
                         conversationId={conversationId || undefined}
+                        inlineData={isCurrentlyStreaming ? inlineData : msg.frozenInlineData}
+                        contradictions={isCurrentlyStreaming ? contradictions : msg.frozenContradictions}
+                        verifications={isCurrentlyStreaming ? verifications : msg.frozenVerifications}
+                        escalations={isCurrentlyStreaming ? escalations : msg.frozenEscalations}
+                        selfCheckStatus={isCurrentlyStreaming ? selfCheckStatus : null}
+                        intent={isCurrentlyStreaming ? intent : msg.frozenIntent}
+                        planUpdateReason={isCurrentlyStreaming ? planUpdateReason : null}
+                        progress={isCurrentlyStreaming ? progress : null}
                       />
 
                       {isLastUser && showStreamingIndicator && (
@@ -813,6 +829,14 @@ export default function Chat() {
                                 plan={plan}
                                 thinkingText={thinkingText}
                                 fileRefs={fileRefs}
+                                inlineData={inlineData}
+                                contradictions={contradictions}
+                                verifications={verifications}
+                                escalations={escalations}
+                                selfCheckStatus={selfCheckStatus}
+                                intent={intent}
+                                planUpdateReason={planUpdateReason}
+                                progress={progress}
                               />
                             ) : (
                               <div className="space-y-3">

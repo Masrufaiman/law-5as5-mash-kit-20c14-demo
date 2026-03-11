@@ -6,6 +6,36 @@ export interface MessageAttachments {
   fileNames?: string[];
 }
 
+export interface InlineDataTable {
+  headers: string[];
+  rows: string[][];
+}
+
+export interface Contradiction {
+  claim: string;
+  sourceA: string;
+  sourceB: string;
+}
+
+export interface Verification {
+  claim: string;
+  status: "checking" | "verified" | "unverified";
+  source?: string;
+}
+
+export interface Escalation {
+  from: string;
+  to: string;
+  reason: string;
+}
+
+export interface IntentData {
+  taskType: string;
+  jurisdictions: string[];
+  complexity: number;
+  approach?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -16,12 +46,17 @@ export interface ChatMessage {
   followUps?: string[];
   attachments?: MessageAttachments;
   createdAt: Date;
-  // Persisted per-message metadata (frozen after stream completes)
+  // Persisted per-message metadata
   frozenSteps?: AgentStep[];
   frozenPlan?: string[];
   frozenThinkingText?: string;
   frozenSearchSources?: SearchSource | null;
   frozenFileRefs?: FileRef[];
+  frozenInlineData?: InlineDataTable[];
+  frozenContradictions?: Contradiction[];
+  frozenVerifications?: Verification[];
+  frozenEscalations?: Escalation[];
+  frozenIntent?: IntentData;
 }
 
 export interface AgentStep {
@@ -77,6 +112,15 @@ export function useStreamChat() {
   const [plan, setPlan] = useState<string[]>([]);
   const [thinkingText, setThinkingText] = useState("");
   const [fileRefs, setFileRefs] = useState<FileRef[]>([]);
+  const [inlineData, setInlineData] = useState<InlineDataTable[]>([]);
+  const [contradictions, setContradictions] = useState<Contradiction[]>([]);
+  const [verifications, setVerifications] = useState<Verification[]>([]);
+  const [escalations, setEscalations] = useState<Escalation[]>([]);
+  const [selfCheckStatus, setSelfCheckStatus] = useState<string | null>(null);
+  const [intent, setIntent] = useState<IntentData | null>(null);
+  const [planUpdateReason, setPlanUpdateReason] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
   const abortRef = useRef<AbortController | null>(null);
   const lastUserMsgRef = useRef<string>("");
   const stepTimers = useRef<Map<string, number>>(new Map());
@@ -93,6 +137,14 @@ export function useStreamChat() {
       setPlan([]);
       setThinkingText("");
       setFileRefs([]);
+      setInlineData([]);
+      setContradictions([]);
+      setVerifications([]);
+      setEscalations([]);
+      setSelfCheckStatus(null);
+      setIntent(null);
+      setPlanUpdateReason(null);
+      setProgress(null);
       setIsStreaming(true);
       lastUserMsgRef.current = content;
       stepTimers.current.clear();
@@ -114,12 +166,17 @@ export function useStreamChat() {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // Refs to accumulate live state for freezing
+      // Live accumulators for freezing
       let liveSteps: AgentStep[] = [];
       let livePlan: string[] = [];
       let liveThinkingText = "";
       let liveSearchSources: SearchSource | null = null;
       let liveFileRefs: FileRef[] = [];
+      let liveInlineData: InlineDataTable[] = [];
+      let liveContradictions: Contradiction[] = [];
+      let liveVerifications: Verification[] = [];
+      let liveEscalations: Escalation[] = [];
+      let liveIntent: IntentData | null = null;
 
       try {
         const { data: sessionData } = await (await import("@/integrations/supabase/client")).supabase.auth.getSession();
@@ -187,124 +244,159 @@ export function useStreamChat() {
             if (!line.startsWith("data: ")) continue;
 
             const jsonStr = line.slice(6).trim();
-            if (jsonStr === "[DONE]") {
-              streamDone = true;
-              break;
-            }
+            if (jsonStr === "[DONE]") { streamDone = true; break; }
 
             try {
               const parsed = JSON.parse(jsonStr);
 
-              if (parsed.type === "plan") {
-                livePlan = parsed.steps || [];
-                setPlan(livePlan);
-              } else if (parsed.type === "steps") {
-                liveSteps = parsed.steps;
-                setSteps(liveSteps);
-              } else if (parsed.type === "step") {
-                setSteps((prev) => {
+              switch (parsed.type) {
+                case "plan":
+                  livePlan = parsed.steps || [];
+                  setPlan(livePlan);
+                  break;
+
+                case "plan_update":
+                  livePlan = parsed.steps || [];
+                  setPlan(livePlan);
+                  setPlanUpdateReason(parsed.reason || null);
+                  break;
+
+                case "step": {
                   const step = parsed.step as AgentStep;
                   const now = Date.now();
-                  
-                  const existing = prev.findIndex((s) => s.name === step.name);
-                  if (existing !== -1) {
-                    let duration = step.duration;
-                    if (step.status === "done" && !duration) {
-                      const startTime = stepTimers.current.get(step.name);
-                      if (startTime) {
-                        const elapsed = Math.round((now - startTime) / 1000);
-                        duration = `${elapsed}s`;
+                  setSteps((prev) => {
+                    const existing = prev.findIndex((s) => s.name === step.name);
+                    if (existing !== -1) {
+                      let duration = step.duration;
+                      if (step.status === "done" && !duration) {
+                        const startTime = stepTimers.current.get(step.name);
+                        if (startTime) duration = `${Math.round((now - startTime) / 1000)}s`;
                       }
+                      const updated = prev.map((s, i) => i === existing ? { ...step, duration, startedAt: s.startedAt } : s);
+                      liveSteps = updated;
+                      return updated;
                     }
-                    const updated = prev.map((s, i) => i === existing ? { ...step, duration, startedAt: s.startedAt } : s);
+                    if (step.status === "working") stepTimers.current.set(step.name, now);
+                    const updated = [...prev, { ...step, startedAt: now }];
                     liveSteps = updated;
                     return updated;
-                  }
-                  
-                  if (step.status === "working") {
-                    stepTimers.current.set(step.name, now);
-                  }
-                  const updated = [...prev, { ...step, startedAt: now }];
-                  liveSteps = updated;
-                  return updated;
-                });
-                
-                if (parsed.step?.status === "done") {
-                  setPlan((prevPlan) => [...prevPlan]);
+                  });
+                  break;
                 }
-              } else if (parsed.type === "thinking") {
-                liveThinkingText += parsed.content;
-                setThinkingText(liveThinkingText);
-              } else if (parsed.type === "file_refs") {
-                liveFileRefs = [...liveFileRefs, ...(parsed.files || [])];
-                setFileRefs(liveFileRefs);
-              } else if (parsed.type === "sources") {
-                liveSearchSources = { urls: parsed.urls, domains: parsed.domains };
-                setSearchSources(liveSearchSources);
-              } else if (parsed.type === "reasoning") {
-                assistantReasoning += parsed.content;
-                setMessages((prev) => {
-                  const last = prev[prev.length - 1];
-                  if (last?.role === "assistant" && last.id === assistantId) {
-                    return prev.map((m, i) =>
-                      i === prev.length - 1 ? { ...m, reasoning: assistantReasoning } : m
-                    );
+
+                case "thinking":
+                  liveThinkingText += parsed.content;
+                  setThinkingText(liveThinkingText);
+                  break;
+
+                case "file_refs":
+                  liveFileRefs = [...liveFileRefs, ...(parsed.files || [])];
+                  setFileRefs(liveFileRefs);
+                  break;
+
+                case "sources":
+                  liveSearchSources = { urls: parsed.urls, domains: parsed.domains };
+                  setSearchSources(liveSearchSources);
+                  break;
+
+                case "intent":
+                  liveIntent = parsed.data;
+                  setIntent(parsed.data);
+                  break;
+
+                case "escalation":
+                  liveEscalations = [...liveEscalations, parsed.data];
+                  setEscalations(liveEscalations);
+                  break;
+
+                case "contradiction":
+                  liveContradictions = [...liveContradictions, parsed.data];
+                  setContradictions(liveContradictions);
+                  break;
+
+                case "verify_start":
+                  liveVerifications = [...liveVerifications, { claim: parsed.claim, status: "checking" }];
+                  setVerifications([...liveVerifications]);
+                  break;
+
+                case "verify_end": {
+                  const idx = liveVerifications.findIndex(v => v.claim === parsed.claim);
+                  if (idx >= 0) {
+                    liveVerifications[idx] = {
+                      claim: parsed.claim,
+                      status: parsed.verified ? "verified" : "unverified",
+                      source: parsed.source,
+                    };
+                    setVerifications([...liveVerifications]);
                   }
-                  return [
-                    ...prev,
-                    {
-                      id: assistantId,
-                      role: "assistant" as const,
-                      content: "",
-                      reasoning: assistantReasoning,
-                      createdAt: new Date(),
-                    },
-                  ];
-                });
-              } else if (parsed.type === "token") {
-                assistantContent += parsed.content;
-                setMessages((prev) => {
-                  const last = prev[prev.length - 1];
-                  if (last?.role === "assistant" && last.id === assistantId) {
-                    return prev.map((m, i) =>
-                      i === prev.length - 1 ? { ...m, content: assistantContent } : m
-                    );
-                  }
-                  return [
-                    ...prev,
-                    {
-                      id: assistantId,
-                      role: "assistant" as const,
-                      content: assistantContent,
-                      createdAt: new Date(),
-                    },
-                  ];
-                });
-              } else if (parsed.type === "done") {
-                const frozenMeta = {
-                  frozenSteps: liveSteps.map(s => ({ ...s, status: "done" as const })),
-                  frozenPlan: livePlan,
-                  frozenThinkingText: liveThinkingText,
-                  frozenSearchSources: liveSearchSources,
-                  frozenFileRefs: liveFileRefs,
-                  followUps: parsed.followUps,
-                };
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantId
-                      ? {
-                          ...m,
-                          citations: parsed.citations,
-                          followUps: parsed.followUps,
-                          ...frozenMeta,
-                        }
-                      : m
-                  )
-                );
-                setSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
-                // Metadata is persisted by the backend (llm-router) — no client-side update needed
-              } else if (parsed.type === "error") {
-                setError(parsed.error);
+                  break;
+                }
+
+                case "inline_data":
+                  liveInlineData = [...liveInlineData, parsed.data];
+                  setInlineData(liveInlineData);
+                  break;
+
+                case "self_check":
+                  setSelfCheckStatus(parsed.status);
+                  break;
+
+                case "progress":
+                  setProgress({ current: parsed.current, total: parsed.total });
+                  break;
+
+                case "final_answer_start":
+                  // Marker for UI — no action needed, handled by token rendering
+                  break;
+
+                case "reasoning":
+                  assistantReasoning += parsed.content;
+                  setMessages((prev) => {
+                    const last = prev[prev.length - 1];
+                    if (last?.role === "assistant" && last.id === assistantId) {
+                      return prev.map((m, i) => i === prev.length - 1 ? { ...m, reasoning: assistantReasoning } : m);
+                    }
+                    return [...prev, { id: assistantId, role: "assistant" as const, content: "", reasoning: assistantReasoning, createdAt: new Date() }];
+                  });
+                  break;
+
+                case "token":
+                  assistantContent += parsed.content;
+                  setMessages((prev) => {
+                    const last = prev[prev.length - 1];
+                    if (last?.role === "assistant" && last.id === assistantId) {
+                      return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantContent } : m);
+                    }
+                    return [...prev, { id: assistantId, role: "assistant" as const, content: assistantContent, createdAt: new Date() }];
+                  });
+                  break;
+
+                case "done": {
+                  const frozenMeta = {
+                    frozenSteps: liveSteps.map(s => ({ ...s, status: "done" as const })),
+                    frozenPlan: livePlan,
+                    frozenThinkingText: liveThinkingText,
+                    frozenSearchSources: liveSearchSources,
+                    frozenFileRefs: liveFileRefs,
+                    frozenInlineData: liveInlineData.length > 0 ? liveInlineData : undefined,
+                    frozenContradictions: liveContradictions.length > 0 ? liveContradictions : undefined,
+                    frozenVerifications: liveVerifications.length > 0 ? liveVerifications : undefined,
+                    frozenEscalations: liveEscalations.length > 0 ? liveEscalations : undefined,
+                    frozenIntent: liveIntent || undefined,
+                    followUps: parsed.followUps,
+                  };
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantId ? { ...m, citations: parsed.citations, followUps: parsed.followUps, ...frozenMeta } : m
+                    )
+                  );
+                  setSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
+                  break;
+                }
+
+                case "error":
+                  setError(parsed.error);
+                  break;
               }
             } catch {
               continue;
@@ -326,26 +418,16 @@ export function useStreamChat() {
   const regenerateLastMessage = useCallback(
     (options: StreamChatOptions) => {
       setMessages((prev) => {
-        const withoutLast = prev[prev.length - 1]?.role === "assistant"
-          ? prev.slice(0, -1)
-          : prev;
+        const withoutLast = prev[prev.length - 1]?.role === "assistant" ? prev.slice(0, -1) : prev;
         return withoutLast;
       });
-
       const lastUserContent = lastUserMsgRef.current;
       if (!lastUserContent) return;
-
       setMessages((prev) => {
-        const lastIdx = prev.length - 1;
-        if (prev[lastIdx]?.role === "user") {
-          return prev.slice(0, -1);
-        }
+        if (prev[prev.length - 1]?.role === "user") return prev.slice(0, -1);
         return prev;
       });
-
-      setTimeout(() => {
-        sendMessage(lastUserContent, options);
-      }, 100);
+      setTimeout(() => { sendMessage(lastUserContent, options); }, 100);
     },
     [sendMessage]
   );
@@ -362,6 +444,14 @@ export function useStreamChat() {
     setPlan([]);
     setThinkingText("");
     setFileRefs([]);
+    setInlineData([]);
+    setContradictions([]);
+    setVerifications([]);
+    setEscalations([]);
+    setSelfCheckStatus(null);
+    setIntent(null);
+    setPlanUpdateReason(null);
+    setProgress(null);
     setError(null);
   }, []);
 
@@ -374,6 +464,14 @@ export function useStreamChat() {
     plan,
     thinkingText,
     fileRefs,
+    inlineData,
+    contradictions,
+    verifications,
+    escalations,
+    selfCheckStatus,
+    intent,
+    planUpdateReason,
+    progress,
     sendMessage,
     cancelStream,
     clearMessages,

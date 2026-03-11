@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { FileText, Bot, Copy, Pencil, Database, Paperclip, Table2 } from "lucide-react";
-import type { ChatMessage, Citation, AgentStep, SearchSource, FileRef } from "@/hooks/useStreamChat";
+import type { ChatMessage, Citation, AgentStep, SearchSource, FileRef, InlineDataTable, Contradiction, Verification, Escalation, IntentData } from "@/hooks/useStreamChat";
 import type { SheetData } from "@/components/editor/SheetEditor";
 
 interface MessageBubbleProps {
@@ -35,6 +35,14 @@ interface MessageBubbleProps {
   thinkingText?: string;
   fileRefs?: FileRef[];
   conversationId?: string;
+  inlineData?: InlineDataTable[];
+  contradictions?: Contradiction[];
+  verifications?: Verification[];
+  escalations?: Escalation[];
+  selfCheckStatus?: string | null;
+  intent?: IntentData | null;
+  planUpdateReason?: string | null;
+  progress?: { current: number; total: number } | null;
 }
 
 /** User message action bar (edit, copy) */
@@ -227,6 +235,14 @@ export function MessageBubble({
   thinkingText,
   fileRefs,
   conversationId,
+  inlineData,
+  contradictions,
+  verifications,
+  escalations,
+  selfCheckStatus,
+  intent,
+  planUpdateReason,
+  progress,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const citations = message.citations || [];
@@ -314,6 +330,14 @@ export function MessageBubble({
         plan={plan}
         thinkingText={thinkingText}
         fileRefs={fileRefs}
+        inlineData={inlineData || message.frozenInlineData}
+        contradictions={contradictions || message.frozenContradictions}
+        verifications={verifications || message.frozenVerifications}
+        escalations={escalations || message.frozenEscalations}
+        selfCheckStatus={selfCheckStatus}
+        intent={intent || message.frozenIntent}
+        planUpdateReason={planUpdateReason}
+        progress={progress}
       />
     </div>
   ) : null;
@@ -549,9 +573,14 @@ export function MessageBubble({
       <div className="pl-8">
         {!isUser && stepsSection}
 
-        {/* Visual separator between steps and final answer */}
+        {/* Final answer divider */}
         {!isUser && stepsSection && cleanContent && (
-          <div className="border-t border-border/30 my-2" />
+          <div className="relative my-3">
+            <div className="border-t-2 border-agent-divider" />
+            <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-background px-2 text-[10px] text-muted-foreground font-medium tracking-wide">
+              LawKit Response
+            </span>
+          </div>
         )}
 
         {isUser ? (
