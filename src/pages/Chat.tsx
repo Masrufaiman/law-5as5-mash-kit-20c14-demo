@@ -360,8 +360,7 @@ export default function Chat() {
 
   const handleReplyWithSelection = () => {
     if (!selectionTooltip) return;
-    const quoted = `> ${selectionTooltip.text.replace(/\n/g, "\n> ")}\n\n`;
-    setInput(quoted + input);
+    setReplyContext(selectionTooltip.text);
     setSelectionTooltip(null);
     window.getSelection()?.removeAllRanges();
   };
