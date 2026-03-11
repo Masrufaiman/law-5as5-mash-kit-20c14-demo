@@ -280,7 +280,7 @@ function CollapsibleReferences({ citations, onFileClick }: { citations: Citation
   );
 }
 
-
+function AgentAvatar({ isUser }: { isUser: boolean }) {
   return (
     <div
       className={cn(
