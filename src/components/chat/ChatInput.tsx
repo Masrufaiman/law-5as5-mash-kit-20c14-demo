@@ -70,6 +70,8 @@ interface ChatInputProps {
   onWorkflowTagRemove?: () => void;
   replyContext?: string | null;
   onRemoveReply?: () => void;
+  onFilesAttach?: (files: File[]) => void;
+  isProcessingFiles?: boolean;
 }
 
 export function ChatInput({
