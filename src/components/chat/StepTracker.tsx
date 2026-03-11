@@ -250,7 +250,7 @@ export function StepTracker({
                     {step.detail && <p className="text-[11px] text-muted-foreground/80 leading-relaxed">{step.detail}</p>}
                     {step.substeps?.map((sub, j) => (
                       <div key={j} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        {sub.status === "done" ? <Check className="h-2.5 w-2.5 text-agent-blue" /> : <Loader2 className="h-2.5 w-2.5 text-agent-blue animate-spin" />}
+                        {sub.status === "done" ? <Check className="h-2.5 w-2.5 text-primary" /> : <Loader2 className="h-2.5 w-2.5 text-primary animate-spin" />}
                         <span>{sub.name}</span>
                       </div>
                     ))}
