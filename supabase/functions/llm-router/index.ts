@@ -463,7 +463,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
                       excerpt: (p.content || "").substring(0, 200),
                     });
                   });
-                  emitThinking(controller, encoder, `Found ${results.length} relevant document sections. Analyzing content for the most relevant information.`);
+                  emitThinkingAndAccumulate(`Found ${results.length} relevant document sections. Analyzing content for the most relevant information.`);
                   trackStep("Searching your documents", "done", `Found ${results.length} relevant sections`);
                 } else {
                   trackStep("Searching your documents", "done", "No matching sections found");
