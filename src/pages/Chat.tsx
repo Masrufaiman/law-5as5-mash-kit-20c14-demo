@@ -470,14 +470,19 @@ export default function Chat() {
     handleSend(text);
   }, [conversationId, profile?.organization_id, vaultId, deepResearch, activeSources, promptMode, isStreaming]);
 
-  const handleDocumentOpen = useCallback((title: string, content: string) => {
+  const handleDocumentOpen = useCallback((title: string, content: string, excerpt?: string) => {
     const container = scrollContainerRef.current;
     const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
     const scrollTop = viewport?.scrollTop || 0;
 
-    setEditorDoc(
-      editorDoc?.title === title ? null : { title, content }
-    );
+    setHighlightExcerpt(excerpt);
+    
+    // If same title, append as new version
+    if (editorDoc?.title === title && !excerpt) {
+      setEditorDoc(null); // toggle off
+    } else {
+      setEditorDoc({ title, content });
+    }
 
     requestAnimationFrame(() => {
       if (viewport) viewport.scrollTop = scrollTop;
