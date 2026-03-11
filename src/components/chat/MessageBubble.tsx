@@ -347,7 +347,9 @@ export function MessageBubble({
     rawContent = rawContent.replace(/^>>?FOLLOWUP:\s*.+$/gm, "").replace(/^FOLLOWUP:\s*.+$/gm, "").trim();
   }
 
-  const cleanContent = !isUser ? stripCitationsBlock(rawContent) : rawContent;
+  // Preprocess: ensure blank lines around pipe tables for remark-gfm
+  const preprocessed = !isUser ? rawContent.replace(/([^\n])\n(\|)/g, '$1\n\n$2').replace(/(\|)\n([^\n|])/g, '$1\n\n$2') : rawContent;
+  const cleanContent = !isUser ? stripCitationsBlock(preprocessed) : preprocessed;
 
   const alreadySelected = nextMessage?.role === "user" ? nextMessage.content : null;
 
