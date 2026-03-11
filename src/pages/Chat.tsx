@@ -662,6 +662,43 @@ export default function Chat() {
     setAttachedFiles(prev => prev.filter((_, i) => i !== index));
   }, []);
 
+  const handleEditMessage = useCallback(async (messageId: string, newContent: string) => {
+    if (!conversationId || !profile?.organization_id || isStreaming) return;
+    // Update message content in Supabase
+    await supabase.from("messages").update({ content: newContent }).eq("id", messageId);
+    // Remove all messages after this one from local state + DB
+    const msgIndex = messages.findIndex(m => m.id === messageId);
+    if (msgIndex === -1) return;
+    const msgsToDelete = messages.slice(msgIndex + 1);
+    for (const m of msgsToDelete) {
+      await supabase.from("messages").delete().eq("id", m.id);
+    }
+    // Reload and re-send
+    loadHistory(messages.slice(0, msgIndex).map(m => ({
+      id: m.id, role: m.role, content: m.content,
+      reasoning: m.reasoning, citations: m.citations, model: m.model,
+      followUps: m.followUps, frozenSteps: m.frozenSteps, frozenPlan: m.frozenPlan,
+      frozenThinkingText: m.frozenThinkingText, frozenSearchSources: m.frozenSearchSources,
+      frozenFileRefs: m.frozenFileRefs, createdAt: m.createdAt,
+    })));
+    // Re-send the edited message
+    const opts = {
+      conversationId,
+      organizationId: profile.organization_id!,
+      vaultId,
+      vaultName,
+      deepResearch,
+      sources: activeSources,
+      useCase: promptMode,
+      currentSheetState: sheetDoc,
+      workflowSystemPrompt: workflowTag?.systemPrompt,
+      currentDocumentContent: editorDoc?.content,
+      ...(vaultName === "Uploads" && conversationAttachedFileIds.length > 0 ? { attachedFileIds: conversationAttachedFileIds } : {}),
+    };
+    lastStreamOptions.current = opts;
+    sendMessage(newContent, opts);
+  }, [conversationId, profile, isStreaming, messages, vaultId, vaultName, deepResearch, activeSources, promptMode, sheetDoc, workflowTag, editorDoc, conversationAttachedFileIds, loadHistory, sendMessage]);
+
   const handleRegenerate = () => {
     if (!lastStreamOptions.current || isStreaming) return;
     regenerateLastMessage(lastStreamOptions.current);
