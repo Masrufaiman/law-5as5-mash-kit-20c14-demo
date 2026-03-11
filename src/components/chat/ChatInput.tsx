@@ -191,6 +191,24 @@ export function ChatInput({
         </div>
       )}
 
+      {/* Reply context badge */}
+      {replyContext && (
+        <div className="flex items-start gap-2 px-3 pt-2">
+          <div className="flex-1 flex items-start gap-2 rounded-md bg-muted/50 border border-border/50 px-2.5 py-1.5">
+            <Reply className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
+            <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2 flex-1">
+              {replyContext.length > 120 ? replyContext.slice(0, 120) + "..." : replyContext}
+            </p>
+            <button
+              onClick={onRemoveReply}
+              className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="relative">
         <Textarea
           ref={textareaRef}
