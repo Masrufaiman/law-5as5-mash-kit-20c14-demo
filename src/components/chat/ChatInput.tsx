@@ -77,7 +77,7 @@ interface ChatInputProps {
 export function ChatInput({
   value, onChange, onSend, disabled, deepResearch = false, onDeepResearchChange,
   promptMode, onPromptModeChange, vaults, selectedVault, onVaultSelect, activeSources, onSourceToggle,
-  workflowTag, onWorkflowTagRemove, replyContext, onRemoveReply,
+  workflowTag, onWorkflowTagRemove, replyContext, onRemoveReply, onFilesAttach, isProcessingFiles,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { profile } = useAuth();
