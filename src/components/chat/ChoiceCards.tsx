@@ -65,12 +65,6 @@ export function parseNeedMoreInfo(content: string): { preamble: string; choices:
   const choices: Choice[] = [];
   let preamble = content;
 
-  const defaultChoices = [
-    { number: 1, title: "Corporate Law", description: "Business formation, M&A, governance" },
-    { number: 2, title: "Contract Law", description: "Agreements, disputes, enforcement" },
-    { number: 3, title: "Intellectual Property", description: "Patents, trademarks, copyrights" },
-    { number: 4, title: "Employment Law", description: "Labor regulations, compliance, disputes" },
-  ];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
