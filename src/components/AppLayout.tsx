@@ -13,11 +13,11 @@ export function AppLayout({ children, rightPanel }: AppLayoutProps) {
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         {rightPanel ? (
           <ResizablePanelGroup direction="horizontal">
-            <ResizablePanel defaultSize={70} minSize={30}>
+            <ResizablePanel defaultSize={45} minSize={25}>
               <div className="h-full overflow-auto">{children}</div>
             </ResizablePanel>
             <ResizableHandle />
-            <ResizablePanel collapsible collapsedSize={0} defaultSize={45} minSize={25} maxSize={50}>
+            <ResizablePanel collapsible collapsedSize={0} defaultSize={55} minSize={25} maxSize={65}>
               <div className="h-full overflow-auto border-l border-border">{rightPanel}</div>
             </ResizablePanel>
           </ResizablePanelGroup>
