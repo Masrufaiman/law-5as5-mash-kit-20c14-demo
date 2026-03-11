@@ -101,6 +101,9 @@ export default function Chat() {
   const [replyContext, setReplyContext] = useState<string | null>(null);
   // Track attached file IDs for Uploads vault scoping across messages
   const [conversationAttachedFileIds, setConversationAttachedFileIds] = useState<string[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [highlightExcerpt, setHighlightExcerpt] = useState<string | undefined>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Load vaults for sources dropdown
