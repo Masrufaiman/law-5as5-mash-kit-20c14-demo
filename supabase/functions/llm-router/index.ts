@@ -524,7 +524,7 @@ RULES:
       plan: args.plan || ["Analyze query", "Synthesize response"],
       approach: args.approach || "",
       needsVaultSearch: hasVault ? (args.needs_vault_search !== false) : false,
-      needsWebSearch: hasSources ? (args.needs_web_search !== false) : false,
+      needsWebSearch: args.needs_web_search !== false,
     };
   } catch (err) {
     console.error("Intent analysis error:", err);
