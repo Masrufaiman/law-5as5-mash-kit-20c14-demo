@@ -975,7 +975,8 @@ ${documentEditingContext}`;
           const messageMetadata: any = {};
           if (collectedSteps.length > 0) messageMetadata.frozenSteps = collectedSteps;
           if (planSteps.length > 0) messageMetadata.frozenPlan = planSteps;
-          if (reasoningContent) messageMetadata.frozenThinkingText = reasoningContent;
+          if (accumulatedThinkingText) messageMetadata.frozenThinkingText = accumulatedThinkingText;
+          if (reasoningContent) messageMetadata.frozenReasoning = reasoningContent;
           if (followUps.length > 0) messageMetadata.followUps = followUps;
           if (searchSourceDomains.length > 0) {
             messageMetadata.frozenSearchSources = {
