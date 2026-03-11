@@ -330,6 +330,14 @@ export function MessageBubble({
         plan={plan}
         thinkingText={thinkingText}
         fileRefs={fileRefs}
+        inlineData={inlineData || message.frozenInlineData}
+        contradictions={contradictions || message.frozenContradictions}
+        verifications={verifications || message.frozenVerifications}
+        escalations={escalations || message.frozenEscalations}
+        selfCheckStatus={selfCheckStatus}
+        intent={intent || message.frozenIntent}
+        planUpdateReason={planUpdateReason}
+        progress={progress}
       />
     </div>
   ) : null;
