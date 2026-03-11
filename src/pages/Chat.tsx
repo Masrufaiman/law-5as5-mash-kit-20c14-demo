@@ -664,11 +664,14 @@ export default function Chat() {
     <DocumentEditor
       title={editorDoc.title}
       content={editorDoc.content}
+      highlightExcerpt={highlightExcerpt}
+      appendVersion={true}
       onClose={() => {
         const container = scrollContainerRef.current;
         const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
         const scrollTop = viewport?.scrollTop || 0;
         setEditorDoc(null);
+        setHighlightExcerpt(undefined);
         requestAnimationFrame(() => {
           if (viewport) viewport.scrollTop = scrollTop;
         });

@@ -210,7 +210,7 @@ function detectSheet(content: string): SheetData | null {
   }
 }
 /** Collapsible References section */
-function CollapsibleReferences({ citations, onFileClick }: { citations: Citation[]; onFileClick?: (fileName: string, fileId?: string) => void }) {
+function CollapsibleReferences({ citations, onFileClick }: { citations: Citation[]; onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void }) {
   const [open, setOpen] = React.useState(false);
 
   // Group citations by source file
