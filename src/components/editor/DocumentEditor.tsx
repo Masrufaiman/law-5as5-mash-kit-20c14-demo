@@ -260,8 +260,20 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
   }, [showEdits, versions, currentVersion]);
 
   const handleExportMarkdown = () => {
-    const text = editorContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    const blob = new Blob([text], { type: "text/markdown" });
+    // Convert HTML back to simple markdown
+    const md = editorContent
+      .replace(/<h1[^>]*>(.*?)<\/h1>/gi, "# $1\n\n")
+      .replace(/<h2[^>]*>(.*?)<\/h2>/gi, "## $1\n\n")
+      .replace(/<h3[^>]*>(.*?)<\/h3>/gi, "### $1\n\n")
+      .replace(/<strong>(.*?)<\/strong>/gi, "**$1**")
+      .replace(/<em>(.*?)<\/em>/gi, "*$1*")
+      .replace(/<li>(.*?)<\/li>/gi, "- $1\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<hr\s*\/?>/gi, "\n---\n")
+      .replace(/<\/?(p|ul|ol|div|blockquote|table|thead|tbody|tr|td|th|code|pre|span)[^>]*>/gi, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    const blob = new Blob([md], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
