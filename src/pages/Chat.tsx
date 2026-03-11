@@ -289,6 +289,8 @@ export default function Chat() {
         const effectiveVaultName = vName || "Uploads";
         setVaultId(effectiveVault);
         setVaultName(effectiveVaultName);
+        // Track attached file IDs for subsequent messages
+        setConversationAttachedFileIds(preProcessedFileIds);
         createConversationAndSend(msg, effectiveVault, deep, srcs, pMode, effectiveVaultName, wfTag?.systemPrompt, preProcessedFileIds, preProcessedFileNames);
       } else {
         createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
