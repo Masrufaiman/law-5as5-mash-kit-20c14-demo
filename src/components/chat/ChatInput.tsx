@@ -68,6 +68,8 @@ interface ChatInputProps {
   onSourceToggle?: (source: string) => void;
   workflowTag?: WorkflowTag | null;
   onWorkflowTagRemove?: () => void;
+  replyContext?: string | null;
+  onRemoveReply?: () => void;
 }
 
 export function ChatInput({

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Check, Loader2, ChevronDown, ChevronRight, Brain, FileText, Circle, Clock, AlertTriangle, Shield, ArrowUpCircle, Table2, BookOpen, ExternalLink } from "lucide-react";
 import type { AgentStep, SearchSource, FileRef, InlineDataTable, Contradiction, Verification, Escalation, IntentData, Citation } from "@/hooks/useStreamChat";
 import { cn } from "@/lib/utils";
