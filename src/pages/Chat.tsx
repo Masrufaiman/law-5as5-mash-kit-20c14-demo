@@ -540,7 +540,26 @@ export default function Chat() {
       setConversationAttachedFileIds(prev => [...prev, ...result.fileIds]);
       setVaultId(result.vaultId);
       setVaultName("Uploads");
-      toast({ title: "Files attached", description: `${files.length} file${files.length > 1 ? 's' : ''} uploaded and processing.` });
+
+      // Poll until all files are ready (max 60s)
+      const deadline = Date.now() + 60_000;
+      let allReady = false;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 2000));
+        const { data: statuses } = await supabase
+          .from("files")
+          .select("id, status")
+          .in("id", result.fileIds);
+        if (statuses && statuses.every(f => f.status === "ready" || f.status === "error")) {
+          allReady = true;
+          break;
+        }
+      }
+      if (!allReady) {
+        toast({ title: "Processing", description: "Some files are still processing. The AI may not see all content yet." });
+      } else {
+        toast({ title: "Files ready", description: `${files.length} file${files.length > 1 ? 's' : ''} processed and ready.` });
+      }
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
