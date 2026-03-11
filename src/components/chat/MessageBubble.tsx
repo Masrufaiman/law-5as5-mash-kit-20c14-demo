@@ -209,8 +209,78 @@ function detectSheet(content: string): SheetData | null {
     return null;
   }
 }
+/** Collapsible References section */
+function CollapsibleReferences({ citations, onFileClick }: { citations: Citation[]; onFileClick?: (fileName: string, fileId?: string) => void }) {
+  const [open, setOpen] = React.useState(false);
 
-function AgentAvatar({ isUser }: { isUser: boolean }) {
+  // Group citations by source file
+  const grouped = React.useMemo(() => {
+    const map = new Map<string, Citation[]>();
+    citations.forEach((c) => {
+      const key = c.source || `Source ${c.index}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(c);
+    });
+    return Array.from(map.entries());
+  }, [citations]);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mt-3 group cursor-pointer">
+        <BookOpen className="h-3.5 w-3.5" />
+        <span>
+          References{" — "}
+          <span className="font-medium text-foreground">{citations.length} cited</span>
+        </span>
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-2 ml-1 space-y-2 border-l-2 border-border/40 pl-3">
+          {grouped.map(([source, cites]) => {
+            const isFile = !cites[0]?.url;
+            const displayName = source.replace(/\s*[·\-–—]\s*(chunk|part|section)\s*\d+.*/i, "").trim();
+            return (
+              <div key={source} className="space-y-1">
+                <button
+                  onClick={() => isFile && onFileClick?.(displayName)}
+                  className={cn(
+                    "flex items-center gap-1.5 text-xs font-medium",
+                    isFile ? "text-primary hover:underline cursor-pointer" : "text-foreground"
+                  )}
+                >
+                  <FileText className="h-3 w-3 shrink-0" />
+                  {displayName}
+                </button>
+                {cites.map((c) => {
+                  // Extract page number from excerpt or source
+                  const pageMatch = c.source?.match(/[Pp]age\s*(\d+)/i) || c.excerpt?.match(/[Pp]age\s*(\d+)/i);
+                  return (
+                    <div key={c.index} className="flex items-start gap-2 text-[11px] text-muted-foreground pl-4">
+                      <span className="text-primary/60 font-mono shrink-0">[{c.index}]</span>
+                      <div className="space-y-0.5">
+                        {pageMatch && <span className="text-muted-foreground/70">Page {pageMatch[1]}</span>}
+                        {c.excerpt && (
+                          <p className="italic leading-relaxed line-clamp-2">"{c.excerpt}"</p>
+                        )}
+                        {c.url && (
+                          <a href={c.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-[10px]">
+                            {c.url}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+
   return (
     <div
       className={cn(
