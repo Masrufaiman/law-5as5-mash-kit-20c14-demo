@@ -765,11 +765,28 @@ export function MessageBubble({
             <AttachmentBadges attachments={message.attachments} />
             <UserMessageActions content={message.content} />
           </div>
+        ) : isStreamingSpecialContent ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/30">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">
+                  {cleanContent.includes("<!-- SHEET:") ? "Generating review table..." : "Analyzing document for red flags..."}
+                </p>
+                <p className="text-xs text-muted-foreground">Results will open in the sidebar</p>
+              </div>
+            </div>
+            <div className="space-y-2 animate-pulse">
+              <div className="h-3.5 bg-muted rounded w-full" />
+              <div className="h-3.5 bg-muted rounded w-5/6" />
+              <div className="h-3.5 bg-muted rounded w-3/4" />
+            </div>
+          </div>
         ) : (
           markdownContent
         )}
 
-        {isStreaming && !isUser && cleanContent.length > 0 && (
+        {isStreaming && !isUser && !isStreamingSpecialContent && cleanContent.length > 0 && (
           <div className="space-y-0">
             <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom rounded-full" />
             {cleanContent.length < 300 && (
