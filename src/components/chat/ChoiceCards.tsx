@@ -141,6 +141,7 @@ export function parseChoices(content: string): { preamble: string; choices: Choi
   if (choices.length > 6 || avgTitleLen > 80) return null;
 
   // --- False positive guards ---
+  const allText = choices.map(c => c.title + " " + c.description).join(" ");
   const hasMonetaryValues = choices.some(c =>
     /[\$₹€£¥৳]|USD|BDT|INR|EUR|GBP|AED|SGD|\b\d{1,3}(,\d{3})*\.\d{2}\b|\b\d+\s*(BDT|USD|INR|EUR|taka|dollar|rupee)/i.test(c.title + " " + c.description)
   );
@@ -157,15 +158,18 @@ export function parseChoices(content: string): { preamble: string; choices: Choi
 
   if ((hasMonetaryValues || hasFileExtensions || hasDataPatterns) && !hasQuestion) return null;
 
-  // Guard: reject explanatory numbered lists (reasons, analysis, findings)
-  const hasExplanatoryPreamble = /(?:reasons?|analysis|findings|observations?|issues?|points?|factors?|considerations?)\s*:?\s*$/im.test(preamble);
-  const hasLongDescriptions = choices.some(c => (c.title + " " + c.description).length > 150);
+  // Guard: reject explanatory numbered lists (reasons, analysis, findings, clauses, red flags)
+  const hasExplanatoryPreamble = /(?:reasons?|analysis|findings|observations?|issues?|points?|factors?|considerations?|red\s*flags?|risks?|concerns?|summary|overview|key\s*terms?|clauses?)\s*:?\s*$/im.test(preamble);
+  const hasLongDescriptions = choices.some(c => (c.title + " " + c.description).length > 120);
   const hasDocReferences = choices.some(c => /\.(docx?|pdf|xlsx?|txt)\b/i.test(c.title + " " + c.description));
   const hasAnalyticalContent = choices.some(c =>
-    /\b(clause|section|article|paragraph|provision|period|term|duration|obligation|liability)\b/i.test(c.title + " " + c.description)
+    /\b(clause|section|article|paragraph|provision|period|term|duration|obligation|liability|indemnity|warranty|termination|governing\s+law|jurisdiction|force\s+majeure|confidentiality|non.?compete|arbitration)\b/i.test(c.title + " " + c.description)
   );
+  // Guard: if content is long (>800 chars), it's likely analysis not choices
+  const contentLength = content.length;
+  const isLongContent = contentLength > 800;
 
-  if ((hasExplanatoryPreamble || hasLongDescriptions || hasDocReferences || hasAnalyticalContent) && !hasQuestion) return null;
+  if ((hasExplanatoryPreamble || hasLongDescriptions || hasDocReferences || hasAnalyticalContent || isLongContent) && !hasQuestion) return null;
 
   return { preamble, choices };
 }

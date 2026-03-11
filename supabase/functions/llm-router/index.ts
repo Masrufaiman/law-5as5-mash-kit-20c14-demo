@@ -798,10 +798,13 @@ serve(async (req) => {
           let webSearchDone = false;
 
           // Determine first action: always vault first if available
-          // For red_flags mode, force read_files first to get full document content
+          // For red_flags mode OR when explicit files are attached, force read_files first
           // Auto-trigger web search when Perplexity is available, even without explicit source selection
           let nextTool: string;
-          if (effectiveMode === "red_flags" && hasVault) {
+          if (attachedFileIds?.length) {
+            // Explicit files attached — always read them first, regardless of mode
+            nextTool = "read_files";
+          } else if (effectiveMode === "red_flags" && hasVault) {
             nextTool = "read_files";
           } else if (intent.needsVaultSearch) {
             nextTool = "vault_search";

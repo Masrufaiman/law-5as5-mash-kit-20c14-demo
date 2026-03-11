@@ -773,7 +773,7 @@ export function MessageBubble({
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">
-                  {cleanContent.includes("<!-- SHEET:") ? "Generating review table..." : "Analyzing document for red flags..."}
+                  {cleanContent.includes("<!-- SHEET:") ? "Generating review table..." : cleanContent.includes("<!-- REDFLAGS:") ? "Analyzing document for red flags..." : "Drafting document..."}
                 </p>
                 <p className="text-xs text-muted-foreground">Results will open in the sidebar</p>
               </div>

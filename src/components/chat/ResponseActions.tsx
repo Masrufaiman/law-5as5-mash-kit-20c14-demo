@@ -107,7 +107,7 @@ export function ResponseActions({ content, messageId, conversationId, onRegenera
           variant="ghost"
           size="sm"
           className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-          onClick={exportAsMarkdown}
+          onClick={exportAsText}
           title="Download"
         >
           <Download className="h-3 w-3" />

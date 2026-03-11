@@ -668,17 +668,18 @@ export default function Chat() {
 
   const handleExport = () => {
     if (!messages.length) return;
-    const md = messages
-      .map((m) => `## ${m.role === "user" ? "You" : "LawKit AI"}\n\n${m.content}`)
-      .join("\n\n---\n\n");
-    const blob = new Blob([md], { type: "text/markdown" });
+    const lines = messages
+      .map((m) => `${m.role === "user" ? "You" : "LawKit AI"}:\n${m.content}`)
+      .join("\n\n" + "─".repeat(40) + "\n\n");
+    const header = `${conversationTitle}\nExported ${new Date().toLocaleDateString()}\n${"═".repeat(40)}\n\n`;
+    const blob = new Blob([header + lines], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${conversationTitle.replace(/[^a-zA-Z0-9]/g, "_")}.md`;
+    a.download = `${conversationTitle.replace(/[^a-zA-Z0-9]/g, "_")}.txt`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Exported", description: "Conversation downloaded as Markdown" });
+    toast({ title: "Exported", description: "Conversation downloaded as text file" });
   };
 
   const [showShareDialog, setShowShareDialog] = useState(false);

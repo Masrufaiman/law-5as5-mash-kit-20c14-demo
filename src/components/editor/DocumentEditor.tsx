@@ -402,16 +402,16 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
             </PopoverTrigger>
             <PopoverContent className="w-36 p-1" align="end">
               <button
-                onClick={handleExportMarkdown}
+                onClick={handleExportTxt}
                 className="flex w-full items-center rounded px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors"
               >
-                Export as .md
+                Export as .txt
               </button>
               <button
-                onClick={handleExportHtml}
+                onClick={handleExportDocx}
                 className="flex w-full items-center rounded px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors"
               >
-                Export as .html
+                Export as .doc
               </button>
             </PopoverContent>
           </Popover>

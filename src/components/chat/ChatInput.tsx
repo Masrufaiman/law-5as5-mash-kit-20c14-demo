@@ -432,21 +432,23 @@ export function ChatInput({
                     className="w-full h-7 px-2 text-xs rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </div>
-                {filteredJurisdictions.map((j) => (
-                  <button
-                    key={j.name}
-                    onClick={() => onSourceToggle?.(j.name)}
-                    className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <j.icon className="h-3.5 w-3.5 text-muted-foreground" />
-                      {j.name}
-                    </span>
-                    {activeSources?.includes(j.name) && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                    )}
-                  </button>
-                ))}
+                <div className="max-h-[200px] overflow-y-auto">
+                  {filteredJurisdictions.map((j) => (
+                    <button
+                      key={j.name}
+                      onClick={() => onSourceToggle?.(j.name)}
+                      className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                    >
+                      <span className="flex items-center gap-2.5 truncate">
+                        <j.icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="truncate">{j.name}</span>
+                      </span>
+                      {activeSources?.includes(j.name) && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
             </ScrollArea>
           </PopoverContent>
