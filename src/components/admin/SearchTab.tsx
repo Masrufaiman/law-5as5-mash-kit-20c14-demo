@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { encryptApiKey } from "@/lib/encryptApiKey";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,8 +64,9 @@ export function SearchTab({ orgId }: SearchTabProps) {
       };
 
       if (apiKey && !apiKey.startsWith("••")) {
-        payload.api_key_encrypted = btoa(apiKey);
-        payload.api_key_iv = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(12))));
+        const { api_key_encrypted, api_key_iv } = await encryptApiKey(apiKey);
+        payload.api_key_encrypted = api_key_encrypted;
+        payload.api_key_iv = api_key_iv;
       }
 
       if (existingId) {

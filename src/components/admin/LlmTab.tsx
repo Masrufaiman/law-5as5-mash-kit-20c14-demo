@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { encryptApiKey } from "@/lib/encryptApiKey";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,8 +115,7 @@ function AddLlmForm({ orgId, onClose }: { orgId: string; onClose: () => void }) 
     e.preventDefault();
     setSubmitting(true);
     try {
-      const encrypted = btoa(apiKey);
-      const iv = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(12))));
+      const { api_key_encrypted: encrypted, api_key_iv: iv } = await encryptApiKey(apiKey);
       const { error } = await supabase.from("llm_configs").insert({
         provider: provider as any,
         model_id: modelId,

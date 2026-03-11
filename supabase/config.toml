@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.llm-router]
 verify_jwt = false
+
+[functions.encrypt-api-key]
+verify_jwt = false
