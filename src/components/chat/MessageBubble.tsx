@@ -668,7 +668,16 @@ export function MessageBubble({
         )}
 
         {isStreaming && !isUser && cleanContent.length > 0 && (
-          <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom rounded-full" />
+          <div className="space-y-0">
+            <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom rounded-full" />
+            {cleanContent.length < 300 && (
+              <div className="mt-2 space-y-2 animate-pulse">
+                <div className="h-3.5 bg-muted rounded w-full" />
+                <div className="h-3.5 bg-muted rounded w-5/6" />
+                <div className="h-3.5 bg-muted rounded w-3/4" />
+              </div>
+            )}
+          </div>
         )}
 
         {/* Collapsible References */}

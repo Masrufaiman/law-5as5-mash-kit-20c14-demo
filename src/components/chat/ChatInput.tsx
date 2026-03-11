@@ -529,7 +529,7 @@ export function ChatInput({
           {isProcessingFiles ? (
             <>
               <Loader2 className="h-3 w-3 animate-spin" />
-              Uploading...
+              {UPLOAD_STATUSES[uploadStatusIdx]}
             </>
           ) : (
             <>

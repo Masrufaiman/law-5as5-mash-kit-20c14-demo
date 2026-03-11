@@ -580,9 +580,10 @@ ${orgKnowledge ? `## Organization Knowledge\n${orgKnowledge}\n` : ""}
 
 ## Formatting
 - Use markdown: headers, lists, bold for key terms
-- Use tables for comparative data
+- Use tables for comparative data — ALWAYS ensure a blank line before and after any markdown table
 - Do NOT include a "References:", "Citations:", or "Sources:" section at the end — citations are handled automatically by the UI
 - Use comparison tables aggressively when analyzing multiple documents, jurisdictions, or options
+- IMPORTANT: When you need more information or clarification, provide 3-4 numbered options that are SPECIFIC and CONTEXTUALLY RELEVANT to the user's query. NEVER use generic category choices like "Corporate Law", "Contract Law" etc. Each option must relate directly to the topic being discussed.
 - At the end, suggest 3 follow-up questions starting with ">>FOLLOWUP: "`;
 }
 

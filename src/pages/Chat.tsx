@@ -829,11 +829,16 @@ export default function Chat() {
                       top: selectionTooltip.y,
                       transform: "translate(-50%, -100%)",
                     }}
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
                     <Button
                       variant="secondary"
                       size="sm"
                       className="h-7 text-xs gap-1.5 shadow-md border border-border"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                      }}
                       onClick={handleReplyWithSelection}
                     >
                       <Reply className="h-3 w-3" />
