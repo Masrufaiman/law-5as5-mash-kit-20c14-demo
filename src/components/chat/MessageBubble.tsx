@@ -346,6 +346,7 @@ export function MessageBubble({
   isStreamingSteps,
   searchSources,
   onFollowUp,
+  onEditMessage,
   plan,
   thinkingText,
   fileRefs,
@@ -363,6 +364,8 @@ export function MessageBubble({
   const isUser = message.role === "user";
   const citations = message.citations || [];
   const followUps = message.followUps || [];
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(message.content);
 
   // Client-side follow-up extraction fallback
   let rawContent = message.content;
