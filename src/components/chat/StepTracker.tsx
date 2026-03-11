@@ -51,7 +51,6 @@ export function StepTracker({
 }: StepTrackerProps) {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const [showAllFileRefs, setShowAllFileRefs] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
 
   const hasSteps = steps.length > 0;
@@ -65,7 +64,17 @@ export function StepTracker({
   const completedCount = steps.filter((s) => s.status === "done").length;
   const totalSteps = hasPlan ? plan.length : steps.length;
 
+  // Collapsed state: derive initial value from whether steps are already done.
+  // This prevents re-mount from resetting collapse state when sidebar opens/closes.
   const hasAutoCollapsedRef = useRef(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    // If on mount all steps are done and we're not streaming, start collapsed
+    if (allDone && hasSteps && !isStreaming) {
+      hasAutoCollapsedRef.current = true;
+      return true;
+    }
+    return false;
+  });
 
   useEffect(() => {
     if (isStreaming) {
@@ -112,7 +121,6 @@ export function StepTracker({
   // Collapsed summary
   if (collapsed && !isWorking) {
     const stepNames = steps.slice(0, 3).map(s => s.name).join(", ");
-    // Sum actual durations from step.duration strings like "72s"
     const totalTime = steps.reduce((sum, s) => {
       if (s.duration) { const num = parseInt(s.duration.replace(/[^\d]/g, '')); return sum + (isNaN(num) ? 0 : num); }
       return sum;
@@ -402,7 +410,7 @@ export function StepTracker({
         </div>
       )}
 
-      {/* Sources section (moved from SourcesFooter) */}
+      {/* Sources section */}
       {hasCitations && !isStreaming && (
         <div className="mt-1">
           <button

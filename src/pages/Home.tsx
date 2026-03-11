@@ -4,22 +4,11 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import { ChatInput } from "@/components/chat/ChatInput";
+import type { WorkflowTag } from "@/components/chat/ChatInput";
 import {
-  Plus,
-  Sparkles,
-  Globe,
-  Send,
-  X,
-  Upload,
-  FolderOpen,
-  Search,
   FileText,
   Scale,
   Clock,
@@ -29,6 +18,7 @@ import {
   Loader2,
   Zap,
   AlertTriangle,
+  Search,
 } from "lucide-react";
 
 interface VaultItem {
@@ -50,30 +40,6 @@ interface WorkflowConfig {
   icon: string;
   systemPrompt?: string;
 }
-
-// Jurisdiction sources
-const JURISDICTION_SOURCES = [
-  { name: "Web Search", icon: Globe },
-  { name: "EDGAR (SEC)", icon: Scale },
-  { name: "CourtListener", icon: Scale },
-  { name: "EUR-Lex", icon: Scale },
-  { name: "US Law", icon: Scale },
-  { name: "UK Law", icon: Scale },
-  { name: "Indian Law", icon: Scale },
-  { name: "Canadian Law", icon: Scale },
-  { name: "Australian Law", icon: Scale },
-  { name: "French Law", icon: Scale },
-  { name: "German Law", icon: Scale },
-  { name: "Brazilian Law", icon: Scale },
-  { name: "Singapore Law", icon: Scale },
-  { name: "UAE Law", icon: Scale },
-  { name: "Italian Law", icon: Scale },
-  { name: "Japanese Law", icon: Scale },
-  { name: "South Korean Law", icon: Scale },
-  { name: "Chinese Law", icon: Scale },
-  { name: "Spanish Law", icon: Scale },
-  { name: "Swiss Law", icon: Scale },
-];
 
 // Icon mapping for workflow configs
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -147,7 +113,6 @@ function saveSessionState(state: any) {
 export default function Home() {
   const { profile } = useAuth();
   const navigate = useNavigate();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
   const location = useLocation();
 
@@ -161,11 +126,9 @@ export default function Home() {
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [activeSources, setActiveSources] = useState<string[]>(saved.current?.activeSources || []);
   const [kbSources, setKbSources] = useState<KBSource[]>([]);
-  const [improving, setImproving] = useState(false);
-  const [searchFilter, setSearchFilter] = useState("");
   const [promptMode, setPromptMode] = useState<string | undefined>(saved.current?.promptMode || undefined);
   const [workflows, setWorkflows] = useState<WorkflowCard[]>(DEFAULT_WORKFLOWS);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<{ title: string; systemPrompt?: string } | null>(saved.current?.selectedWorkflow || null);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowTag | null>(saved.current?.selectedWorkflow || null);
 
   // Persist state to sessionStorage on changes
   useEffect(() => {
@@ -355,17 +318,11 @@ export default function Home() {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
   const handleFileSelect = () => {
     const input = document.createElement("input");
     input.type = "file";
     input.multiple = true;
+    input.accept = ".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.xls,.pptx,.png,.jpg,.jpeg,.webp";
     input.onchange = (e) => {
       const files = Array.from((e.target as HTMLInputElement).files || []);
       setAttachedFiles((prev) => [...prev, ...files]);
@@ -388,76 +345,6 @@ export default function Home() {
     setSelectedWorkflow({ title: wf.title, systemPrompt: wf.systemPrompt });
   };
 
-  const handleImprove = async () => {
-    if (!message.trim() || improving) return;
-    setImproving(true);
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Not authenticated");
-
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/llm-router`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            conversationId: "",
-            message: `Rewrite and improve this legal research prompt to be clearer, more specific, and more effective. Return ONLY the improved prompt, nothing else:\n\n"${message}"`,
-            history: [],
-          }),
-        }
-      );
-
-      if (!resp.ok) throw new Error("Failed to improve prompt");
-
-      const reader = resp.body!.getReader();
-      const decoder = new TextDecoder();
-      let improved = "";
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") continue;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            if (parsed.type === "token") improved += parsed.content;
-          } catch {}
-        }
-      }
-
-      if (improved.trim()) {
-        let clean = improved.trim();
-        if (clean.startsWith('"') && clean.endsWith('"')) clean = clean.slice(1, -1);
-        setMessage(clean);
-        toast({ title: "Prompt improved" });
-      }
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setImproving(false);
-    }
-  };
-
-  const filteredJurisdictions = searchFilter
-    ? JURISDICTION_SOURCES.filter(j => j.name.toLowerCase().includes(searchFilter.toLowerCase()))
-    : JURISDICTION_SOURCES;
-
-  const hasChips = selectedVault || deepResearch || activeSources.length > 0 || attachedFiles.length > 0 || promptMode || selectedWorkflow;
-
   return (
     <AppLayout>
       <div className="flex h-full flex-col items-center justify-center px-6">
@@ -472,264 +359,30 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Main prompt box */}
-          <div className="border border-border rounded-lg overflow-hidden">
-            {hasChips && (
-              <div className="flex flex-wrap gap-1.5 px-3 pt-3 bg-muted/30">
-                {selectedWorkflow && (
-                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
-                    <Zap className="h-2.5 w-2.5 shrink-0" />
-                    <span className="truncate">{selectedWorkflow.title}</span>
-                    <button onClick={() => setSelectedWorkflow(null)} className="ml-0.5 shrink-0">
-                      <X className="h-2 w-2" />
-                    </button>
-                  </Badge>
-                )}
-                {selectedVault && (
-                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
-                    <FolderOpen className="h-2.5 w-2.5 shrink-0" />
-                    <span className="truncate">{selectedVault.name}</span>
-                    <button onClick={() => setSelectedVault(null)} className="ml-0.5 shrink-0">
-                      <X className="h-2 w-2" />
-                    </button>
-                  </Badge>
-                )}
-                {deepResearch && (
-                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <Zap className="h-2.5 w-2.5 shrink-0" />
-                    Deep Research
-                    <button onClick={() => setDeepResearch(false)} className="ml-0.5 shrink-0">
-                      <X className="h-2 w-2" />
-                    </button>
-                  </Badge>
-                )}
-                {activeSources.map((source) => (
-                  <Badge key={source} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
-                    <Scale className="h-2.5 w-2.5 shrink-0" />
-                    <span className="truncate">{source}</span>
-                    <button onClick={() => toggleSource(source)} className="ml-0.5 shrink-0">
-                      <X className="h-2 w-2" />
-                    </button>
-                  </Badge>
-                ))}
-                {attachedFiles.map((file, i) => (
-                  <Badge key={i} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
-                    <FileText className="h-2.5 w-2.5 shrink-0" />
-                    <span className="truncate">{file.name}</span>
-                    <button onClick={() => removeFile(i)} className="ml-0.5 shrink-0">
-                      <X className="h-2 w-2" />
-                    </button>
-                  </Badge>
-                ))}
-                {promptMode && (
-                  <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
-                    <Sparkles className="h-2.5 w-2.5 shrink-0" />
-                    <span className="truncate">
-                      {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Document Drafting" : promptMode === "review" ? "Review Table" : "Chat Mode"}
-                    </span>
-                    <button onClick={() => setPromptMode(undefined)} className="ml-0.5 shrink-0">
-                      <X className="h-2 w-2" />
-                    </button>
-                  </Badge>
-                )}
-              </div>
-            )}
-
-            <Textarea
-              ref={textareaRef}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask LawKit anything..."
-              className="border-0 focus-visible:ring-0 resize-none min-h-[100px] text-sm bg-muted/30 px-4 pt-4"
-              rows={4}
-            />
-
-            {/* Bottom toolbar */}
-            <div className="flex items-center gap-1 px-3 py-2.5 border-t border-border bg-muted/30">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
-                    <Plus className="h-3.5 w-3.5" />
-                    Sources
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 p-0 overflow-hidden" align="start">
-                  <ScrollArea className="max-h-[400px]">
-                    <div className="p-2">
-                      <button
-                        onClick={handleFileSelect}
-                        className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
-                      >
-                        <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                        Upload files
-                      </button>
-
-                      {vaults.length > 0 && (
-                        <>
-                          <div className="my-1 h-px bg-border" />
-                          <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
-                            Vaults
-                          </p>
-                          {vaults.slice(0, 5).map((v) => (
-                            <button
-                              key={v.id}
-                              onClick={() => setSelectedVault(v)}
-                              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                            >
-                              <span className="flex items-center gap-2.5">
-                                <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                                {v.name}
-                              </span>
-                              {selectedVault?.id === v.id && (
-                                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                              )}
-                            </button>
-                          ))}
-                        </>
-                      )}
-
-                      {kbSources.length > 0 && (
-                        <>
-                          <div className="my-1 h-px bg-border" />
-                          <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
-                            Knowledge Base
-                          </p>
-                          {kbSources.map((kb) => (
-                            <button
-                              key={kb.id}
-                              onClick={() => toggleSource(kb.title)}
-                              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                            >
-                              <span className="flex items-center gap-2.5">
-                                <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                                {kb.title}
-                              </span>
-                              {activeSources.includes(kb.title) && (
-                                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                              )}
-                            </button>
-                          ))}
-                        </>
-                      )}
-
-                      <div className="my-1 h-px bg-border" />
-                      <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
-                        Jurisdictions & Databases
-                      </p>
-                      <div className="px-2.5 py-1">
-                        <input
-                          type="text"
-                          value={searchFilter}
-                          onChange={(e) => setSearchFilter(e.target.value)}
-                          placeholder="Filter jurisdictions..."
-                          className="w-full h-7 px-2 text-xs rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                        />
-                      </div>
-                      {filteredJurisdictions.map((j) => (
-                        <button
-                          key={j.name}
-                          onClick={() => toggleSource(j.name)}
-                          className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
-                        >
-                          <span className="flex items-center gap-2.5">
-                            <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-                            {j.name}
-                          </span>
-                          {activeSources.includes(j.name) && (
-                            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </PopoverContent>
-              </Popover>
-
-              {/* Mode selector */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground">
-                    {promptMode === "red_flags" ? <AlertTriangle className="h-3.5 w-3.5" /> : promptMode === "drafting" ? <FileText className="h-3.5 w-3.5" /> : promptMode === "review" ? <ListChecks className="h-3.5 w-3.5" /> : <Scale className="h-3.5 w-3.5" />}
-                    {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Draft Document" : promptMode === "review" ? "Review Table" : "Chat / Research"}
-                    <ChevronRight className="h-2.5 w-2.5" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 p-1.5" align="start">
-                  {[
-                    { id: "chat", label: "Chat / Research", description: "Ask questions, analyze documents, research topics", icon: Scale },
-                    { id: "drafting", label: "Draft Document", description: "Generate contracts, memos, briefs, and legal documents", icon: FileText },
-                    { id: "red_flags", label: "Red Flag Detection", description: "Identify risks, compliance issues, and red flags", icon: AlertTriangle },
-                    { id: "review", label: "Review Table", description: "Extract structured data from documents into a spreadsheet", icon: ListChecks },
-                  ].map((mode) => (
-                    <button
-                      key={mode.id}
-                      onClick={() => {
-                        setPromptMode(mode.id === "chat" ? undefined : mode.id);
-                      }}
-                      className={cn(
-                        "flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors",
-                        (promptMode === mode.id || (!promptMode && mode.id === "chat")) && "bg-muted ring-1 ring-primary/20"
-                      )}
-                    >
-                      <mode.icon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                      <div className="text-left">
-                        <p className="font-medium">{mode.label}</p>
-                        <p className="text-muted-foreground mt-0.5">{mode.description}</p>
-                      </div>
-                    </button>
-                  ))}
-                </PopoverContent>
-              </Popover>
-
-              {/* Improve */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-                onClick={handleImprove}
-                disabled={!message.trim() || improving}
-              >
-                {improving ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-                Improve
-              </Button>
-
-              {/* Deep Research toggle */}
-              <div className="flex items-center gap-1.5 ml-1">
-                <Switch
-                  checked={deepResearch}
-                  onCheckedChange={setDeepResearch}
-                  className="scale-75"
-                />
-                <span className="text-[10px] text-muted-foreground">Deep research</span>
-              </div>
-
-              <div className="flex-1" />
-
-              <Button
-                size="sm"
-                className="h-7 px-4 text-xs gap-1.5"
-                onClick={handleSend}
-                disabled={!message.trim() || isSendingWithFiles}
-              >
-                {isSendingWithFiles ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Uploading files...
-                  </>
-                ) : (
-                  <>
-                    Ask LawKit
-                    <Send className="h-3 w-3" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
+          {/* Main prompt box — uses the same ChatInput component as Chat page */}
+          <ChatInput
+            value={message}
+            onChange={setMessage}
+            onSend={handleSend}
+            disabled={isSendingWithFiles}
+            deepResearch={deepResearch}
+            onDeepResearchChange={setDeepResearch}
+            promptMode={promptMode}
+            onPromptModeChange={setPromptMode}
+            vaults={vaults}
+            selectedVault={selectedVault}
+            onVaultSelect={setSelectedVault}
+            activeSources={activeSources}
+            onSourceToggle={toggleSource}
+            workflowTag={selectedWorkflow}
+            onWorkflowTagRemove={() => setSelectedWorkflow(null)}
+            attachedFiles={attachedFiles}
+            onFileSelect={handleFileSelect}
+            onRemoveFile={removeFile}
+            onFilesDropped={(files) => setAttachedFiles(prev => [...prev, ...files])}
+            isProcessingFiles={isSendingWithFiles}
+            kbSources={kbSources}
+          />
 
           {/* Recommended workflows - click adds as tag */}
           <div className="space-y-3 pb-8">
