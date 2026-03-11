@@ -147,9 +147,9 @@ function injectCitations(text: string, citations: Citation[]): React.ReactNode[]
       if (citation) return <CitationPopover key={`cite-${idx}-${i}`} citation={citation} />;
     }
 
-    const superscriptChars = part.replace(/\[\],s/g, "");
+    const superscriptChars = part.replace(/[\[\],\s]/g, "");
     if (/^[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+$/.test(superscriptChars)) {
-      const nums = part.replace(/\[\]/g, "").split(/[,s]+/).filter(Boolean);
+      const nums = part.replace(/[\[\]]/g, "").split(/[,\s]+/).filter(Boolean);
       const elements: React.ReactNode[] = [];
       nums.forEach((num, j) => {
         const trimmed = num.trim();
