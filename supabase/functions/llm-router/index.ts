@@ -1143,7 +1143,7 @@ ${followUpInstruction}
             iterations: iteration,
             complexity,
             jurisdictions: intent.jurisdictions,
-            searchModelsUsed: currentSearchModel,
+            searchModelsUsed: "internal",
             taskType: intent.taskType,
           };
 
