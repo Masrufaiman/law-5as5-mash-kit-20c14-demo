@@ -394,9 +394,6 @@ export function SheetEditor({ data, onClose, onUpdate }: SheetEditorProps) {
                     </Popover>
                   </th>
                 ))}
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground w-[80px]">
-                  Status
-                </th>
               </tr>
             </thead>
             <tbody>
