@@ -392,7 +392,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
 
           if (hasVault && qdrantConf.url && qdrantConf.api_key && openaiConf.api_key) {
             trackStep("Searching your documents", "working");
-            emitThinking(controller, encoder, "Embedding query and searching document vectors for relevant passages...");
+            emitThinkingAndAccumulate("Embedding query and searching document vectors for relevant passages...");
 
             try {
               const queryEmbedding = await embedQuery(message, openaiConf.api_key, embeddingModel);
