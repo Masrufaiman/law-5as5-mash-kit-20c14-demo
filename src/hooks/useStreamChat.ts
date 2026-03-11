@@ -158,6 +158,10 @@ export function useStreamChat() {
       if (options.vaultName) attachments.vaultName = options.vaultName;
       if (options.vaultId) attachments.vaultId = options.vaultId;
       if (options.attachedFileNames?.length) attachments.fileNames = options.attachedFileNames;
+      if (options.useCase || options.promptMode) attachments.promptMode = options.promptMode || options.useCase;
+      if (options.sources?.length) attachments.sources = options.sources;
+      if (options.deepResearch) attachments.deepResearch = true;
+      if (options.workflowTitle) attachments.workflowTitle = options.workflowTitle;
 
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
