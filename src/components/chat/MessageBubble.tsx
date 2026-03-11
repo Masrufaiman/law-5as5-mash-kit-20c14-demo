@@ -573,9 +573,14 @@ export function MessageBubble({
       <div className="pl-8">
         {!isUser && stepsSection}
 
-        {/* Visual separator between steps and final answer */}
+        {/* Final answer divider */}
         {!isUser && stepsSection && cleanContent && (
-          <div className="border-t border-border/30 my-2" />
+          <div className="relative my-3">
+            <div className="border-t-2 border-agent-divider" />
+            <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-background px-2 text-[10px] text-muted-foreground font-medium tracking-wide">
+              LawKit Response
+            </span>
+          </div>
         )}
 
         {isUser ? (
