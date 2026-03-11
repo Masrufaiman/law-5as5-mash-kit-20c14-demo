@@ -226,7 +226,8 @@ async function toolReadFiles(orgId: string, vaultId: string | undefined, attache
   const citations: ToolResult["citations"] = [];
   const fileRefs: { name: string; id?: string }[] = [];
   files.filter((f: any) => f.extracted_text).forEach((f: any, i: number) => {
-    context += `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, 15000)}\n\n`;
+    const charLimit = 50000; // Read more text for thorough analysis
+    context += `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, charLimit)}\n\n`;
     citations.push({ index: i + 1, source: f.name, excerpt: (f.extracted_text || "").substring(0, 200) });
     fileRefs.push({ name: f.name, id: f.id });
   });
