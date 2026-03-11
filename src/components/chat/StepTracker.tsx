@@ -434,18 +434,19 @@ export function StepTracker({
                   </a>
                 );
               })}
-              {docSources.map((c) => (
-                <button
-                  key={c.index}
-                  onClick={() => onFileClick?.(c.source)}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:bg-accent/50 transition-colors cursor-pointer"
-                >
-                  <span className="h-3.5 w-3.5 rounded-sm bg-primary/10 flex items-center justify-center text-primary text-[8px] font-bold shrink-0">
-                    {c.index}
-                  </span>
-                  <span className="truncate max-w-[140px]">{c.source}</span>
-                </button>
-              ))}
+              {docSources.map((c) => {
+                const displayName = c.source.replace(/\s*[·\-–—]\s*(chunk|part|section|page)\s*\d+.*/i, "").trim();
+                return (
+                  <button
+                    key={c.index}
+                    onClick={() => onFileClick?.(displayName)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:bg-accent/50 transition-colors cursor-pointer"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="truncate max-w-[140px]">{displayName}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

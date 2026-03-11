@@ -40,7 +40,7 @@ export function CitationPopover({ citation }: CitationPopoverProps) {
           )}
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-foreground truncate">
-              {citation.source}
+              {citation.source.replace(/\s*[·\-–—]\s*(chunk|part|section|page)\s*\d+.*/i, "").trim()}
             </p>
             {domain && (
               <p className="text-[10px] text-muted-foreground truncate">{domain}</p>

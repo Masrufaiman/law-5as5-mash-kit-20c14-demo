@@ -353,7 +353,7 @@ export function MessageBubble({
 
   // Markdown components with remark-gfm for proper tables
   const markdownContent = (
-    <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/90 prose-strong:text-foreground prose-li:text-foreground/90 prose-td:text-foreground prose-th:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted prose-pre:border prose-pre:border-border">
+    <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/90 prose-p:leading-7 prose-strong:text-foreground prose-li:text-foreground/90 prose-li:leading-7 prose-td:text-foreground prose-th:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted prose-pre:border prose-pre:border-border">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
