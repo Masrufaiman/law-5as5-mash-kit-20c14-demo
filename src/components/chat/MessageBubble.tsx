@@ -35,6 +35,14 @@ interface MessageBubbleProps {
   thinkingText?: string;
   fileRefs?: FileRef[];
   conversationId?: string;
+  inlineData?: InlineDataTable[];
+  contradictions?: Contradiction[];
+  verifications?: Verification[];
+  escalations?: Escalation[];
+  selfCheckStatus?: string | null;
+  intent?: IntentData | null;
+  planUpdateReason?: string | null;
+  progress?: { current: number; total: number } | null;
 }
 
 /** User message action bar (edit, copy) */
