@@ -98,6 +98,8 @@ export default function Chat() {
   const [chatVaults, setChatVaults] = useState<{ id: string; name: string }[]>([]);
   const [workflowTag, setWorkflowTag] = useState<{ title: string; systemPrompt?: string } | null>(null);
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
+  // Track attached file IDs for Uploads vault scoping across messages
+  const [conversationAttachedFileIds, setConversationAttachedFileIds] = useState<string[]>([]);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Load vaults for sources dropdown
@@ -287,6 +289,8 @@ export default function Chat() {
         const effectiveVaultName = vName || "Uploads";
         setVaultId(effectiveVault);
         setVaultName(effectiveVaultName);
+        // Track attached file IDs for subsequent messages
+        setConversationAttachedFileIds(preProcessedFileIds);
         createConversationAndSend(msg, effectiveVault, deep, srcs, pMode, effectiveVaultName, wfTag?.systemPrompt, preProcessedFileIds, preProcessedFileNames);
       } else {
         createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
@@ -431,7 +435,7 @@ export default function Chat() {
     if (!conversationId) {
       await createConversationAndSend(msg, vaultId, deepResearch, activeSources, promptMode);
     } else {
-      const opts = {
+      const opts: any = {
         conversationId,
         organizationId: profile.organization_id!,
         vaultId,
@@ -443,6 +447,10 @@ export default function Chat() {
         workflowSystemPrompt: workflowTag?.systemPrompt,
         currentDocumentContent: editorDoc?.content,
       };
+      // For Uploads vault, scope to the originally attached files
+      if (vaultName === "Uploads" && conversationAttachedFileIds.length > 0) {
+        opts.attachedFileIds = conversationAttachedFileIds;
+      }
       lastStreamOptions.current = opts;
       sendMessage(msg, opts);
     }
@@ -483,6 +491,21 @@ export default function Chat() {
     });
   }, [sheetDoc]);
 
+  const handleFileClick = useCallback(async (fileName: string, fileId?: string) => {
+    if (!profile?.organization_id) return;
+    // Try to fetch file content by ID or name
+    const query = supabase.from("files").select("name, extracted_text").eq("organization_id", profile.organization_id);
+    if (fileId) {
+      query.eq("id", fileId);
+    } else {
+      query.eq("name", fileName);
+    }
+    const { data } = await query.maybeSingle();
+    if (data?.extracted_text) {
+      handleDocumentOpen(data.name || fileName, data.extracted_text);
+    }
+  }, [profile?.organization_id, handleDocumentOpen]);
+
   const handleRegenerate = () => {
     if (!lastStreamOptions.current || isStreaming) return;
     regenerateLastMessage(lastStreamOptions.current);
@@ -494,6 +517,7 @@ export default function Chat() {
     setPromptMode(undefined);
     setEditorDoc(null);
     setSheetDoc(null);
+    setConversationAttachedFileIds([]);
     initialMessageSentRef.current = false;
     clearMessages();
     navigate("/chat", { replace: true });
@@ -810,6 +834,7 @@ export default function Chat() {
                         intent={isCurrentlyStreaming ? intent : msg.frozenIntent}
                         planUpdateReason={isCurrentlyStreaming ? planUpdateReason : null}
                         progress={isCurrentlyStreaming ? progress : null}
+                        onFileClick={handleFileClick}
                       />
 
                       {isLastUser && showStreamingIndicator && (

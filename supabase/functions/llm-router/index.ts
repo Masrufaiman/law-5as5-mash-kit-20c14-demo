@@ -665,7 +665,9 @@ serve(async (req) => {
 
     const effectiveMode = promptMode || useCase;
     const needsSearch = (sources && sources.length > 0) || deepResearch;
-    const hasVault = !!(vaultId || attachedFileIds?.length);
+    const isUploadsVaultEarly = clientVaultName === "Uploads";
+    // For Uploads vault, only treat as "has vault" if we have explicit file IDs
+    const hasVault = !!(attachedFileIds?.length) || !!(vaultId && !isUploadsVaultEarly);
 
     // ──────── RESOLVE AI CONFIG ────────
     let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
@@ -718,14 +720,22 @@ serve(async (req) => {
             knowledgeContext = "\n\n## Knowledge Base\n" + knowledgeEntries.map((e: any) => `### ${e.title} (${e.category || "general"})\n${e.content}`).join("\n\n");
           }
 
-          let vaultName = "";
+          let vaultName = clientVaultName || "";
           let vaultInventory = "";
+          const isUploadsVault = vaultName === "Uploads" || clientVaultName === "Uploads";
           if (vaultId) {
-            const { data: vaultData } = await adminClient.from("vaults").select("name").eq("id", vaultId).single();
-            vaultName = vaultData?.name || "";
-            const { data: vaultFiles } = await adminClient.from("files").select("name, status, size_bytes, mime_type").eq("vault_id", vaultId).eq("organization_id", orgId).order("created_at", { ascending: false }).limit(50);
-            if (vaultFiles?.length) {
-              vaultInventory = `\n\n## Available Documents in Vault "${vaultName}"\n` + vaultFiles.map((f: any) => `- ${f.name} (${f.status}, ${Math.round(f.size_bytes / 1024)}KB)`).join("\n");
+            if (!vaultName) {
+              const { data: vaultData } = await adminClient.from("vaults").select("name").eq("id", vaultId).single();
+              vaultName = vaultData?.name || "";
+            }
+            // For Uploads vault without explicit attachedFileIds, skip vault-wide search
+            if (isUploadsVault && (!attachedFileIds || attachedFileIds.length === 0)) {
+              // Don't load vault inventory — user didn't attach files this message
+            } else {
+              const { data: vaultFiles } = await adminClient.from("files").select("name, status, size_bytes, mime_type").eq("vault_id", vaultId).eq("organization_id", orgId).order("created_at", { ascending: false }).limit(50);
+              if (vaultFiles?.length) {
+                vaultInventory = `\n\n## Available Documents in Vault "${vaultName}"\n` + vaultFiles.map((f: any) => `- ${f.name} (${f.status}, ${Math.round(f.size_bytes / 1024)}KB)`).join("\n");
+              }
             }
           }
 
@@ -938,6 +948,8 @@ serve(async (req) => {
             customPrompt = agentConf.prompts?.chat || "";
           }
 
+          const followUpInstruction = `\n\nIMPORTANT: At the end of your response, always suggest 3 relevant follow-up questions the user might want to ask. Format each as ">>FOLLOWUP: [question]" on its own line. Make them specific and actionable based on the conversation context.`;
+
           const draftingModePrompt = effectiveMode === "drafting" ? `
 You are LawKit AI, an expert legal document drafting assistant.
 CRITICAL RULES:
@@ -946,7 +958,7 @@ CRITICAL RULES:
 - Use proper legal formatting: numbered sections, subsections, defined terms in bold, signature blocks.
 - Fill in ALL details using user info and org context. NEVER use placeholder text.
 - Include all standard clauses expected for the document type.
-- At the end, suggest 3 follow-up questions starting with ">>FOLLOWUP: "
+${followUpInstruction}
 ` : "";
 
           const reviewModePrompt = effectiveMode === "review" ? `
@@ -959,6 +971,7 @@ Format:
 {"columns":[{"name":"Col","type":"free_response","query":"..."}],"rows":[{"fileName":"f.pdf","status":"completed","values":{"Col":"val"}}]}
 \`\`\`
 Column types: "free_response", "date", "classification", "verbatim", "number"
+${followUpInstruction}
 ` : "";
 
           let documentEditingContext = "";

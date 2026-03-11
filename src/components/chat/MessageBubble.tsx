@@ -7,7 +7,6 @@ import { CitationPopover } from "./CitationPopover";
 import { ChoiceCards, parseChoices } from "./ChoiceCards";
 import { MultiStepQuestionnaire, parseMultiStepQuestions } from "./MultiStepQuestionnaire";
 import { StepTracker } from "./StepTracker";
-import { SourcesFooter } from "./SourcesFooter";
 import { FollowUpSuggestions } from "./FollowUpSuggestions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +42,7 @@ interface MessageBubbleProps {
   intent?: IntentData | null;
   planUpdateReason?: string | null;
   progress?: { current: number; total: number } | null;
+  onFileClick?: (fileName: string, fileId?: string) => void;
 }
 
 /** User message action bar (edit, copy) */
@@ -243,6 +243,7 @@ export function MessageBubble({
   intent,
   planUpdateReason,
   progress,
+  onFileClick,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const citations = message.citations || [];
@@ -257,14 +258,12 @@ export function MessageBubble({
     while ((match = followUpRegex.exec(rawContent)) !== null) {
       extractedFollowUps.push(match[1].trim());
     }
-    // Also handle without >> prefix
     const altRegex = /^FOLLOWUP:\s*(.+)/gm;
     while ((match = altRegex.exec(rawContent)) !== null) {
       if (!extractedFollowUps.includes(match[1].trim())) {
         extractedFollowUps.push(match[1].trim());
       }
     }
-    // Strip follow-up lines from content
     if (extractedFollowUps.length > 0) {
       rawContent = rawContent.replace(/>>?FOLLOWUP:\s*.+/g, "").trim();
     }
@@ -319,10 +318,11 @@ export function MessageBubble({
     };
   }, [citations]);
 
-  // Steps section (with reasoning, plan, thinking, file refs)
+  // Steps section (with reasoning, plan, thinking, file refs, sources)
   const stepsSection = !isUser && (steps?.length || message.reasoning || plan?.length || thinkingText) ? (
     <div className="mb-3">
       <StepTracker
+        key={`step-${message.id}`}
         steps={steps || []}
         isStreaming={isStreamingSteps}
         reasoning={message.reasoning}
@@ -338,12 +338,10 @@ export function MessageBubble({
         intent={intent || message.frozenIntent}
         planUpdateReason={planUpdateReason}
         progress={progress}
+        citations={citations}
+        onFileClick={onFileClick}
       />
     </div>
-  ) : null;
-
-  const sourcesFooter = !isUser && !isStreaming && citations.length > 0 ? (
-    <SourcesFooter citations={citations} />
   ) : null;
 
   // Always show follow-ups for messages that have them; clickable only when isLastAssistant
@@ -450,7 +448,6 @@ export function MessageBubble({
               </div>
             </div>
           </Card>
-          {sourcesFooter}
           {followUpSection}
           {!isStreaming && cleanContent && (
              <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
@@ -493,7 +490,6 @@ export function MessageBubble({
               </div>
             </div>
           </Card>
-          {sourcesFooter}
           {followUpSection}
           {!isStreaming && cleanContent && (
              <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
@@ -520,7 +516,6 @@ export function MessageBubble({
             disabled={isStreaming || !isInteractive}
             selectedValue={alreadySelected}
           />
-          {sourcesFooter}
           {followUpSection}
           {!isStreaming && cleanContent && (
             <div className="mt-2">
@@ -549,7 +544,6 @@ export function MessageBubble({
             disabled={isStreaming || !isInteractive}
             selectedValue={alreadySelected}
           />
-          {sourcesFooter}
           {followUpSection}
           {!isStreaming && cleanContent && (
             <div className="mt-2">
@@ -597,7 +591,6 @@ export function MessageBubble({
           <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom rounded-full" />
         )}
 
-        {!isUser && !isStreaming && sourcesFooter}
         {!isUser && !isStreaming && followUpSection}
 
         {!isUser && !isStreaming && cleanContent && (
