@@ -553,13 +553,29 @@ export default function Chat() {
 
   const handleFileClick = useCallback(async (fileName: string, fileId?: string, excerpt?: string) => {
     if (!profile?.organization_id) return;
-    const query = supabase.from("files").select("name, extracted_text").eq("organization_id", profile.organization_id);
+
+    let data: any = null;
+
     if (fileId) {
-      query.eq("id", fileId);
-    } else {
-      query.eq("name", fileName);
+      const { data: d } = await supabase.from("files").select("name, extracted_text").eq("organization_id", profile.organization_id).eq("id", fileId).maybeSingle();
+      data = d;
     }
-    const { data } = await query.maybeSingle();
+
+    if (!data) {
+      // Exact name match
+      const { data: d } = await supabase.from("files").select("name, extracted_text").eq("organization_id", profile.organization_id).eq("name", fileName).maybeSingle();
+      data = d;
+    }
+
+    if (!data) {
+      // Fuzzy match: strip extensions, chunk suffixes, try ilike
+      const baseName = fileName.replace(/\s*[-–—]\s*(chunk|part|section)\s*\d+.*/i, "").replace(/\.[^.]+$/, "").trim();
+      if (baseName.length > 3) {
+        const { data: d } = await supabase.from("files").select("name, extracted_text").eq("organization_id", profile.organization_id).ilike("name", `%${baseName}%`).limit(1).maybeSingle();
+        data = d;
+      }
+    }
+
     if (data?.extracted_text) {
       handleDocumentOpen(data.name || fileName, data.extracted_text, excerpt);
     }

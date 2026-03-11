@@ -56,15 +56,79 @@ function stripDocArtifacts(content: string): string {
 
 function markdownToHtml(content: string): string {
   const cleaned = stripDocArtifacts(content);
-  return cleaned
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^- (.+)$/gm, "<li>$1</li>")
-    .replace(/\n{2,}/g, "<br><br>")
-    .replace(/\n/g, "<br>");
+  const lines = cleaned.split("\n");
+  const htmlParts: string[] = [];
+  let inTable = false;
+  let inOl = false;
+  let inUl = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Headings
+    if (/^### (.+)$/.test(line)) { closeList(); htmlParts.push(`<h3>${line.replace(/^### /, "")}</h3>`); continue; }
+    if (/^## (.+)$/.test(line)) { closeList(); htmlParts.push(`<h2>${line.replace(/^## /, "")}</h2>`); continue; }
+    if (/^# (.+)$/.test(line)) { closeList(); htmlParts.push(`<h1>${line.replace(/^# /, "")}</h1>`); continue; }
+
+    // Horizontal rule
+    if (/^---+$/.test(line.trim())) { closeList(); htmlParts.push("<hr>"); continue; }
+
+    // Table rows
+    if (/^\|(.+)\|$/.test(line.trim())) {
+      // Skip separator row
+      if (/^\|[\s\-:|]+\|$/.test(line.trim())) continue;
+      if (!inTable) { inTable = true; htmlParts.push('<table class="legal-table">'); }
+      const cells = line.trim().slice(1, -1).split("|").map(c => c.trim());
+      const tag = !htmlParts.some(p => p.includes("<tr>")) ? "th" : "td";
+      htmlParts.push(`<tr>${cells.map(c => `<${tag}>${inlineFormat(c)}</${tag}>`).join("")}</tr>`);
+      continue;
+    } else if (inTable) {
+      inTable = false;
+      htmlParts.push("</table>");
+    }
+
+    // Ordered list
+    if (/^\d+\.\s+(.+)$/.test(line)) {
+      if (!inOl) { inOl = true; htmlParts.push("<ol>"); }
+      htmlParts.push(`<li>${inlineFormat(line.replace(/^\d+\.\s+/, ""))}</li>`);
+      continue;
+    } else if (inOl && !/^\s+/.test(line)) {
+      inOl = false;
+      htmlParts.push("</ol>");
+    }
+
+    // Unordered list
+    if (/^[-*]\s+(.+)$/.test(line)) {
+      if (!inUl) { inUl = true; htmlParts.push("<ul>"); }
+      htmlParts.push(`<li>${inlineFormat(line.replace(/^[-*]\s+/, ""))}</li>`);
+      continue;
+    } else if (inUl && !/^\s+/.test(line)) {
+      inUl = false;
+      htmlParts.push("</ul>");
+    }
+
+    // Empty line
+    if (line.trim() === "") { htmlParts.push("<br>"); continue; }
+
+    // Regular paragraph
+    htmlParts.push(`<p>${inlineFormat(line)}</p>`);
+  }
+
+  closeList();
+  if (inTable) htmlParts.push("</table>");
+  return htmlParts.join("\n");
+
+  function closeList() {
+    if (inOl) { inOl = false; htmlParts.push("</ol>"); }
+    if (inUl) { inUl = false; htmlParts.push("</ul>"); }
+  }
+
+  function inlineFormat(text: string): string {
+    return text
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      .replace(/`(.+?)`/g, "<code>$1</code>");
+  }
 }
 
 function computeDiff(oldText: string, newText: string): string {
@@ -72,7 +136,7 @@ function computeDiff(oldText: string, newText: string): string {
   const newWords = newText.replace(/<[^>]+>/g, " ").split(/\s+/).filter(Boolean);
   const m = oldWords.length;
   const n = newWords.length;
-  if (m > 500 || n > 500) return newText;
+  if (m > 3000 || n > 3000) return newText;
 
   const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
   for (let i = 1; i <= m; i++) {
@@ -196,8 +260,20 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
   }, [showEdits, versions, currentVersion]);
 
   const handleExportMarkdown = () => {
-    const text = editorContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    const blob = new Blob([text], { type: "text/markdown" });
+    // Convert HTML back to simple markdown
+    const md = editorContent
+      .replace(/<h1[^>]*>(.*?)<\/h1>/gi, "# $1\n\n")
+      .replace(/<h2[^>]*>(.*?)<\/h2>/gi, "## $1\n\n")
+      .replace(/<h3[^>]*>(.*?)<\/h3>/gi, "### $1\n\n")
+      .replace(/<strong>(.*?)<\/strong>/gi, "**$1**")
+      .replace(/<em>(.*?)<\/em>/gi, "*$1*")
+      .replace(/<li>(.*?)<\/li>/gi, "- $1\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<hr\s*\/?>/gi, "\n---\n")
+      .replace(/<\/?(p|ul|ol|div|blockquote|table|thead|tbody|tr|td|th|code|pre|span)[^>]*>/gi, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    const blob = new Blob([md], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -207,7 +283,7 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
   };
 
   const handleExportHtml = () => {
-    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6;}</style></head><body>${editorContent}</body></html>`;
+    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Instrument Sans',system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.8;color:#1a1a1a;}h1{font-size:1.5rem;font-weight:700;border-bottom:2px solid #e5e5e5;padding-bottom:0.5rem;margin-top:2rem;}h2{font-size:1.25rem;font-weight:600;margin-top:1.75rem;}h3{font-size:1.1rem;font-weight:600;margin-top:1.25rem;}blockquote{border-left:3px solid #6366f1;padding-left:1rem;color:#666;font-style:italic;}table{width:100%;border-collapse:collapse;margin:1rem 0;}th,td{border:1px solid #e5e5e5;padding:0.5rem 0.75rem;text-align:left;}th{background:#f5f5f5;font-weight:600;}</style></head><body>${editorContent}</body></html>`;
     const blob = new Blob([fullHtml], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -221,11 +297,19 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
     <div className="flex flex-col h-full bg-card" ref={editorContainerRef}>
       {/* Font face CSS for app fonts */}
       <style>{`
-        .ql-editor { font-family: 'Instrument Sans', sans-serif; line-height: 1.8; }
-        .ql-editor h1 { font-size: 1.5rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.75rem; color: hsl(var(--foreground)); border-bottom: 2px solid hsl(var(--border)); padding-bottom: 0.5rem; }
-        .ql-editor h2 { font-size: 1.25rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; color: hsl(var(--foreground)); }
-        .ql-editor h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; color: hsl(var(--foreground)); }
+        .ql-editor { font-family: 'Instrument Sans', sans-serif; line-height: 1.8; padding: 2rem 2.5rem; max-width: 800px; margin: 0 auto; }
+        .ql-editor h1 { font-size: 1.5rem; font-weight: 700; margin-top: 2rem; margin-bottom: 1rem; color: hsl(var(--foreground)); border-bottom: 2px solid hsl(var(--border)); padding-bottom: 0.5rem; letter-spacing: -0.01em; }
+        .ql-editor h2 { font-size: 1.25rem; font-weight: 600; margin-top: 1.75rem; margin-bottom: 0.75rem; color: hsl(var(--foreground)); }
+        .ql-editor h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; color: hsl(var(--foreground)); }
         .ql-editor blockquote { border-left: 3px solid hsl(var(--primary)); padding-left: 1rem; color: hsl(var(--muted-foreground)); font-style: italic; margin: 0.75rem 0; }
+        .ql-editor strong { color: hsl(var(--foreground)); }
+        .ql-editor ol, .ql-editor ul { padding-left: 1.5rem; margin: 0.5rem 0; }
+        .ql-editor li { margin-bottom: 0.25rem; }
+        .ql-editor table.legal-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.875rem; }
+        .ql-editor table.legal-table th, .ql-editor table.legal-table td { border: 1px solid hsl(var(--border)); padding: 0.5rem 0.75rem; text-align: left; }
+        .ql-editor table.legal-table th { background: hsl(var(--muted)); font-weight: 600; }
+        .ql-editor hr { border: none; border-top: 1px solid hsl(var(--border)); margin: 1.5rem 0; }
+        .ql-editor p { margin-bottom: 0.5rem; }
         .ql-font-playfair-display { font-family: 'Playfair Display', serif; }
         .ql-font-ibm-plex-mono { font-family: 'IBM Plex Mono', monospace; }
         .ql-font-georgia { font-family: 'Georgia', serif; }

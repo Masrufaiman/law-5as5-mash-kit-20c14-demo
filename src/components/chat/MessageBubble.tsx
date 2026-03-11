@@ -13,9 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Bot, Copy, Pencil, Database, Paperclip, Table2, BookOpen, ChevronDown, ChevronRight } from "lucide-react";
+import { FileText, Bot, Copy, Pencil, Database, Paperclip, Table2, BookOpen, ChevronDown, ChevronRight, Shield } from "lucide-react";
 import type { ChatMessage, Citation, AgentStep, SearchSource, FileRef, InlineDataTable, Contradiction, Verification, Escalation, IntentData } from "@/hooks/useStreamChat";
 import type { SheetData } from "@/components/editor/SheetEditor";
+import { RedFlagCard, parseRedFlags } from "./RedFlagCard";
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -184,30 +185,46 @@ function stripCitationsBlock(content: string): string {
     .trim();
 }
 
-function detectDocument(content: string): { title: string } | null {
-  if (content.includes("<!-- SHEET:")) return null;
-  const headingMatch = content.match(/^#\s+(.+)/m) || content.match(/^##\s+(.+)/m);
-  if (headingMatch && content.length > 500) return { title: headingMatch[1] };
+function detectDocuments(content: string): { title: string; content: string }[] {
+  if (content.includes("<!-- SHEET:") || content.includes("<!-- REDFLAGS:")) return [];
+  // Find all top-level headings that could be documents
+  const docs: { title: string; content: string }[] = [];
+  const headingRegex = /^#{1,2}\s+(.+)/gm;
+  let match;
+  const headings: { title: string; index: number }[] = [];
+  while ((match = headingRegex.exec(content)) !== null) {
+    headings.push({ title: match[1], index: match.index });
+  }
+  
+  if (headings.length === 0) {
+    // Try bold title pattern
+    const boldMatch = content.match(/^\*\*([A-Z][A-Z\s\-–—,]+[A-Z])\*\*/m);
+    if (boldMatch && content.length > 500) return [{ title: boldMatch[1], content }];
+    return [];
+  }
 
-  const boldMatch = content.match(/^\*\*([A-Z][A-Z\s\-–—,]+[A-Z])\*\*/m);
-  if (boldMatch && content.length > 500) return { title: boldMatch[1] };
+  if (content.length < 500) return [];
 
-  return null;
+  // Single doc: first heading is the title
+  docs.push({ title: headings[0].title, content });
+  return docs;
 }
 
-function detectSheet(content: string): SheetData | null {
-  const match = content.match(/<!--\s*SHEET:\s*(.+?)\s*-->\s*```json\s*([\s\S]*?)```/);
-  if (!match) return null;
-  try {
-    const parsed = JSON.parse(match[2]);
-    return {
-      title: match[1].trim(),
-      columns: parsed.columns || [],
-      rows: parsed.rows || [],
-    };
-  } catch {
-    return null;
+function detectSheets(content: string): SheetData[] {
+  const sheets: SheetData[] = [];
+  const regex = /<!--\s*SHEET:\s*(.+?)\s*-->\s*```json\s*([\s\S]*?)```/g;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    try {
+      const parsed = JSON.parse(match[2]);
+      sheets.push({
+        title: match[1].trim(),
+        columns: parsed.columns || [],
+        rows: parsed.rows || [],
+      });
+    } catch { /* skip invalid */ }
   }
+  return sheets;
 }
 /** Collapsible References section */
 function CollapsibleReferences({ citations, onFileClick }: { citations: Citation[]; onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void }) {
@@ -370,8 +387,11 @@ export function MessageBubble({
 
   const isInteractive = isLastAssistant && !alreadySelected;
 
-  const docInfo = !isUser && !isStreaming ? detectDocument(cleanContent) : null;
-  const sheetInfo = !isUser && !isStreaming ? detectSheet(cleanContent) : null;
+  const detectedDocs = !isUser && !isStreaming ? detectDocuments(cleanContent) : [];
+  const detectedSheets = !isUser && !isStreaming ? detectSheets(cleanContent) : [];
+  const redFlagData = !isUser && !isStreaming ? parseRedFlags(cleanContent) : null;
+  const docInfo = detectedDocs.length > 0 ? detectedDocs[0] : null;
+  const sheetInfo = detectedSheets.length > 0 ? detectedSheets[0] : null;
 
   const citeComponents = React.useMemo(() => {
     if (!citations.length) return {};
@@ -510,6 +530,39 @@ export function MessageBubble({
       </ReactMarkdown>
     </div>
   );
+
+  // Render red flags
+  if (redFlagData) {
+    // Strip the REDFLAGS block from content for any remaining text display
+    const remainingContent = cleanContent.replace(/<!--\s*REDFLAGS:\s*.+?\s*-->\s*```json\s*[\s\S]*?```/, "").trim();
+    return (
+      <div className="group">
+        <div className="flex items-center gap-2 mb-2">
+          <AgentAvatar isUser={false} />
+          <span className="text-xs font-semibold text-foreground">LawKit AI</span>
+        </div>
+        <div className="pl-8 space-y-3">
+          {stepsSection}
+          {remainingContent && (
+            <div className="text-sm text-foreground/90 leading-relaxed prose prose-sm max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{remainingContent.replace(/<!--\s*REDFLAGS:[\s\S]*?```/, "").trim()}</ReactMarkdown>
+            </div>
+          )}
+          <RedFlagCard
+            data={redFlagData}
+            onOpenInEditor={onDocumentOpen ? () => onDocumentOpen(redFlagData.title, cleanContent) : undefined}
+          />
+          {!isUser && !isStreaming && citations.length > 0 && (
+            <CollapsibleReferences citations={citations} onFileClick={onFileClick} />
+          )}
+          {followUpSection}
+          {!isStreaming && cleanContent && (
+            <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Render sheet as compact card
   if (sheetInfo && onSheetOpen) {
