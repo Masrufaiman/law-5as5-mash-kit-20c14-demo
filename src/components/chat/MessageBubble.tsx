@@ -531,6 +531,39 @@ export function MessageBubble({
     </div>
   );
 
+  // Render red flags
+  if (redFlagData) {
+    // Strip the REDFLAGS block from content for any remaining text display
+    const remainingContent = cleanContent.replace(/<!--\s*REDFLAGS:\s*.+?\s*-->\s*```json\s*[\s\S]*?```/, "").trim();
+    return (
+      <div className="group">
+        <div className="flex items-center gap-2 mb-2">
+          <AgentAvatar isUser={false} />
+          <span className="text-xs font-semibold text-foreground">LawKit AI</span>
+        </div>
+        <div className="pl-8 space-y-3">
+          {stepsSection}
+          {remainingContent && (
+            <div className="text-sm text-foreground/90 leading-relaxed prose prose-sm max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{remainingContent.replace(/<!--\s*REDFLAGS:[\s\S]*?```/, "").trim()}</ReactMarkdown>
+            </div>
+          )}
+          <RedFlagCard
+            data={redFlagData}
+            onOpenInEditor={onDocumentOpen ? () => onDocumentOpen(redFlagData.title, cleanContent) : undefined}
+          />
+          {!isUser && !isStreaming && citations.length > 0 && (
+            <CollapsibleReferences citations={citations} onFileClick={onFileClick} />
+          )}
+          {followUpSection}
+          {!isStreaming && cleanContent && (
+            <ResponseActions content={cleanContent} messageId={message.id} conversationId={conversationId} onRegenerate={onRegenerate} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Render sheet as compact card
   if (sheetInfo && onSheetOpen) {
     return (

@@ -1062,7 +1062,7 @@ ${followUpInstruction}
           );
 
           const allContext = accumulatedContext.join("\n");
-          const effectiveBasePrompt = draftingModePrompt || reviewModePrompt || (basePrompt + followUpInstruction);
+          const effectiveBasePrompt = redFlagModePrompt || draftingModePrompt || reviewModePrompt || (basePrompt + followUpInstruction);
           let finalSystemPrompt = effectiveBasePrompt;
           if (workflowSystemPrompt) finalSystemPrompt = workflowSystemPrompt + "\n\n" + finalSystemPrompt;
           finalSystemPrompt += `\n${knowledgeContext}\n${vaultInventory}\n${allContext}\n${documentEditingContext}`;
