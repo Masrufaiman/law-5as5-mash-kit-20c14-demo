@@ -80,6 +80,7 @@ export function ChatInput({
   workflowTag, onWorkflowTagRemove, replyContext, onRemoveReply, onFilesAttach, isProcessingFiles,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { profile } = useAuth();
   const { toast } = useToast();
   const [improving, setImproving] = useState(false);
