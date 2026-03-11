@@ -112,8 +112,9 @@ export function StepTracker({
   // Collapsed summary
   if (collapsed && !isWorking) {
     const stepNames = steps.slice(0, 3).map(s => s.name).join(", ");
+    // Sum actual durations from step.duration strings like "72s"
     const totalTime = steps.reduce((sum, s) => {
-      if (s.duration) { const num = parseInt(s.duration); return sum + (isNaN(num) ? 0 : num); }
+      if (s.duration) { const num = parseInt(s.duration.replace(/[^\d]/g, '')); return sum + (isNaN(num) ? 0 : num); }
       return sum;
     }, 0);
 
