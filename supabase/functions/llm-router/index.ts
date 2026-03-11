@@ -1080,6 +1080,39 @@ Format:
 {"columns":[{"name":"Col","type":"free_response","query":"..."}],"rows":[{"fileName":"f.pdf","status":"completed","values":{"Col":"val"}}]}
 \`\`\`
 Column types: "free_response", "date", "classification", "verbatim", "number"
+
+## EXTRACTION GROUNDING RULES (MANDATORY)
+
+### Rule 1 — NOT FOUND (prevents all fabrication)
+For every cell you extract, you MUST be able to quote a verbatim sentence from the document.
+If you cannot quote a verbatim sentence → the value does not exist in this document.
+If a field is absent, return the value as: "NOT FOUND IN DOCUMENT"
+NEVER infer, estimate, or use training data to fill a cell.
+NEVER populate a cell you cannot directly quote from the document.
+
+### Rule 2 — Governing Law Grounding (prevents jurisdiction hallucination)
+WHEN extracting Governing Law:
+Only read the explicit governing law clause — typically in a final section titled "Governing Law" or "Governing Law and Jurisdiction".
+DO NOT infer governing law from the investor's address, the LP's name or nationality, the currency used, or any other contextual signal.
+If no explicit clause exists → return NOT FOUND IN DOCUMENT.
+
+### Rule 3 — Document Type Awareness (prevents inventing clauses)
+WHEN processing LP side letters:
+These documents contain: economic terms, MFN rights, co-investment rights, reporting rights, key person provisions, governing law.
+These documents DO NOT contain: liability caps, auto-renewal clauses, termination notice periods, indemnification terms. These live in the LPA itself.
+If asked to extract an absent clause type → return NOT FOUND IN DOCUMENT.
+DO NOT invent typical values. DO NOT infer from the LPA.
+
+### Rule 4 — Payment Term Precision
+WHEN extracting payment terms, extract all sub-values separately:
+- Management fee (Investment Period)
+- Management fee (post-Investment Period)
+- Carried interest rate
+- Hurdle / preferred return rate
+- Management fee offset % (only if explicitly stated)
+DO NOT use industry-standard or typical values.
+Omit any sub-value not stated in the document.
+
 ${followUpInstruction}
 ` : "";
 
