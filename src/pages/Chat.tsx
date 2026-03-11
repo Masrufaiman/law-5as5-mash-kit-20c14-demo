@@ -101,6 +101,9 @@ export default function Chat() {
   const [replyContext, setReplyContext] = useState<string | null>(null);
   // Track attached file IDs for Uploads vault scoping across messages
   const [conversationAttachedFileIds, setConversationAttachedFileIds] = useState<string[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [highlightExcerpt, setHighlightExcerpt] = useState<string | undefined>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Load vaults for sources dropdown
@@ -467,14 +470,19 @@ export default function Chat() {
     handleSend(text);
   }, [conversationId, profile?.organization_id, vaultId, deepResearch, activeSources, promptMode, isStreaming]);
 
-  const handleDocumentOpen = useCallback((title: string, content: string) => {
+  const handleDocumentOpen = useCallback((title: string, content: string, excerpt?: string) => {
     const container = scrollContainerRef.current;
     const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
     const scrollTop = viewport?.scrollTop || 0;
 
-    setEditorDoc(
-      editorDoc?.title === title ? null : { title, content }
-    );
+    setHighlightExcerpt(excerpt);
+    
+    // If same title, append as new version
+    if (editorDoc?.title === title && !excerpt) {
+      setEditorDoc(null); // toggle off
+    } else {
+      setEditorDoc({ title, content });
+    }
 
     requestAnimationFrame(() => {
       if (viewport) viewport.scrollTop = scrollTop;
@@ -498,9 +506,8 @@ export default function Chat() {
     });
   }, [sheetDoc]);
 
-  const handleFileClick = useCallback(async (fileName: string, fileId?: string) => {
+  const handleFileClick = useCallback(async (fileName: string, fileId?: string, excerpt?: string) => {
     if (!profile?.organization_id) return;
-    // Try to fetch file content by ID or name
     const query = supabase.from("files").select("name, extracted_text").eq("organization_id", profile.organization_id);
     if (fileId) {
       query.eq("id", fileId);
@@ -509,9 +516,34 @@ export default function Chat() {
     }
     const { data } = await query.maybeSingle();
     if (data?.extracted_text) {
-      handleDocumentOpen(data.name || fileName, data.extracted_text);
+      handleDocumentOpen(data.name || fileName, data.extracted_text, excerpt);
     }
   }, [profile?.organization_id, handleDocumentOpen]);
+
+  const handleFileSelect = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFilesSelected = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    setAttachedFiles(prev => [...prev, ...files]);
+    setIsProcessingFiles(true);
+    try {
+      const result = await processAttachedFiles(files);
+      setConversationAttachedFileIds(prev => [...prev, ...result.fileIds]);
+      setVaultId(result.vaultId);
+      setVaultName("Uploads");
+      toast({ title: "Files attached", description: `${files.length} file${files.length > 1 ? 's' : ''} uploaded and processing.` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsProcessingFiles(false);
+    }
+  }, [processAttachedFiles, toast]);
+
+  const removeAttachedFile = useCallback((index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  }, []);
 
   const handleRegenerate = () => {
     if (!lastStreamOptions.current || isStreaming) return;
@@ -632,11 +664,14 @@ export default function Chat() {
     <DocumentEditor
       title={editorDoc.title}
       content={editorDoc.content}
+      highlightExcerpt={highlightExcerpt}
+      appendVersion={true}
       onClose={() => {
         const container = scrollContainerRef.current;
         const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
         const scrollTop = viewport?.scrollTop || 0;
         setEditorDoc(null);
+        setHighlightExcerpt(undefined);
         requestAnimationFrame(() => {
           if (viewport) viewport.scrollTop = scrollTop;
         });
@@ -905,6 +940,19 @@ export default function Chat() {
 
           <div className="px-6 py-4">
             <div className="mx-auto max-w-3xl">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.xls,.pptx,.png,.jpg,.jpeg,.webp"
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                if (files.length > 0) handleFilesSelected(files);
+                e.target.value = "";
+              }}
+            />
             <ChatInput
                 value={input}
                 onChange={setInput}
@@ -928,20 +976,9 @@ export default function Chat() {
                 replyContext={replyContext}
                 onRemoveReply={() => setReplyContext(null)}
                 isProcessingFiles={isProcessingFiles}
-                onFilesAttach={async (files) => {
-                  setIsProcessingFiles(true);
-                  try {
-                    const result = await processAttachedFiles(files);
-                    setConversationAttachedFileIds(prev => [...prev, ...result.fileIds]);
-                    setVaultId(result.vaultId);
-                    setVaultName("Uploads");
-                    toast({ title: "Files attached", description: `${files.length} file${files.length > 1 ? 's' : ''} uploaded and processing.` });
-                  } catch (err: any) {
-                    toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-                  } finally {
-                    setIsProcessingFiles(false);
-                  }
-                }}
+                onFileSelect={handleFileSelect}
+                attachedFiles={attachedFiles}
+                onRemoveFile={removeAttachedFile}
               />
             </div>
           </div>

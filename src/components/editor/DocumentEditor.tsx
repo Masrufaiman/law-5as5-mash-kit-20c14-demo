@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { X, Eye, EyeOff, Save, Clock, ChevronDown, ChevronsLeft, ChevronsRight, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,9 @@ interface DocumentEditorProps {
   title: string;
   content: string;
   onClose: () => void;
+  highlightExcerpt?: string;
+  /** If true, append content as a new version instead of replacing */
+  appendVersion?: boolean;
 }
 
 const modules = {
@@ -100,19 +103,76 @@ function computeDiff(oldText: string, newText: string): string {
   return result.join(" ");
 }
 
-export function DocumentEditor({ title, content, onClose }: DocumentEditorProps) {
+export function DocumentEditor({ title, content, onClose, highlightExcerpt, appendVersion }: DocumentEditorProps) {
   const [editorContent, setEditorContent] = useState("");
   const [versions, setVersions] = useState<string[]>([]);
   const [currentVersion, setCurrentVersion] = useState(0);
   const [showEdits, setShowEdits] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const prevTitleRef = useRef<string>("");
 
   useEffect(() => {
     const html = markdownToHtml(content);
-    setEditorContent(html);
-    setVersions([html]);
-    setCurrentVersion(0);
-  }, [content]);
+    
+    // If same title and appendVersion, add as new version instead of replacing
+    if (appendVersion && prevTitleRef.current === title && versions.length > 0) {
+      const newVersions = [...versions, html];
+      setVersions(newVersions);
+      setCurrentVersion(newVersions.length - 1);
+      setEditorContent(html);
+    } else {
+      setEditorContent(html);
+      setVersions([html]);
+      setCurrentVersion(0);
+    }
+    prevTitleRef.current = title;
+  }, [content, title]);
+
+  // Highlight excerpt: scroll to matching text
+  useEffect(() => {
+    if (!highlightExcerpt || !editorContainerRef.current) return;
+    
+    const timer = setTimeout(() => {
+      const container = editorContainerRef.current;
+      if (!container) return;
+      
+      const qlEditor = container.querySelector('.ql-editor');
+      if (!qlEditor) return;
+      
+      // Search for excerpt text in the editor
+      const textContent = qlEditor.textContent || "";
+      const excerptClean = highlightExcerpt.replace(/\s+/g, " ").trim().slice(0, 100);
+      const idx = textContent.toLowerCase().indexOf(excerptClean.toLowerCase());
+      
+      if (idx >= 0) {
+        // Find the DOM node containing this text and scroll to it
+        const walker = document.createTreeWalker(qlEditor, NodeFilter.SHOW_TEXT);
+        let charCount = 0;
+        let node: Node | null;
+        while ((node = walker.nextNode())) {
+          const nodeLen = (node.textContent || "").length;
+          if (charCount + nodeLen >= idx) {
+            const el = node.parentElement;
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              // Add temporary highlight
+              const origBg = el.style.backgroundColor;
+              el.style.backgroundColor = "hsl(var(--primary) / 0.2)";
+              el.style.transition = "background-color 0.3s";
+              setTimeout(() => {
+                el.style.backgroundColor = origBg;
+              }, 3000);
+            }
+            break;
+          }
+          charCount += nodeLen;
+        }
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [highlightExcerpt]);
 
   const isViewingOldVersion = currentVersion < versions.length - 1;
 
@@ -130,7 +190,6 @@ export function DocumentEditor({ title, content, onClose }: DocumentEditorProps)
     setShowEdits(false);
   };
 
-  // Diff compares previous version vs current version — showing deletions (strikethrough red) + additions (green highlight)
   const diffHtml = useMemo(() => {
     if (!showEdits || currentVersion === 0) return null;
     return computeDiff(versions[currentVersion - 1], versions[currentVersion]);
@@ -159,7 +218,7 @@ export function DocumentEditor({ title, content, onClose }: DocumentEditorProps)
   };
 
   return (
-    <div className="flex flex-col h-full bg-card">
+    <div className="flex flex-col h-full bg-card" ref={editorContainerRef}>
       {/* Font face CSS for app fonts */}
       <style>{`
         .ql-editor { font-family: 'Instrument Sans', sans-serif; }

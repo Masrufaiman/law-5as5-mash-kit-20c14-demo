@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Sparkles, Send, Plus, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, FolderOpen, Scale, Table2, Zap, Reply, X, Paperclip } from "lucide-react";
+import { Sparkles, Send, Plus, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, FolderOpen, Scale, Table2, Zap, Reply, X, Upload, BookOpen, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -19,7 +19,7 @@ const PROMPT_MODES = [
 ];
 
 const JURISDICTION_SOURCES = [
-  { name: "Web Search", icon: Scale },
+  { name: "Web Search", icon: Globe },
   { name: "EDGAR (SEC)", icon: Scale },
   { name: "CourtListener", icon: Scale },
   { name: "EUR-Lex", icon: Scale },
@@ -46,6 +46,12 @@ interface VaultItem {
   name: string;
 }
 
+interface KBSource {
+  id: string;
+  title: string;
+  category: string | null;
+}
+
 export interface WorkflowTag {
   title: string;
   systemPrompt?: string;
@@ -70,22 +76,28 @@ interface ChatInputProps {
   onWorkflowTagRemove?: () => void;
   replyContext?: string | null;
   onRemoveReply?: () => void;
-  onFilesAttach?: (files: File[]) => void;
+  // File handling
+  attachedFiles?: File[];
+  onFileSelect?: () => void;
+  onRemoveFile?: (index: number) => void;
   isProcessingFiles?: boolean;
+  // Knowledge base
+  kbSources?: KBSource[];
 }
 
 export function ChatInput({
   value, onChange, onSend, disabled, deepResearch = false, onDeepResearchChange,
   promptMode, onPromptModeChange, vaults, selectedVault, onVaultSelect, activeSources, onSourceToggle,
-  workflowTag, onWorkflowTagRemove, replyContext, onRemoveReply, onFilesAttach, isProcessingFiles,
+  workflowTag, onWorkflowTagRemove, replyContext, onRemoveReply,
+  attachedFiles, onFileSelect, onRemoveFile, isProcessingFiles, kbSources,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { profile } = useAuth();
   const { toast } = useToast();
   const [improving, setImproving] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");
   const [localVaults, setLocalVaults] = useState<VaultItem[]>([]);
+  const [localKbSources, setLocalKbSources] = useState<KBSource[]>([]);
 
   useEffect(() => {
     if (vaults) return;
@@ -98,7 +110,20 @@ export function ChatInput({
       .then(({ data }) => setLocalVaults(data || []));
   }, [profile?.organization_id, vaults]);
 
+  // Fetch KB sources if not provided
+  useEffect(() => {
+    if (kbSources) return;
+    if (!profile?.organization_id) return;
+    supabase
+      .from("knowledge_entries")
+      .select("id, title, category")
+      .or(`organization_id.eq.${profile.organization_id},is_global.eq.true`)
+      .order("title")
+      .then(({ data }) => setLocalKbSources(data || []));
+  }, [profile?.organization_id, kbSources]);
+
   const effectiveVaults = vaults || localVaults;
+  const effectiveKb = kbSources || localKbSources;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -177,20 +202,69 @@ export function ChatInput({
     ? JURISDICTION_SOURCES.filter(j => j.name.toLowerCase().includes(searchFilter.toLowerCase()))
     : JURISDICTION_SOURCES;
 
+  const hasChips = workflowTag || selectedVault || deepResearch || (activeSources && activeSources.length > 0) || (attachedFiles && attachedFiles.length > 0) || promptMode;
+
   return (
     <div className="border border-border rounded-lg bg-card overflow-hidden">
-      {/* Workflow tag badge */}
-      {workflowTag && (
-        <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-          <Badge
-            variant="secondary"
-            className="text-[10px] py-0 px-1.5 gap-1 font-normal cursor-pointer hover:bg-destructive/20"
-            onClick={onWorkflowTagRemove}
-          >
-            <Zap className="h-2.5 w-2.5" />
-            {workflowTag.title}
-            <span className="ml-0.5 text-muted-foreground">×</span>
-          </Badge>
+      {/* Chips area — exact clone of Home */}
+      {hasChips && (
+        <div className="flex flex-wrap gap-1.5 px-3 pt-3 bg-muted/30">
+          {workflowTag && (
+            <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
+              <Zap className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{workflowTag.title}</span>
+              <button onClick={onWorkflowTagRemove} className="ml-0.5 shrink-0">
+                <X className="h-2 w-2" />
+              </button>
+            </Badge>
+          )}
+          {selectedVault && (
+            <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
+              <FolderOpen className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{selectedVault.name}</span>
+              <button onClick={() => onVaultSelect?.(null)} className="ml-0.5 shrink-0">
+                <X className="h-2 w-2" />
+              </button>
+            </Badge>
+          )}
+          {deepResearch && (
+            <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
+              <Zap className="h-2.5 w-2.5 shrink-0" />
+              Deep Research
+              <button onClick={() => onDeepResearchChange?.(false)} className="ml-0.5 shrink-0">
+                <X className="h-2 w-2" />
+              </button>
+            </Badge>
+          )}
+          {activeSources?.map((source) => (
+            <Badge key={source} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
+              <Scale className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{source}</span>
+              <button onClick={() => onSourceToggle?.(source)} className="ml-0.5 shrink-0">
+                <X className="h-2 w-2" />
+              </button>
+            </Badge>
+          ))}
+          {attachedFiles?.map((file, i) => (
+            <Badge key={i} variant="secondary" className="gap-1 text-[10px] py-0.5 px-2 max-w-[200px]">
+              <FileText className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{file.name}</span>
+              <button onClick={() => onRemoveFile?.(i)} className="ml-0.5 shrink-0">
+                <X className="h-2 w-2" />
+              </button>
+            </Badge>
+          ))}
+          {promptMode && (
+            <Badge variant="secondary" className="gap-1 text-[10px] py-0.5 px-2">
+              <Sparkles className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">
+                {promptMode === "red_flags" ? "Red Flag Detection" : promptMode === "drafting" ? "Document Drafting" : promptMode === "review" ? "Review Table" : "Chat Mode"}
+              </span>
+              <button onClick={() => onPromptModeChange?.(undefined)} className="ml-0.5 shrink-0">
+                <X className="h-2 w-2" />
+              </button>
+            </Badge>
+          )}
         </div>
       )}
 
@@ -225,41 +299,9 @@ export function ChatInput({
         />
       </div>
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.xls,.pptx,.png,.jpg,.jpeg,.webp"
-        className="hidden"
-        onChange={(e) => {
-          const files = Array.from(e.target.files || []);
-          if (files.length > 0 && onFilesAttach) onFilesAttach(files);
-          e.target.value = "";
-        }}
-      />
-
       {/* Bottom toolbar */}
       <div className="flex items-center gap-1 px-3 py-2 border-t border-border bg-muted/30">
-        {/* File attach button */}
-        {onFilesAttach && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled || isProcessingFiles}
-          >
-            {isProcessingFiles ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Paperclip className="h-3.5 w-3.5" />
-            )}
-            Attach
-          </Button>
-        )}
-
-        {/* Sources button */}
+        {/* Sources button — with Upload files, Vaults, KB, Jurisdictions */}
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground">
@@ -268,8 +310,27 @@ export function ChatInput({
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-72 p-0 overflow-hidden" align="start">
-            <ScrollArea className="max-h-[350px]">
+            <ScrollArea className="max-h-[400px]">
               <div className="p-2">
+                {/* Upload files */}
+                {onFileSelect && (
+                  <>
+                    <button
+                      onClick={onFileSelect}
+                      disabled={isProcessingFiles}
+                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                    >
+                      {isProcessingFiles ? (
+                        <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin" />
+                      ) : (
+                        <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                      Upload files
+                    </button>
+                    <div className="my-1 h-px bg-border" />
+                  </>
+                )}
+
                 {effectiveVaults.length > 0 && (
                   <>
                     <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
@@ -294,6 +355,30 @@ export function ChatInput({
                   </>
                 )}
 
+                {effectiveKb.length > 0 && (
+                  <>
+                    <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
+                      Knowledge Base
+                    </p>
+                    {effectiveKb.map((kb) => (
+                      <button
+                        key={kb.id}
+                        onClick={() => onSourceToggle?.(kb.title)}
+                        className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                          {kb.title}
+                        </span>
+                        {activeSources?.includes(kb.title) && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        )}
+                      </button>
+                    ))}
+                    <div className="my-1 h-px bg-border" />
+                  </>
+                )}
+
                 <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
                   Jurisdictions & Databases
                 </p>
@@ -302,7 +387,7 @@ export function ChatInput({
                     type="text"
                     value={searchFilter}
                     onChange={(e) => setSearchFilter(e.target.value)}
-                    placeholder="Filter..."
+                    placeholder="Filter jurisdictions..."
                     className="w-full h-7 px-2 text-xs rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </div>
@@ -394,10 +479,19 @@ export function ChatInput({
           size="sm"
           className="h-7 px-3 text-xs gap-1.5"
           onClick={onSend}
-          disabled={disabled || !value.trim()}
+          disabled={disabled || !value.trim() || isProcessingFiles}
         >
-          <Send className="h-3.5 w-3.5" />
-          Send
+          {isProcessingFiles ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Uploading...
+            </>
+          ) : (
+            <>
+              <Send className="h-3.5 w-3.5" />
+              Send
+            </>
+          )}
         </Button>
       </div>
     </div>
