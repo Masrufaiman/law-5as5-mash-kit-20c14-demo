@@ -938,7 +938,7 @@ serve(async (req) => {
             } else {
               // Default: if vault not searched and available, do that; else if web not searched, do that; else finish
               if (!vaultSearchDone && hasVault) { nextTool = "vault_search"; }
-              else if (!webSearchDone && needsSearch && perplexityKey) { nextTool = "web_search"; }
+              else if (!webSearchDone && perplexityKey) { nextTool = "web_search"; }
               else { nextTool = ""; }
             }
           }

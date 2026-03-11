@@ -155,7 +155,7 @@ export function StepTracker({
         <div className="flex items-center gap-1.5">
           {progress && isWorking && (
             <span className="text-[10px] font-mono text-agent-blue font-medium">
-              {progress.current} / {progress.total}
+              {Math.min(progress.current, Math.max(progress.current, progress.total))} / {Math.max(progress.current, progress.total)}
             </span>
           )}
           {!progress && totalSteps > 0 && (

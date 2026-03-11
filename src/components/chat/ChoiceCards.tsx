@@ -93,7 +93,8 @@ export function parseNeedMoreInfo(content: string): { preamble: string; choices:
     return { preamble, choices };
   }
 
-  return { preamble: content.trim(), choices: defaultChoices };
+  // No parsed choices found — return null, don't show static fallbacks
+  return null;
 }
 
 /**

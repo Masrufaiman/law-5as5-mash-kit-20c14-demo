@@ -370,6 +370,7 @@ export default function Chat() {
 
   const handleReplyWithSelection = () => {
     if (!selectionTooltip) return;
+    isReplyingRef.current = true;
     setReplyContext(selectionTooltip.text);
     setSelectionTooltip(null);
     window.getSelection()?.removeAllRanges();
