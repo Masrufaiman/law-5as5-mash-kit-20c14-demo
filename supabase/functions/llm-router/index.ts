@@ -516,7 +516,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
                   .filter((f: any) => f.extracted_text)
                   .map((f: any, i: number) => `### [${i + 1}] ${f.name}\n${f.extracted_text?.substring(0, 15000)}`)
                   .join("\n\n");
-              emitThinking(controller, encoder, `Loaded ${files.length} documents directly. Reading through content to find relevant information.`);
+              emitThinkingAndAccumulate(`Loaded ${files.length} documents directly. Reading through content to find relevant information.`);
               trackStep("Reading vault documents", "done", `Analyzed ${files.length} documents`);
             } else {
               trackStep("Reading vault documents", "done", "No documents found");
