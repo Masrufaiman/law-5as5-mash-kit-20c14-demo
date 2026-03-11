@@ -409,8 +409,10 @@ export function MessageBubble({
   const isInteractive = isLastAssistant && !alreadySelected;
 
   // During streaming, detect markers early to show skeleton
+  // Also detect document drafting patterns during streaming: long content starting with headings
+  const isStreamingDraftContent = isStreaming && !isUser && cleanContent.length > 200 && /^#\s+.+/m.test(cleanContent) && !cleanContent.includes("<!-- SHEET:") && !cleanContent.includes("<!-- REDFLAGS:");
   const isStreamingSpecialContent = isStreaming && !isUser && (
-    cleanContent.includes("<!-- SHEET:") || cleanContent.includes("<!-- REDFLAGS:") 
+    cleanContent.includes("<!-- SHEET:") || cleanContent.includes("<!-- REDFLAGS:") || isStreamingDraftContent
   );
 
   const detectedDocs = !isUser && !isStreaming ? detectDocuments(cleanContent) : [];
