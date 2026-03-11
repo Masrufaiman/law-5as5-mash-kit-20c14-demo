@@ -56,15 +56,79 @@ function stripDocArtifacts(content: string): string {
 
 function markdownToHtml(content: string): string {
   const cleaned = stripDocArtifacts(content);
-  return cleaned
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^- (.+)$/gm, "<li>$1</li>")
-    .replace(/\n{2,}/g, "<br><br>")
-    .replace(/\n/g, "<br>");
+  const lines = cleaned.split("\n");
+  const htmlParts: string[] = [];
+  let inTable = false;
+  let inOl = false;
+  let inUl = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Headings
+    if (/^### (.+)$/.test(line)) { closeList(); htmlParts.push(`<h3>${line.replace(/^### /, "")}</h3>`); continue; }
+    if (/^## (.+)$/.test(line)) { closeList(); htmlParts.push(`<h2>${line.replace(/^## /, "")}</h2>`); continue; }
+    if (/^# (.+)$/.test(line)) { closeList(); htmlParts.push(`<h1>${line.replace(/^# /, "")}</h1>`); continue; }
+
+    // Horizontal rule
+    if (/^---+$/.test(line.trim())) { closeList(); htmlParts.push("<hr>"); continue; }
+
+    // Table rows
+    if (/^\|(.+)\|$/.test(line.trim())) {
+      // Skip separator row
+      if (/^\|[\s\-:|]+\|$/.test(line.trim())) continue;
+      if (!inTable) { inTable = true; htmlParts.push('<table class="legal-table">'); }
+      const cells = line.trim().slice(1, -1).split("|").map(c => c.trim());
+      const tag = !htmlParts.some(p => p.includes("<tr>")) ? "th" : "td";
+      htmlParts.push(`<tr>${cells.map(c => `<${tag}>${inlineFormat(c)}</${tag}>`).join("")}</tr>`);
+      continue;
+    } else if (inTable) {
+      inTable = false;
+      htmlParts.push("</table>");
+    }
+
+    // Ordered list
+    if (/^\d+\.\s+(.+)$/.test(line)) {
+      if (!inOl) { inOl = true; htmlParts.push("<ol>"); }
+      htmlParts.push(`<li>${inlineFormat(line.replace(/^\d+\.\s+/, ""))}</li>`);
+      continue;
+    } else if (inOl && !/^\s+/.test(line)) {
+      inOl = false;
+      htmlParts.push("</ol>");
+    }
+
+    // Unordered list
+    if (/^[-*]\s+(.+)$/.test(line)) {
+      if (!inUl) { inUl = true; htmlParts.push("<ul>"); }
+      htmlParts.push(`<li>${inlineFormat(line.replace(/^[-*]\s+/, ""))}</li>`);
+      continue;
+    } else if (inUl && !/^\s+/.test(line)) {
+      inUl = false;
+      htmlParts.push("</ul>");
+    }
+
+    // Empty line
+    if (line.trim() === "") { htmlParts.push("<br>"); continue; }
+
+    // Regular paragraph
+    htmlParts.push(`<p>${inlineFormat(line)}</p>`);
+  }
+
+  closeList();
+  if (inTable) htmlParts.push("</table>");
+  return htmlParts.join("\n");
+
+  function closeList() {
+    if (inOl) { inOl = false; htmlParts.push("</ol>"); }
+    if (inUl) { inUl = false; htmlParts.push("</ul>"); }
+  }
+
+  function inlineFormat(text: string): string {
+    return text
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      .replace(/`(.+?)`/g, "<code>$1</code>");
+  }
 }
 
 function computeDiff(oldText: string, newText: string): string {
