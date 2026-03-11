@@ -808,7 +808,7 @@ serve(async (req) => {
                   if (!perplexityKey) {
                     toolResult = { context: "", citations: [], domains: [], fileRefs: [], summary: "No search API configured" };
                   } else {
-                    emitThinking(`Searching across legal databases using ${currentSearchModel}...`);
+                    emitThinking(`Searching across legal databases...`);
                     toolResult = await toolWebSearch(nextInput.query || message, perplexityKey, currentSearchModel, sources, intent.jurisdictions, currentRE);
                     webSearchDone = true;
                     if (toolResult.domains.length > 0) {
