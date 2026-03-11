@@ -341,6 +341,7 @@ If you cannot determine a value from the document content, use "N/A". Be concise
       async start(controller) {
           // Accumulators for metadata persistence
           let accumulatedThinkingText = "";
+          const stepStartTimes: Map<string, number> = new Map();
 
           const encoder = new TextEncoder();
           const trackStep = (name: string, status: string, detail?: string) => {
