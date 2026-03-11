@@ -491,6 +491,21 @@ export default function Chat() {
     });
   }, [sheetDoc]);
 
+  const handleFileClick = useCallback(async (fileName: string, fileId?: string) => {
+    if (!profile?.organization_id) return;
+    // Try to fetch file content by ID or name
+    const query = supabase.from("files").select("name, extracted_text").eq("organization_id", profile.organization_id);
+    if (fileId) {
+      query.eq("id", fileId);
+    } else {
+      query.eq("name", fileName);
+    }
+    const { data } = await query.maybeSingle();
+    if (data?.extracted_text) {
+      handleDocumentOpen(data.name || fileName, data.extracted_text);
+    }
+  }, [profile?.organization_id, handleDocumentOpen]);
+
   const handleRegenerate = () => {
     if (!lastStreamOptions.current || isStreaming) return;
     regenerateLastMessage(lastStreamOptions.current);
@@ -502,6 +517,7 @@ export default function Chat() {
     setPromptMode(undefined);
     setEditorDoc(null);
     setSheetDoc(null);
+    setConversationAttachedFileIds([]);
     initialMessageSentRef.current = false;
     clearMessages();
     navigate("/chat", { replace: true });
