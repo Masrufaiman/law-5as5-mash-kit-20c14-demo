@@ -900,7 +900,7 @@ export default function Chat() {
 
           <div className="px-6 py-4">
             <div className="mx-auto max-w-3xl">
-              <ChatInput
+            <ChatInput
                 value={input}
                 onChange={setInput}
                 onSend={handleSend}
@@ -920,6 +920,8 @@ export default function Chat() {
                 onSourceToggle={(s) => setActiveSources(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
                 workflowTag={workflowTag}
                 onWorkflowTagRemove={() => setWorkflowTag(null)}
+                replyContext={replyContext}
+                onRemoveReply={() => setReplyContext(null)}
               />
             </div>
           </div>
