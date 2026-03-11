@@ -469,7 +469,18 @@ async function analyzeIntent(
       body: JSON.stringify({
         model: modelId,
         messages: [
-          { role: "system", content: "Analyze this legal query. Output structured plan." },
+          { role: "system", content: `You are a legal AI planning engine. Analyze the user's legal query and generate a detailed, multi-step execution plan.
+
+RULES:
+- Always generate 3-7 specific, actionable steps
+- If vault documents are available, include a "Search uploaded documents for [specific topic]" step
+- If web search is available, include a "Research [specific aspect] via legal databases" step  
+- Always end with a "Synthesize findings into comprehensive response" step
+- Each step should be specific to the query, not generic
+- For research queries: include vault search + web search + cross-reference + synthesis
+- For drafting queries: include research relevant templates + draft document + review clauses
+- For analysis queries: include document analysis + identify key provisions + compare against standards
+- IMPORTANT: When the AI needs to ask for clarification, it MUST generate context-relevant numbered options in the response (not generic ones). Each option should relate to the specific topic being discussed.` },
           { role: "user", content: `Query: "${query}"\nHas vault documents: ${hasVault}\nHas search sources: ${hasSources}\nMode: ${effectiveMode || "chat"}` },
         ],
         tools: [{
