@@ -906,8 +906,18 @@ serve(async (req) => {
             }
 
             // Decide next action
-            if (monologue.next_action === "FINISH") {
+            // Check vault fallback: if vault returned irrelevant results, auto-switch to web
+            const vaultWasIrrelevant = monologue.vault_result_relevant === false;
+            if (monologue.next_action === "FINISH" && !vaultWasIrrelevant) {
               nextTool = "";
+            } else if (vaultWasIrrelevant && !webSearchDone && perplexityKey) {
+              // Vault results irrelevant — auto fallback to web search
+              nextTool = "web_search";
+              nextInput = monologue.next_tool_input || { query: message };
+              emitThinking("Document results not relevant to query. Searching online sources...");
+              // Clear irrelevant vault citations
+              allCitations = allCitations.filter(c => c.url);
+              allFileRefs = [];
             } else if (monologue.next_action === "TOOL" && monologue.next_tool) {
               nextTool = monologue.next_tool;
               nextInput = monologue.next_tool_input || { query: message };
