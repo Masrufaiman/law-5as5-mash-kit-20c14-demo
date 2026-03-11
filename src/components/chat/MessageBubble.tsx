@@ -133,7 +133,7 @@ function processChildren(
   });
 }
 
-const CITATION_PATTERN = /(\[\d+\]|\[[\u2070\u00b9\u00b2\u00b3\u2074-\u2079][,\s\u2070\u00b9\u00b2\u00b3\u2074-\u2079]*\]|[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+)/g;
+const CITATION_PATTERN = /(\[\*{0,2}\d+\*{0,2}\]|\[[\u2070\u00b9\u00b2\u00b3\u2074-\u2079][,\s\u2070\u00b9\u00b2\u00b3\u2074-\u2079]*\]|[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+)/g;
 
 function injectCitations(text: string, citations: Citation[]): React.ReactNode[] {
   const parts = text.split(CITATION_PATTERN);
