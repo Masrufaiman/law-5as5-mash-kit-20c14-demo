@@ -1711,6 +1711,8 @@ ${followUpInstruction}
           let reasoningContent = "";
           let buffer = "";
           let inThinkBlock = false;
+          let firstTokensBuffer = ""; // Buffer first tokens to strip bad openers
+          let firstTokensEmitted = false;
 
           while (true) {
             const { done, value } = await reader.read();
