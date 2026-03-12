@@ -508,7 +508,8 @@ RULES:
 - For research queries: include vault search + web search + cross-reference + synthesis
 - For drafting queries: include research relevant templates + draft document + review clauses
 - For analysis queries: include document analysis + identify key provisions + compare against standards
-- IMPORTANT: When the AI needs to ask for clarification, it MUST generate context-relevant numbered options in the response (not generic ones). Each option should relate to the specific topic being discussed.` },
+- IMPORTANT: When the AI needs to ask for clarification, it MUST generate context-relevant numbered options in the response (not generic ones). Each option should relate to the specific topic being discussed.
+- If the user message is short or ambiguous (under 10 words), resolve it against the conversation history before treating it as a new query. Combine the previous topic with the new message to form a complete query.` },
           { role: "user", content: `Query: "${query}"\nHas vault documents: ${hasVault}\nHas search sources: ${hasSources}\nMode: ${effectiveMode || "chat"}` },
         ],
         tools: [{
