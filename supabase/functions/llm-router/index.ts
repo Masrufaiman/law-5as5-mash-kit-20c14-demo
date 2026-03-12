@@ -981,7 +981,7 @@ serve(async (req) => {
           // ════════════════════════════════════
           // PHASE 2: REQUEST TYPE CLASSIFICATION + INTENT ANALYSIS
           // ════════════════════════════════════
-          const requestType = classifyRequestType(message, !!(attachedFileIds?.length), hasVault, conversationHistory);
+          const requestType = classifyRequestType(message, !!(attachedFileIds?.length), hasVault, conversationHistory, sources);
           const intent = await analyzeIntent(aiUrl, aiKey, modelId, aiHeaders, resolvedMessage, hasVault, !!needsSearch, effectiveMode);
 
           // Merge complexity: use max of assessed vs intent-returned
