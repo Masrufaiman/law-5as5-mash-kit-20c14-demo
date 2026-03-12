@@ -611,6 +611,7 @@ export default function Chat() {
     try {
       const result = await processAttachedFiles(attachedFiles);
       setConversationAttachedFileIds(prev => [...prev, ...result.fileIds]);
+      setConversationAttachedFileNames(prev => [...prev, ...attachedFiles.map(f => f.name)]);
       setVaultId(result.vaultId);
       setVaultName("Uploads");
 
