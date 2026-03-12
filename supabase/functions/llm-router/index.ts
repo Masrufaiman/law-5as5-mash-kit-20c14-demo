@@ -355,24 +355,18 @@ RULES:
 - For contradiction, use: {"claim":"...", "sourceA":"...", "sourceB":"..."}
 - For inline_data, use: {"headers":["col1","col2"], "rows":[["val1","val2"]]}
 - VAULT FALLBACK RULE: If vault_search returned empty results, irrelevant results (invoices, receipts, wrong file types), or results unrelated to the query → set vault_result_relevant to false and next_action to TOOL with next_tool "web_search". NEVER FINISH after irrelevant vault results when web search is available. Always fall back to web_search before answering from training data.
-- Only cite sources that actually contributed to your answer. Never cite vault documents if the answer came from web search or training data.`;
+- Only cite sources that actually contributed to your answer. Never cite vault documents if the answer came from web search or training data.
+- EXPLICIT ATTACHMENT RULE: If "has_explicit_attachments" is true in the input, the user has explicitly attached specific files. You MUST analyze those files. Do NOT suggest vault_search, do NOT ask which file to analyze. The attached files ARE the scope. Set next_action to FINISH once you have read them.`;
 
 async function innerMonologue(
   aiUrl: string, aiKey: string, modelId: string, headers: Record<string, string>,
   query: string, plan: string[], accumulatedContext: string[], latestResult: ToolResult,
-  iteration: number, totalPlanSteps: number
+  iteration: number, totalPlanSteps: number, explicitAttachmentNames?: string[]
 ): Promise<MonologueResult> {
   const contextSummary = accumulatedContext.map((c, i) => `--- Context block ${i + 1} ---\n${c.substring(0, 2000)}`).join("\n");
 
   try {
-    const resp = await fetch(aiUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          { role: "system", content: INNER_MONOLOGUE_PROMPT },
-          { role: "user", content: JSON.stringify({
+    const monologueInput: any = {
             original_query: query,
             plan,
             iteration,
@@ -380,7 +374,21 @@ async function innerMonologue(
             accumulated_context_summary: contextSummary.substring(0, 6000),
             latest_tool_result: latestResult.summary,
             latest_tool_context_preview: latestResult.context.substring(0, 2000),
-          }) },
+          };
+    // Signal explicit attachments to prevent monologue from asking "which file?"
+    if (explicitAttachmentNames?.length) {
+      monologueInput.has_explicit_attachments = true;
+      monologueInput.attached_file_names = explicitAttachmentNames;
+    }
+
+    const resp = await fetch(aiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: modelId,
+        messages: [
+          { role: "system", content: INNER_MONOLOGUE_PROMPT },
+          { role: "user", content: JSON.stringify(monologueInput) },
         ],
         max_tokens: 500,
         temperature: 0,
@@ -757,6 +765,13 @@ serve(async (req) => {
             knowledgeContext = "\n\n## Knowledge Base\n" + knowledgeEntries.map((e: any) => `### ${e.title} (${e.category || "general"})\n${e.content}`).join("\n\n");
           }
 
+          // Load agent memory (last 10 entries for this user)
+          let agentMemoryContext = "";
+          const { data: memoryEntries } = await adminClient.from("agent_memory").select("content, category, created_at").eq("organization_id", orgId).eq("user_id", userId).order("created_at", { ascending: false }).limit(10);
+          if (memoryEntries?.length) {
+            agentMemoryContext = "\n\n## Agent Memory\n" + memoryEntries.map((e: any) => `- [${e.category || "general"}] ${e.content}`).join("\n");
+          }
+
           let vaultName = clientVaultName || "";
           let vaultInventory = "";
           const isUploadsVault = vaultName === "Uploads" || clientVaultName === "Uploads";
@@ -895,7 +910,7 @@ serve(async (req) => {
             trackStep(stepLabel, "done", toolResult.summary);
 
             // ── INNER MONOLOGUE ──
-            const monologue = await innerMonologue(aiUrl, aiKey, modelId, aiHeaders, message, currentPlan, accumulatedContext, toolResult, iteration, currentPlan.length);
+            const monologue = await innerMonologue(aiUrl, aiKey, modelId, aiHeaders, message, currentPlan, accumulatedContext, toolResult, iteration, currentPlan.length, attachedFileNames);
 
             emitThinking(monologue.thinking_narration);
 
@@ -946,7 +961,7 @@ serve(async (req) => {
               nextInput = { query: message };
 
               // Re-run monologue to decide next step
-              const postVerify = await innerMonologue(aiUrl, aiKey, modelId, aiHeaders, message, currentPlan, accumulatedContext, toolResult, iteration, currentPlan.length);
+              const postVerify = await innerMonologue(aiUrl, aiKey, modelId, aiHeaders, message, currentPlan, accumulatedContext, toolResult, iteration, currentPlan.length, attachedFileNames);
               if (postVerify.next_action === "FINISH") break;
               nextTool = postVerify.next_tool || "";
               nextInput = postVerify.next_tool_input || { query: message };
@@ -954,9 +969,16 @@ serve(async (req) => {
             }
 
             // Decide next action
+            // GUARD: If explicit files are attached, NEVER switch to vault_search — attached files ARE the scope
+            if (attachedFileIds?.length && monologue.next_tool === "vault_search") {
+              nextTool = "";
+            }
             // Check vault fallback: if vault returned irrelevant results, auto-switch to web
             const vaultWasIrrelevant = monologue.vault_result_relevant === false;
             if (monologue.next_action === "FINISH" && !vaultWasIrrelevant) {
+              nextTool = "";
+            } else if (attachedFileIds?.length && monologue.next_tool === "vault_search") {
+              // Already guarded above — force finish
               nextTool = "";
             } else if (vaultWasIrrelevant && !webSearchDone && perplexityKey) {
               // Vault results irrelevant — auto fallback to web search
@@ -971,7 +993,7 @@ serve(async (req) => {
               nextInput = monologue.next_tool_input || { query: message };
             } else {
               // Default: if vault not searched and available, do that; else if web not searched, do that; else finish
-              if (!vaultSearchDone && hasVault) { nextTool = "vault_search"; }
+              if (!vaultSearchDone && hasVault && !attachedFileIds?.length) { nextTool = "vault_search"; }
               else if (!webSearchDone && perplexityKey) { nextTool = "web_search"; }
               else { nextTool = ""; }
             }
@@ -1130,7 +1152,12 @@ ${followUpInstruction}
           const effectiveBasePrompt = redFlagModePrompt || draftingModePrompt || reviewModePrompt || (basePrompt + followUpInstruction);
           let finalSystemPrompt = effectiveBasePrompt;
           if (workflowSystemPrompt) finalSystemPrompt = workflowSystemPrompt + "\n\n" + finalSystemPrompt;
-          finalSystemPrompt += `\n${knowledgeContext}\n${vaultInventory}\n${allContext}\n${documentEditingContext}`;
+          finalSystemPrompt += `\n${knowledgeContext}\n${agentMemoryContext}\n${vaultInventory}\n${allContext}\n${documentEditingContext}`;
+
+          // Inject explicit attachment context into synthesis prompt
+          if (attachedFileIds?.length && attachedFileNames?.length) {
+            finalSystemPrompt += `\n\n## EXPLICIT ATTACHMENTS\nThe user explicitly attached these files for analysis: ${attachedFileNames.join(", ")}. Analyze ALL attached files directly. Do NOT ask which file to analyze. Do NOT search the vault for other files. The attached files ARE your scope.`;
+          }
 
           // Build messages
           const aiMessages = [
@@ -1283,6 +1310,42 @@ ${followUpInstruction}
               const title = cleanedContent.substring(0, 60).replace(/[#*\n]/g, "").trim() + (cleanedContent.length > 60 ? "..." : "");
               await adminClient.from("conversations").update({ title }).eq("id", conversationId);
             }
+          }
+
+          // ════════════════════════════════════
+          // PHASE 7: SAVE AGENT MEMORY
+          // ════════════════════════════════════
+          try {
+            const memoryResp = await fetch(aiUrl, {
+              method: "POST",
+              headers: aiHeaders,
+              body: JSON.stringify({
+                model: modelId,
+                messages: [
+                  { role: "system", content: "Summarize this conversation exchange in exactly 2 concise sentences for future context. Focus on: what the user asked, what was found/decided, and any important facts learned. Output ONLY the 2 sentences, nothing else." },
+                  { role: "user", content: `User: ${message}\n\nAssistant: ${cleanedContent.substring(0, 2000)}` },
+                ],
+                max_tokens: 150,
+                temperature: 0,
+              }),
+            });
+            if (memoryResp.ok) {
+              const memData = await memoryResp.json();
+              const memorySummary = memData.choices?.[0]?.message?.content?.trim();
+              if (memorySummary) {
+                const category = intent.taskType || "general";
+                await adminClient.from("agent_memory").insert({
+                  organization_id: orgId, user_id: userId, content: memorySummary, category,
+                });
+                // Prune old entries — keep only last 50 per user
+                const { data: oldEntries } = await adminClient.from("agent_memory").select("id").eq("organization_id", orgId).eq("user_id", userId).order("created_at", { ascending: false }).range(50, 1000);
+                if (oldEntries?.length) {
+                  await adminClient.from("agent_memory").delete().in("id", oldEntries.map((e: any) => e.id));
+                }
+              }
+            }
+          } catch (memErr) {
+            console.error("Agent memory save error:", memErr);
           }
 
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
