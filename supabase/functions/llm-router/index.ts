@@ -169,6 +169,114 @@ const PPLX_SYSTEM: Record<string, string> = {
 };
 
 // ──────────────────────────────────────────────
+// Tool: CourtListener Search
+// ──────────────────────────────────────────────
+async function toolCourtListener(query: string, apiKey: string): Promise<ToolResult> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (apiKey) headers["Authorization"] = `Token ${apiKey}`;
+  const url = `https://www.courtlistener.com/api/rest/v3/search/?q=${encodeURIComponent(query)}&type=o&format=json`;
+  const resp = await fetch(url, { headers });
+  if (!resp.ok) {
+    return { context: "", citations: [], domains: ["courtlistener.com"], fileRefs: [], summary: `CourtListener error: ${resp.status}` };
+  }
+  const data = await resp.json();
+  const results = (data.results || []).slice(0, 8);
+  if (!results.length) {
+    return { context: "No CourtListener results found.", citations: [], domains: ["courtlistener.com"], fileRefs: [], summary: "0 results" };
+  }
+  const citations = results.map((r: any, i: number) => ({
+    index: i + 1,
+    source: r.caseName || r.case_name || "Court Opinion",
+    excerpt: (r.snippet || r.text || "").substring(0, 300),
+    url: r.absolute_url ? `https://www.courtlistener.com${r.absolute_url}` : undefined,
+  }));
+  const context = results.map((r: any) => {
+    const name = r.caseName || r.case_name || "Unknown";
+    const court = r.court || "";
+    const date = r.dateFiled || r.date_filed || "";
+    const text = (r.snippet || r.text || "").substring(0, 500);
+    return `## ${name}\nCourt: ${court} | Date: ${date}\n${text}`;
+  }).join("\n\n");
+  return { context, citations, domains: ["courtlistener.com"], fileRefs: [], summary: `${results.length} cases found` };
+}
+
+// ──────────────────────────────────────────────
+// Tool: EDGAR (SEC) Search
+// ──────────────────────────────────────────────
+async function toolEdgar(query: string, userAgent: string): Promise<ToolResult> {
+  const url = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}&dateRange=custom&startdt=2020-01-01&forms=10-K,10-Q,8-K,S-1,DEF+14A`;
+  const resp = await fetch(url, { headers: { "User-Agent": userAgent, Accept: "application/json" } });
+  if (!resp.ok) {
+    // Fallback to full-text search API
+    const fallbackUrl = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}`;
+    const fallbackResp = await fetch(fallbackUrl, { headers: { "User-Agent": userAgent, Accept: "application/json" } });
+    if (!fallbackResp.ok) {
+      return { context: "", citations: [], domains: ["sec.gov"], fileRefs: [], summary: `EDGAR error: ${resp.status}` };
+    }
+    const fallbackData = await fallbackResp.json();
+    const hits = (fallbackData.hits?.hits || []).slice(0, 8);
+    if (!hits.length) return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
+    const citations = hits.map((h: any, i: number) => ({
+      index: i + 1,
+      source: `${h._source?.entity_name || "Unknown"} — ${h._source?.form_type || "Filing"}`,
+      excerpt: (h._source?.file_description || "").substring(0, 200),
+      url: h._source?.file_url ? `https://www.sec.gov/Archives/edgar/data/${h._source.file_url}` : undefined,
+    }));
+    const context = hits.map((h: any) => {
+      const s = h._source || {};
+      return `## ${s.entity_name || "Unknown"} — ${s.form_type || "Filing"}\nCIK: ${s.entity_id || "N/A"} | Filed: ${s.file_date || "N/A"}\n${s.file_description || ""}`;
+    }).join("\n\n");
+    return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${hits.length} filings found` };
+  }
+  const data = await resp.json();
+  const hits = (data.hits?.hits || []).slice(0, 8);
+  if (!hits.length) return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
+  const citations = hits.map((h: any, i: number) => ({
+    index: i + 1,
+    source: `${h._source?.entity_name || "Unknown"} — ${h._source?.form_type || "Filing"}`,
+    excerpt: (h._source?.file_description || "").substring(0, 200),
+    url: h._source?.file_url ? `https://www.sec.gov/Archives/edgar/data/${h._source.file_url}` : undefined,
+  }));
+  const context = hits.map((h: any) => {
+    const s = h._source || {};
+    return `## ${s.entity_name || "Unknown"} — ${s.form_type || "Filing"}\nCIK: ${s.entity_id || "N/A"} | Filed: ${s.file_date || "N/A"}\n${s.file_description || ""}`;
+  }).join("\n\n");
+  return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${hits.length} filings found` };
+}
+
+// ──────────────────────────────────────────────
+// Tool: EUR-Lex Search
+// ──────────────────────────────────────────────
+async function toolEurLex(query: string): Promise<ToolResult> {
+  // Use EUR-Lex REST search (returns HTML, extract key info)
+  const url = `https://eur-lex.europa.eu/search.html?scope=EURLEX&text=${encodeURIComponent(query)}&type=quick&lang=en`;
+  try {
+    const resp = await fetch(url, { headers: { Accept: "text/html" } });
+    if (!resp.ok) {
+      return { context: `EUR-Lex search URL: ${url}\nPlease search EUR-Lex directly for: ${query}`, citations: [{ index: 1, source: "EUR-Lex", excerpt: `Search for: ${query}`, url }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "EUR-Lex link provided" };
+    }
+    const html = await resp.text();
+    // Extract result titles from HTML
+    const titleMatches = [...html.matchAll(/<a[^>]*class="title"[^>]*>([\s\S]*?)<\/a>/gi)];
+    const celexMatches = [...html.matchAll(/CELEX[^"]*?(\d{5}[A-Z]\d{4})/gi)];
+    if (!titleMatches.length) {
+      return { context: `EUR-Lex search for "${query}" returned results. View at: ${url}`, citations: [{ index: 1, source: "EUR-Lex Search", excerpt: query, url }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "Results available on EUR-Lex" };
+    }
+    const results = titleMatches.slice(0, 6).map((m, i) => {
+      const title = m[1].replace(/<[^>]*>/g, "").trim();
+      const celex = celexMatches[i]?.[1] || "";
+      const resultUrl = celex ? `https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:${celex}` : url;
+      return { title, celex, url: resultUrl };
+    });
+    const citations = results.map((r, i) => ({ index: i + 1, source: r.title.substring(0, 100), excerpt: r.celex ? `CELEX: ${r.celex}` : "", url: r.url }));
+    const context = results.map(r => `## ${r.title}\n${r.celex ? `CELEX: ${r.celex}` : ""}\nURL: ${r.url}`).join("\n\n");
+    return { context, citations, domains: ["eur-lex.europa.eu"], fileRefs: [], summary: `${results.length} EU law results` };
+  } catch (e) {
+    return { context: `Search EUR-Lex directly: ${url}`, citations: [{ index: 1, source: "EUR-Lex", excerpt: query, url }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "EUR-Lex link provided" };
+  }
+}
+
+// ──────────────────────────────────────────────
 // SSE Emitters
 // ──────────────────────────────────────────────
 function emit(controller: ReadableStreamDefaultController, encoder: TextEncoder, event: any) {
