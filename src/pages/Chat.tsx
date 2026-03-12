@@ -869,9 +869,9 @@ export default function Chat() {
         const scrollTop = viewport?.scrollTop || 0;
         setEditorDoc(null);
         setHighlightExcerpt(undefined);
-        requestAnimationFrame(() => {
+        requestAnimationFrame(() => { requestAnimationFrame(() => {
           if (viewport) viewport.scrollTop = scrollTop;
-        });
+        }); });
       }}
     />
   ) : undefined;
