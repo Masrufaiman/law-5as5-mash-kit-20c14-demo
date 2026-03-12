@@ -40,6 +40,9 @@ export default function Admin() {
               <TabsTrigger value="search" className="text-xs gap-1.5 data-[state=active]:bg-background">
                 <Search className="h-3.5 w-3.5" /> Search & Research
               </TabsTrigger>
+              <TabsTrigger value="legal_apis" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <Scale className="h-3.5 w-3.5" /> Legal APIs
+              </TabsTrigger>
               <TabsTrigger value="storage" className="text-xs gap-1.5 data-[state=active]:bg-background">
                 <HardDrive className="h-3.5 w-3.5" /> Storage (R2)
               </TabsTrigger>
