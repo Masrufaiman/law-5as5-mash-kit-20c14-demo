@@ -845,6 +845,21 @@ export default function Chat() {
       }}
       onUpdate={(updated) => setSheetDoc(updated)}
     />
+  ) : editorDoc && redFlagData ? (
+    <RedlineView
+      title={editorDoc.title}
+      content={editorDoc.content}
+      redFlagData={redFlagData}
+      onClose={() => {
+        setEditorDoc(null);
+        setRedFlagData(null);
+        setHighlightExcerpt(undefined);
+      }}
+      onContentUpdate={(newContent) => {
+        setEditorDoc({ ...editorDoc, content: newContent });
+        setRedFlagData(null); // Clear redline after applying
+      }}
+    />
   ) : editorDoc ? (
     <DocumentEditor
       title={editorDoc.title}
