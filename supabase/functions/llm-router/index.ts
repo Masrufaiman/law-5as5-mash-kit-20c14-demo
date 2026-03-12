@@ -5,16 +5,28 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Server-side AES-GCM decryption
 // ──────────────────────────────────────────────
 async function decryptApiKey(encryptedHex: string, ivHex: string): Promise<string> {
-  const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "PBKDF2" }, false, ["deriveKey"]);
-  const key = await crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: new TextEncoder().encode("lawkit-api-key-enc"), iterations: 100000, hash: "SHA-256" },
-    keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
-  );
-  const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
-  const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
-  return new TextDecoder().decode(decrypted);
+  // Guard: skip decryption if inputs are missing or invalid
+  if (!encryptedHex || !ivHex || ivHex.length < 2) return "";
+  try {
+    const ivBytes = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
+    // AES-GCM requires IV of 12 or 16 bytes
+    if (ivBytes.length !== 12 && ivBytes.length !== 16) {
+      console.error(`Invalid IV length: ${ivBytes.length} (expected 12 or 16)`);
+      return "";
+    }
+    const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "PBKDF2" }, false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: new TextEncoder().encode("lawkit-api-key-enc"), iterations: 100000, hash: "SHA-256" },
+      keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
+    );
+    const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes }, key, encrypted);
+    return new TextDecoder().decode(decrypted);
+  } catch (e) {
+    console.error("decryptApiKey failed:", e);
+    return "";
+  }
 }
 
 const corsHeaders = {
@@ -204,45 +216,71 @@ async function toolCourtListener(query: string, apiKey: string): Promise<ToolRes
 // Tool: EDGAR (SEC) Search
 // ──────────────────────────────────────────────
 async function toolEdgar(query: string, userAgent: string): Promise<ToolResult> {
-  const url = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}&dateRange=custom&startdt=2020-01-01&forms=10-K,10-Q,8-K,S-1,DEF+14A`;
-  const resp = await fetch(url, { headers: { "User-Agent": userAgent, Accept: "application/json" } });
-  if (!resp.ok) {
-    // Fallback to full-text search API
-    const fallbackUrl = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}`;
-    const fallbackResp = await fetch(fallbackUrl, { headers: { "User-Agent": userAgent, Accept: "application/json" } });
-    if (!fallbackResp.ok) {
-      return { context: "", citations: [], domains: ["sec.gov"], fileRefs: [], summary: `EDGAR error: ${resp.status}` };
+  const headers = { "User-Agent": userAgent, Accept: "application/json" };
+
+  // Try EDGAR full-text search API (correct endpoint)
+  const endpoints = [
+    `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}&dateRange=custom&startdt=2020-01-01&forms=10-K,10-Q,8-K,S-1,DEF+14A`,
+    `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const hits = (data.hits?.hits || data.filings || []).slice(0, 8);
+      if (!hits.length) continue;
+
+      const citations = hits.map((h: any, i: number) => ({
+        index: i + 1,
+        source: `${h._source?.entity_name || h.company_name || "Unknown"} — ${h._source?.form_type || h.form_type || "Filing"}`,
+        excerpt: (h._source?.file_description || h.description || "").substring(0, 200),
+        url: h._source?.file_url ? `https://www.sec.gov/Archives/edgar/data/${h._source.file_url}` : (h.filing_href || undefined),
+      }));
+      const context = hits.map((h: any) => {
+        const s = h._source || h;
+        return `## ${s.entity_name || s.company_name || "Unknown"} — ${s.form_type || "Filing"}\nCIK: ${s.entity_id || s.cik || "N/A"} | Filed: ${s.file_date || s.date_filed || "N/A"}\n${s.file_description || s.description || ""}`;
+      }).join("\n\n");
+      return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${hits.length} filings found` };
+    } catch (e) {
+      console.error("EDGAR endpoint failed:", url, e);
+      continue;
     }
-    const fallbackData = await fallbackResp.json();
-    const hits = (fallbackData.hits?.hits || []).slice(0, 8);
-    if (!hits.length) return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
-    const citations = hits.map((h: any, i: number) => ({
-      index: i + 1,
-      source: `${h._source?.entity_name || "Unknown"} — ${h._source?.form_type || "Filing"}`,
-      excerpt: (h._source?.file_description || "").substring(0, 200),
-      url: h._source?.file_url ? `https://www.sec.gov/Archives/edgar/data/${h._source.file_url}` : undefined,
-    }));
-    const context = hits.map((h: any) => {
-      const s = h._source || {};
-      return `## ${s.entity_name || "Unknown"} — ${s.form_type || "Filing"}\nCIK: ${s.entity_id || "N/A"} | Filed: ${s.file_date || "N/A"}\n${s.file_description || ""}`;
-    }).join("\n\n");
-    return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${hits.length} filings found` };
   }
-  const data = await resp.json();
-  const hits = (data.hits?.hits || []).slice(0, 8);
-  if (!hits.length) return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
-  const citations = hits.map((h: any, i: number) => ({
-    index: i + 1,
-    source: `${h._source?.entity_name || "Unknown"} — ${h._source?.form_type || "Filing"}`,
-    excerpt: (h._source?.file_description || "").substring(0, 200),
-    url: h._source?.file_url ? `https://www.sec.gov/Archives/edgar/data/${h._source.file_url}` : undefined,
-  }));
-  const context = hits.map((h: any) => {
-    const s = h._source || {};
-    return `## ${s.entity_name || "Unknown"} — ${s.form_type || "Filing"}\nCIK: ${s.entity_id || "N/A"} | Filed: ${s.file_date || "N/A"}\n${s.file_description || ""}`;
-  }).join("\n\n");
-  return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${hits.length} filings found` };
+
+  // Tertiary fallback: EDGAR company search (Atom feed)
+  try {
+    const companyName = query.replace(/\b(10-K|10-Q|8-K|S-1|SEC|EDGAR|filing|annual|report|quarterly)\b/gi, "").trim();
+    if (companyName.length > 2) {
+      const atomUrl = `https://www.sec.gov/cgi-bin/browse-edgar?company=${encodeURIComponent(companyName)}&CIK=&type=10-K&dateb=&owner=include&count=10&search_text=&action=getcompany&output=atom`;
+      const atomResp = await fetch(atomUrl, { headers: { "User-Agent": userAgent, Accept: "application/atom+xml" } });
+      if (atomResp.ok) {
+        const atomText = await atomResp.text();
+        // Parse Atom XML for entries
+        const entries = [...atomText.matchAll(/<entry>([\s\S]*?)<\/entry>/g)];
+        if (entries.length > 0) {
+          const results = entries.slice(0, 8).map((e, i) => {
+            const title = e[1].match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1]?.trim() || "Filing";
+            const link = e[1].match(/<link[^>]*href="([^"]+)"/)?.[1] || "";
+            const updated = e[1].match(/<updated>([\s\S]*?)<\/updated>/)?.[1]?.trim() || "";
+            const summary = e[1].match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1]?.replace(/<[^>]*>/g, "").trim() || "";
+            return { title, link, updated, summary };
+          });
+          const citations = results.map((r, i) => ({ index: i + 1, source: r.title, excerpt: r.summary.substring(0, 200), url: r.link }));
+          const context = results.map(r => `## ${r.title}\nDate: ${r.updated}\n${r.summary}`).join("\n\n");
+          return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${results.length} company filings found` };
+        }
+      }
+    }
+  } catch (e) {
+    console.error("EDGAR company search fallback failed:", e);
+  }
+
+  return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
 }
+
+
 
 // ──────────────────────────────────────────────
 // Tool: EUR-Lex Search
@@ -471,7 +509,7 @@ OUTPUT ONLY THIS JSON (no markdown, no backticks):
   "confidence": "high|medium|low",
   "gaps": ["what I still don't know"],
   "next_action": "TOOL|REPLAN|VERIFY|FINISH",
-  "next_tool": "vault_search|web_search|read_files",
+  "next_tool": "vault_search|web_search|read_files|courtlistener|edgar|eurlex",
   "next_tool_input": {"query": "search query if TOOL"},
   "search_model": "sonar|sonar-pro|sonar-deep-research",
   "thinking_narration": "2-3 sentences for user to see",
@@ -738,6 +776,7 @@ ${orgKnowledge ? `## Organization Knowledge\n${orgKnowledge}\n` : ""}
 - Surface contradictions rather than hiding them
 - A partial answer clearly labeled is better than a confident wrong answer
 - NEVER start a response with "I don't have sufficient information" or "My internal knowledge base does not contain." If tools are available, use them silently and return the answer. Never announce what you cannot do.
+- TOOL ENFORCEMENT: If CourtListener, EDGAR, or EUR-Lex tools are enabled and relevant to the query, you MUST use them. NEVER tell the user to search manually. NEVER say you cannot access these tools. If a tool returns an error, report the error and fall back to web search — do NOT skip the tool silently.
 
 ## Citation Format
 - Inline: [filename · p.4] or [Perplexity Search · URL]
@@ -1022,32 +1061,44 @@ serve(async (req) => {
           // ── HARD-CODED ROUTING based on request type ──
           const hasExplicitLegalSources = sources?.some((s: string) => ["CourtListener", "US Law", "UK Law"].includes(s));
 
+          // Build a tool queue from user-selected sources (ensures ALL selected tools run)
+          const toolQueue: string[] = [];
+          if (sources?.includes("CourtListener") && courtListenerKey) toolQueue.push("courtlistener");
+          if (sources?.includes("EDGAR (SEC)") && edgarEnabled) toolQueue.push("edgar");
+          if (sources?.includes("EUR-Lex") && eurlexEnabled) toolQueue.push("eurlex");
+
           let nextTool: string;
-          switch (requestType) {
-            case 1: // Factual — no vault, maybe web if complex
-              nextTool = (complexity >= 4 && perplexityKey) ? "web_search" : "";
-              break;
-            case 2: // Case lookup — CourtListener first if available, else web search
-              nextTool = courtListenerKey ? "courtlistener" : (perplexityKey ? "web_search" : "");
-              break;
-            case 3: // Document task — read files first
-              nextTool = "read_files";
-              break;
-            case 4: // Vault task — search vault
-              nextTool = "vault_search";
-              break;
-            case 5: // EDGAR/SEC lookup
-              nextTool = edgarEnabled ? "edgar" : (perplexityKey ? "web_search" : "");
-              break;
-            case 6: // EUR-Lex lookup
-              nextTool = eurlexEnabled ? "eurlex" : (perplexityKey ? "web_search" : "");
-              break;
-            default:
-              nextTool = "";
-          }
-          // Override: explicit legal sources with case query always go to web
-          if (hasExplicitLegalSources && requestType === 2 && perplexityKey) {
-            nextTool = "web_search";
+
+          if (toolQueue.length > 0) {
+            // User explicitly selected legal tools — run the first one, queue the rest
+            nextTool = toolQueue.shift()!;
+          } else {
+            switch (requestType) {
+              case 1: // Factual — no vault, maybe web if complex
+                nextTool = (complexity >= 4 && perplexityKey) ? "web_search" : "";
+                break;
+              case 2: // Case lookup — CourtListener first if available, else web search
+                nextTool = courtListenerKey ? "courtlistener" : (perplexityKey ? "web_search" : "");
+                break;
+              case 3: // Document task — read files first
+                nextTool = "read_files";
+                break;
+              case 4: // Vault task — search vault
+                nextTool = "vault_search";
+                break;
+              case 5: // EDGAR/SEC lookup
+                nextTool = edgarEnabled ? "edgar" : (perplexityKey ? "web_search" : "");
+                break;
+              case 6: // EUR-Lex lookup
+                nextTool = eurlexEnabled ? "eurlex" : (perplexityKey ? "web_search" : "");
+                break;
+              default:
+                nextTool = "";
+            }
+            // Override: explicit legal sources with case query always go to web
+            if (hasExplicitLegalSources && requestType === 2 && perplexityKey) {
+              nextTool = "web_search";
+            }
           }
           // Override: red_flags mode with vault always reads files first
           if (effectiveMode === "red_flags" && hasVault && requestType !== 2) {
@@ -1151,7 +1202,19 @@ serve(async (req) => {
             // The monologue tends to suggest vault_search or ask "which document?" — bypass it completely.
             if (attachedFileIds?.length && nextTool === "read_files" && toolResult.context) {
               emitThinking("Documents loaded. Preparing analysis...");
+              // But if there are queued legal tools, run those first
+              if (toolQueue.length > 0) {
+                nextTool = toolQueue.shift()!;
+                continue;
+              }
               break;
+            }
+
+            // ══ QUEUED TOOLS: run remaining legal tools before monologue decides ══
+            if (toolQueue.length > 0) {
+              nextTool = toolQueue.shift()!;
+              nextInput = { query: message };
+              continue;
             }
 
             // ── INNER MONOLOGUE ──
