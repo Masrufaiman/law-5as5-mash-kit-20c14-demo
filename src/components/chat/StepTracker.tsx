@@ -26,7 +26,7 @@ interface StepTrackerProps {
   planUpdateReason?: string | null;
   progress?: { current: number; total: number } | null;
   citations?: Citation[];
-  onFileClick?: (fileName: string, fileId?: string) => void;
+  onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void;
 }
 
 function isPlanStepDone(planStep: string, steps: AgentStep[]): boolean {
@@ -433,21 +433,27 @@ export function StepTracker({
             <div className="mt-2 flex flex-wrap gap-2">
               {uniqueWebSources.map((c) => {
                 const domain = c.url ? getDomain(c.url) : c.source;
+                const displayTitle = c.title || domain;
                 return (
                   <a
                     key={c.index}
                     href={c.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:bg-accent/50 transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:bg-accent/50 transition-colors max-w-[220px]"
                   >
                     <img
                       src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`}
                       alt=""
-                      className="h-3.5 w-3.5 rounded-sm"
+                      className="h-3.5 w-3.5 rounded-sm shrink-0"
                       onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                     />
-                    <span className="truncate max-w-[140px]">{domain}</span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="truncate font-medium leading-tight">{displayTitle}</span>
+                      {c.title && (
+                        <span className="truncate text-[10px] text-muted-foreground leading-tight">{domain}</span>
+                      )}
+                    </div>
                     <ExternalLink className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
                   </a>
                 );
@@ -457,7 +463,7 @@ export function StepTracker({
                 return (
                   <button
                     key={c.index}
-                    onClick={() => onFileClick?.(displayName)}
+                    onClick={() => onFileClick?.(displayName, undefined, c.excerpt)}
                     className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:bg-accent/50 transition-colors cursor-pointer"
                   >
                     <FileText className="h-3.5 w-3.5 text-primary shrink-0" />

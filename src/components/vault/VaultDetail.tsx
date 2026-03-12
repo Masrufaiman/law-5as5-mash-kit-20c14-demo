@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { ArrowLeft, Search, Upload, Filter, FileText, MoreHorizontal, Pencil, Trash2, Eye, X, Download, Share2, Users } from "lucide-react";
+import { ArrowLeft, Search, Upload, Filter, FileText, MoreHorizontal, Pencil, Trash2, Eye, X, Download, Share2, Users, ExternalLink } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileTable } from "./FileTable";
 import type { Tables } from "@/integrations/supabase/types";
 import { format } from "date-fns";
@@ -51,6 +53,8 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
   const [editName, setEditName] = useState(vault.name);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileRow | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [sharing, setSharing] = useState(false);
@@ -68,11 +72,55 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
     setIsEditingName(false);
   };
 
+  const handleFilePreview = async (file: FileRow) => {
+    setPreviewFile(file);
+    setPreviewText(null);
+    setLoadingPreview(true);
+    try {
+      // Load extracted text
+      const { data } = await supabase
+        .from("files")
+        .select("extracted_text")
+        .eq("id", file.id)
+        .single();
+      setPreviewText(data?.extracted_text || null);
+    } catch {
+      setPreviewText(null);
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handleDownloadFile = async () => {
+    if (!previewFile) return;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Not authenticated");
+
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const resp = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/r2-download`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ r2Key: previewFile.storage_path }),
+        }
+      );
+      if (!resp.ok) throw new Error("Download failed");
+      const result = await resp.json();
+      if (result.url) {
+        window.open(result.url, "_blank", "noopener,noreferrer");
+      }
+    } catch (err: any) {
+      toast({ title: "Download failed", description: err.message, variant: "destructive" });
+    }
+  };
+
   const handleShare = async () => {
     if (!shareEmail.trim() || !profile?.id) return;
     setSharing(true);
     try {
-      // Split by comma, newline, or semicolon to support multiple emails
       const emails = shareEmail
         .split(/[,;\n]+/)
         .map((e) => e.trim().toLowerCase())
@@ -94,11 +142,8 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
           permission: "view",
         });
         if (error) {
-          if (error.code === "23505") {
-            duplicateCount++;
-          } else {
-            throw error;
-          }
+          if (error.code === "23505") duplicateCount++;
+          else throw error;
         } else {
           successCount++;
         }
@@ -155,12 +200,7 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
           <Badge variant="outline" className="text-[10px] ml-1">Vault</Badge>
 
           <div className="flex items-center gap-1 ml-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs gap-1.5"
-              onClick={() => setShowShareDialog(true)}
-            >
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5" onClick={() => setShowShareDialog(true)}>
               <Share2 className="h-3 w-3" />
               Share
             </Button>
@@ -212,10 +252,7 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
               value={shareEmail}
               onChange={(e) => setShareEmail(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleShare();
-                }
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleShare(); }
               }}
               rows={3}
               className="text-sm"
@@ -318,13 +355,13 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
             </p>
           </div>
         ) : (
-          <FileTable files={filtered} onFileClick={setPreviewFile} />
+          <FileTable files={filtered} onFileClick={handleFilePreview} />
         )}
       </div>
 
       {/* File preview dialog */}
-      <Dialog open={!!previewFile} onOpenChange={(open) => !open && setPreviewFile(null)}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog open={!!previewFile} onOpenChange={(open) => { if (!open) { setPreviewFile(null); setPreviewText(null); } }}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
@@ -332,43 +369,83 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
             </DialogTitle>
           </DialogHeader>
           {previewFile && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-muted-foreground text-xs">Type</p>
-                  <p className="font-medium text-foreground">{previewFile.mime_type}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs">Size</p>
-                  <p className="font-medium text-foreground">{formatSize(previewFile.size_bytes)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs">Status</p>
-                  <Badge variant="secondary" className="text-[10px]">{previewFile.status}</Badge>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs">Uploaded</p>
-                  <p className="font-medium text-foreground">{format(new Date(previewFile.created_at), "MMM d, yyyy")}</p>
-                </div>
-                {previewFile.page_count && (
-                  <div>
-                    <p className="text-muted-foreground text-xs">Pages</p>
-                    <p className="font-medium text-foreground">{previewFile.page_count}</p>
+            <Tabs defaultValue="preview" className="flex-1 flex flex-col min-h-0">
+              <TabsList className="w-fit">
+                <TabsTrigger value="preview" className="text-xs">Content Preview</TabsTrigger>
+                <TabsTrigger value="details" className="text-xs">Details</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="preview" className="flex-1 min-h-0 mt-2">
+                {loadingPreview ? (
+                  <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+                    Loading content...
+                  </div>
+                ) : previewText ? (
+                  <ScrollArea className="h-[400px] rounded-md border border-border p-4">
+                    <pre className="text-xs text-foreground whitespace-pre-wrap font-mono leading-relaxed">
+                      {previewText}
+                    </pre>
+                  </ScrollArea>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-32 text-center">
+                    <FileText className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      {previewFile.status === "processing" ? "File is still being processed..." : "No extracted text available"}
+                    </p>
                   </div>
                 )}
-                {previewFile.chunk_count && (
+                <div className="flex items-center gap-2 mt-3">
+                  <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={handleDownloadFile}>
+                    <Download className="h-3 w-3" />
+                    Download original
+                  </Button>
+                  {previewFile.mime_type === "application/pdf" && (
+                    <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={handleDownloadFile}>
+                      <ExternalLink className="h-3 w-3" />
+                      View PDF
+                    </Button>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="details" className="mt-2">
+                <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <p className="text-muted-foreground text-xs">Chunks</p>
-                    <p className="font-medium text-foreground">{previewFile.chunk_count}</p>
+                    <p className="text-muted-foreground text-xs">Type</p>
+                    <p className="font-medium text-foreground">{previewFile.mime_type}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Size</p>
+                    <p className="font-medium text-foreground">{formatSize(previewFile.size_bytes)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Status</p>
+                    <Badge variant="secondary" className="text-[10px]">{previewFile.status}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Uploaded</p>
+                    <p className="font-medium text-foreground">{format(new Date(previewFile.created_at), "MMM d, yyyy")}</p>
+                  </div>
+                  {previewFile.page_count && (
+                    <div>
+                      <p className="text-muted-foreground text-xs">Pages</p>
+                      <p className="font-medium text-foreground">{previewFile.page_count}</p>
+                    </div>
+                  )}
+                  {previewFile.chunk_count && (
+                    <div>
+                      <p className="text-muted-foreground text-xs">Chunks</p>
+                      <p className="font-medium text-foreground">{previewFile.chunk_count}</p>
+                    </div>
+                  )}
+                </div>
+                {previewFile.error_message && (
+                  <div className="rounded-md bg-destructive/10 p-3 mt-3">
+                    <p className="text-xs text-destructive">{previewFile.error_message}</p>
                   </div>
                 )}
-              </div>
-              {previewFile.error_message && (
-                <div className="rounded-md bg-destructive/10 p-3">
-                  <p className="text-xs text-destructive">{previewFile.error_message}</p>
-                </div>
-              )}
-            </div>
+              </TabsContent>
+            </Tabs>
           )}
         </DialogContent>
       </Dialog>

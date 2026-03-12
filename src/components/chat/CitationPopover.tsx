@@ -14,13 +14,23 @@ function getDomain(url: string): string {
   }
 }
 
-export function CitationPopover({ citation }: CitationPopoverProps) {
+export function CitationPopover({ citation, onFileClick }: CitationPopoverProps & { onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void }) {
   const domain = citation.url ? getDomain(citation.url) : null;
 
   return (
     <HoverCard openDelay={200} closeDelay={100}>
       <HoverCardTrigger asChild>
-        <button className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20 transition-colors">
+        <button
+          className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20 transition-colors"
+          onClick={() => {
+            if (citation.url) {
+              window.open(citation.url, "_blank", "noopener,noreferrer");
+            } else {
+              const displayName = citation.source.replace(/\s*[·\-–—]\s*(chunk|part|section|page)\s*\d+.*/i, "").trim();
+              onFileClick?.(displayName, undefined, citation.excerpt);
+            }
+          }}
+        >
           {citation.index}
         </button>
       </HoverCardTrigger>

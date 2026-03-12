@@ -145,16 +145,17 @@ function superscriptToNumber(s: string): number {
 
 function processChildren(
   children: React.ReactNode,
-  citations: Citation[]
+  citations: Citation[],
+  onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void
 ): React.ReactNode {
   return React.Children.map(children, (child) => {
     if (typeof child === "string") {
-      return injectCitations(child, citations);
+      return injectCitations(child, citations, onFileClick);
     }
     if (React.isValidElement(child) && child.props?.children) {
       return React.cloneElement(child, {
         ...child.props,
-        children: processChildren(child.props.children, citations),
+        children: processChildren(child.props.children, citations, onFileClick),
       } as any);
     }
     return child;
@@ -163,7 +164,7 @@ function processChildren(
 
 const CITATION_PATTERN = /(\[\*{0,2}\d+\*{0,2}\]|\[[\u2070\u00b9\u00b2\u00b3\u2074-\u2079][,\s\u2070\u00b9\u00b2\u00b3\u2074-\u2079]*\]|[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+)/g;
 
-function injectCitations(text: string, citations: Citation[]): React.ReactNode[] {
+function injectCitations(text: string, citations: Citation[], onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void): React.ReactNode[] {
   const parts = text.split(CITATION_PATTERN);
   if (parts.length === 1) return [text];
 
@@ -172,7 +173,7 @@ function injectCitations(text: string, citations: Citation[]): React.ReactNode[]
     if (bracketMatch) {
       const idx = parseInt(bracketMatch[1], 10);
       const citation = citations.find((c) => c.index === idx);
-      if (citation) return <CitationPopover key={`cite-${idx}-${i}`} citation={citation} />;
+      if (citation) return <CitationPopover key={`cite-${idx}-${i}`} citation={citation} onFileClick={onFileClick} />;
     }
 
     const superscriptChars = part.replace(/[\[\],\s]/g, "");
@@ -185,9 +186,9 @@ function injectCitations(text: string, citations: Citation[]): React.ReactNode[]
         const idx = superscriptToNumber(trimmed);
         const citation = citations.find((c) => c.index === idx || c.index === idx + 99);
         if (citation) {
-          elements.push(<CitationPopover key={`cite-s-${idx}-${i}-${j}`} citation={{ ...citation, index: idx }} />);
+          elements.push(<CitationPopover key={`cite-s-${idx}-${i}-${j}`} citation={{ ...citation, index: idx }} onFileClick={onFileClick} />);
         } else {
-          elements.push(<CitationPopover key={`cite-s-${idx}-${i}-${j}`} citation={{ index: idx, source: `Source ${idx}`, excerpt: "" }} />);
+          elements.push(<CitationPopover key={`cite-s-${idx}-${i}-${j}`} citation={{ index: idx, source: `Source ${idx}`, excerpt: "" }} onFileClick={onFileClick} />);
         }
       });
       if (elements.length > 0) return <>{elements}</>;
@@ -445,7 +446,7 @@ export function MessageBubble({
 
     const wrap = (tag: string, className: string) => {
       const Comp = ({ children }: { children?: React.ReactNode }) => {
-        const processed = processChildren(children, citations);
+        const processed = processChildren(children, citations, onFileClick);
         return React.createElement(tag, { className }, processed);
       };
       return Comp;
@@ -454,7 +455,7 @@ export function MessageBubble({
     return {
       p: wrap("p", "text-sm text-foreground/90 my-1.5 leading-relaxed"),
       li: ({ children }: { children?: React.ReactNode }) => (
-        <li>{processChildren(children, citations)}</li>
+        <li>{processChildren(children, citations, onFileClick)}</li>
       ),
       td: wrap("td", "px-3 py-2 border-b border-border text-xs whitespace-normal break-words"),
       th: wrap("th", "bg-muted/50 px-3 py-2 text-left font-medium text-foreground border-b border-border text-xs"),
@@ -466,11 +467,11 @@ export function MessageBubble({
       h6: wrap("h6", "text-xs font-medium text-muted-foreground mt-1.5 mb-0.5"),
       blockquote: ({ children }: { children?: React.ReactNode }) => (
         <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-muted-foreground italic">
-          {processChildren(children, citations)}
+          {processChildren(children, citations, onFileClick)}
         </blockquote>
       ),
     };
-  }, [citations]);
+  }, [citations, onFileClick]);
 
   // Steps section (with reasoning, plan, thinking, file refs, sources)
   const stepsSection = !isUser && (steps?.length || message.reasoning || plan?.length || thinkingText) ? (
@@ -535,7 +536,7 @@ export function MessageBubble({
           ),
           td: ({ children }) => (
             <td className="px-3 py-2 border-b border-border text-xs whitespace-normal break-words align-top">
-              {citations.length > 0 ? processChildren(children, citations) : children}
+              {citations.length > 0 ? processChildren(children, citations, onFileClick) : children}
             </td>
           ),
           th: ({ children }) => (

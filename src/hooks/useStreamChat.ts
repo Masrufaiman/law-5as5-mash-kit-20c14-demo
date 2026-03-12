@@ -77,6 +77,7 @@ export interface Citation {
   source: string;
   excerpt: string;
   url?: string;
+  title?: string;
 }
 
 export interface SearchSource {
