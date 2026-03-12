@@ -617,6 +617,13 @@ export default function Chat() {
     }
   }, [profile?.organization_id, handleDocumentOpen]);
 
+  // Callback for "Open in Editor" from RedFlagCard — sets redFlagData AND opens the file
+  const handleRedFlagOpen = useCallback((data: RedFlagData, fileName: string, fileId?: string) => {
+    setRedFlagData(data);
+    handleFileClick(fileName, fileId);
+  }, [handleFileClick]);
+
+
   const handleFileSelect = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
