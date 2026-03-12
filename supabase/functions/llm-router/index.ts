@@ -361,7 +361,7 @@ RULES:
 async function innerMonologue(
   aiUrl: string, aiKey: string, modelId: string, headers: Record<string, string>,
   query: string, plan: string[], accumulatedContext: string[], latestResult: ToolResult,
-  iteration: number, totalPlanSteps: number
+  iteration: number, totalPlanSteps: number, explicitAttachmentNames?: string[]
 ): Promise<MonologueResult> {
   const contextSummary = accumulatedContext.map((c, i) => `--- Context block ${i + 1} ---\n${c.substring(0, 2000)}`).join("\n");
 
