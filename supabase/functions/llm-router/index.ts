@@ -1058,6 +1058,9 @@ serve(async (req) => {
               nextTool === "vault_search" ? "Searching your documents" :
               nextTool === "web_search" ? "Researching sources" :
               nextTool === "read_files" ? (attachedFileIds?.length ? "Reading attached document" : "Reading vault documents") :
+              nextTool === "courtlistener" ? "Searching CourtListener" :
+              nextTool === "edgar" ? "Searching SEC EDGAR" :
+              nextTool === "eurlex" ? "Searching EUR-Lex" :
               "Processing";
 
             trackStep(stepLabel, "working");
@@ -1089,6 +1092,30 @@ serve(async (req) => {
                   emitThinking("Reading document contents directly...");
                   toolResult = await toolReadFiles(orgId, vaultId, attachedFileIds, adminClient);
                   if (toolResult.fileRefs.length > 0) emit(controller, encoder, { type: "file_refs", files: toolResult.fileRefs });
+                  break;
+
+                case "courtlistener":
+                  emitThinking("Searching CourtListener for case law...");
+                  toolResult = await toolCourtListener(nextInput.query || message, courtListenerKey);
+                  if (toolResult.domains.length > 0) {
+                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
+                  }
+                  break;
+
+                case "edgar":
+                  emitThinking("Searching SEC EDGAR for filings...");
+                  toolResult = await toolEdgar(nextInput.query || message, edgarUserAgent);
+                  if (toolResult.domains.length > 0) {
+                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
+                  }
+                  break;
+
+                case "eurlex":
+                  emitThinking("Searching EUR-Lex for EU legislation...");
+                  toolResult = await toolEurLex(nextInput.query || message);
+                  if (toolResult.domains.length > 0) {
+                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
+                  }
                   break;
 
                 default:
