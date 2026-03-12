@@ -558,18 +558,14 @@ export default function Chat() {
     const scrollTop = viewport?.scrollTop || 0;
 
     setHighlightExcerpt(excerpt);
-    
-    // If same title, append as new version
-    if (editorDoc?.title === title && !excerpt) {
-      setEditorDoc(null); // toggle off
-    } else {
-      setEditorDoc({ title, content });
-    }
+    setEditorDoc({ title, content }); // Always replace, never toggle
 
     requestAnimationFrame(() => {
-      if (viewport) viewport.scrollTop = scrollTop;
+      requestAnimationFrame(() => {
+        if (viewport) viewport.scrollTop = scrollTop;
+      });
     });
-  }, [editorDoc]);
+  }, []);
 
   const handleSheetOpen = useCallback((data: SheetData) => {
     const container = scrollContainerRef.current;
