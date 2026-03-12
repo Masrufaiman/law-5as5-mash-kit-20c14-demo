@@ -835,9 +835,22 @@ serve(async (req) => {
           }
 
           // ════════════════════════════════════
-          // PHASE 2: INTENT ANALYSIS
+          // SHORT MESSAGE CONTEXT RESOLUTION
           // ════════════════════════════════════
-          const intent = await analyzeIntent(aiUrl, aiKey, modelId, aiHeaders, message, hasVault, !!needsSearch, effectiveMode);
+          let resolvedMessage = message;
+          if (message.split(/\s+/).length < 6 && conversationHistory.length > 0) {
+            const lastAssistant = [...conversationHistory].reverse().find((m: any) => m.role === "assistant");
+            if (lastAssistant) {
+              const topicSummary = lastAssistant.content.substring(0, 200);
+              resolvedMessage = `Context: "${topicSummary}"\n\nUser follow-up: ${message}`;
+            }
+          }
+
+          // ════════════════════════════════════
+          // PHASE 2: REQUEST TYPE CLASSIFICATION + INTENT ANALYSIS
+          // ════════════════════════════════════
+          const requestType = classifyRequestType(message, !!(attachedFileIds?.length), hasVault, conversationHistory);
+          const intent = await analyzeIntent(aiUrl, aiKey, modelId, aiHeaders, resolvedMessage, hasVault, !!needsSearch, effectiveMode);
 
           // Merge complexity: use max of assessed vs intent-returned
           const assessedComplexity = assessComplexity(message, { jurisdictions: intent.jurisdictions, hasVault });
@@ -851,8 +864,8 @@ serve(async (req) => {
             data: { taskType: intent.taskType, jurisdictions: intent.jurisdictions, complexity, approach: intent.approach },
           });
 
-          // Emit plan
-          const currentPlan = [...intent.plan];
+          // Emit plan — cap TYPE 1 to max 2 steps
+          const currentPlan = requestType === 1 ? intent.plan.slice(0, 2) : [...intent.plan];
           emit(controller, encoder, { type: "plan", steps: currentPlan });
 
           // ════════════════════════════════════
@@ -870,28 +883,33 @@ serve(async (req) => {
           let vaultSearchDone = false;
           let webSearchDone = false;
 
-          // Determine first action: always vault first if available
-          // For red_flags mode OR when explicit files are attached, force read_files first
-          // Auto-trigger web search when Perplexity is available, even without explicit source selection
-          // If legal research sources are explicitly selected and query contains case/court refs, skip vault
+          // ── HARD-CODED ROUTING based on request type ──
           const hasExplicitLegalSources = sources?.some((s: string) => ["CourtListener", "US Law", "UK Law"].includes(s));
-          const isCaseQuery = /case|v\.\s|vs?\.\s|court|appeal|ruling|judgment|citation|\d+\s+(So|F|U\.S|S\.Ct)/i.test(message);
 
           let nextTool: string;
-          if (hasExplicitLegalSources && isCaseQuery && perplexityKey) {
-            // Legal research sources explicitly selected with case query — skip vault, search first
+          switch (requestType) {
+            case 1: // Factual — no vault, maybe web if complex
+              nextTool = (complexity >= 4 && perplexityKey) ? "web_search" : "";
+              break;
+            case 2: // Case lookup — web search, skip vault entirely
+              nextTool = perplexityKey ? "web_search" : "";
+              break;
+            case 3: // Document task — read files first
+              nextTool = "read_files";
+              break;
+            case 4: // Vault task — search vault
+              nextTool = "vault_search";
+              break;
+            default:
+              nextTool = "";
+          }
+          // Override: explicit legal sources with case query always go to web
+          if (hasExplicitLegalSources && requestType === 2 && perplexityKey) {
             nextTool = "web_search";
-          } else if (attachedFileIds?.length) {
-            // Explicit files attached — always read them first, regardless of mode
+          }
+          // Override: red_flags mode with vault always reads files first
+          if (effectiveMode === "red_flags" && hasVault && requestType !== 2) {
             nextTool = "read_files";
-          } else if (effectiveMode === "red_flags" && hasVault) {
-            nextTool = "read_files";
-          } else if (intent.needsVaultSearch) {
-            nextTool = "vault_search";
-          } else if ((intent.needsWebSearch || perplexityKey) && perplexityKey) {
-            nextTool = "web_search";
-          } else {
-            nextTool = "";
           }
           let nextInput: any = { query: message };
 
