@@ -766,6 +766,23 @@ serve(async (req) => {
       try { perplexityKey = await decryptApiKey(pplxConfig.api_key_encrypted, pplxConfig.api_key_iv || ""); } catch (e) { console.error("Decrypt perplexity key failed:", e); }
     }
 
+    // Load Legal API configs (CourtListener, EDGAR, EUR-Lex)
+    let courtListenerKey = "";
+    const { data: clConfig } = await adminClient.from("api_integrations").select("api_key_encrypted, api_key_iv").eq("organization_id", orgId).eq("provider", "courtlistener").eq("is_active", true).maybeSingle();
+    if (clConfig?.api_key_encrypted) {
+      try { courtListenerKey = await decryptApiKey(clConfig.api_key_encrypted, clConfig.api_key_iv || ""); } catch (e) { console.error("Decrypt courtlistener key failed:", e); }
+    }
+
+    let edgarUserAgent = "LawKit/1.0 legal@lawkit.ai";
+    const { data: edgarConfig } = await adminClient.from("api_integrations").select("config").eq("organization_id", orgId).eq("provider", "edgar").eq("is_active", true).maybeSingle();
+    if (edgarConfig?.config && (edgarConfig.config as any).user_agent) {
+      edgarUserAgent = (edgarConfig.config as any).user_agent;
+    }
+    const edgarEnabled = !!edgarConfig;
+
+    const { data: eurlexConfig } = await adminClient.from("api_integrations").select("id").eq("organization_id", orgId).eq("provider", "eurlex").eq("is_active", true).maybeSingle();
+    const eurlexEnabled = !!eurlexConfig;
+
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
