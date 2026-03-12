@@ -446,7 +446,7 @@ export function MessageBubble({
 
     const wrap = (tag: string, className: string) => {
       const Comp = ({ children }: { children?: React.ReactNode }) => {
-        const processed = processChildren(children, citations);
+        const processed = processChildren(children, citations, onFileClick);
         return React.createElement(tag, { className }, processed);
       };
       return Comp;
@@ -455,7 +455,7 @@ export function MessageBubble({
     return {
       p: wrap("p", "text-sm text-foreground/90 my-1.5 leading-relaxed"),
       li: ({ children }: { children?: React.ReactNode }) => (
-        <li>{processChildren(children, citations)}</li>
+        <li>{processChildren(children, citations, onFileClick)}</li>
       ),
       td: wrap("td", "px-3 py-2 border-b border-border text-xs whitespace-normal break-words"),
       th: wrap("th", "bg-muted/50 px-3 py-2 text-left font-medium text-foreground border-b border-border text-xs"),
@@ -467,11 +467,11 @@ export function MessageBubble({
       h6: wrap("h6", "text-xs font-medium text-muted-foreground mt-1.5 mb-0.5"),
       blockquote: ({ children }: { children?: React.ReactNode }) => (
         <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-muted-foreground italic">
-          {processChildren(children, citations)}
+          {processChildren(children, citations, onFileClick)}
         </blockquote>
       ),
     };
-  }, [citations]);
+  }, [citations, onFileClick]);
 
   // Steps section (with reasoning, plan, thinking, file refs, sources)
   const stepsSection = !isUser && (steps?.length || message.reasoning || plan?.length || thinkingText) ? (
