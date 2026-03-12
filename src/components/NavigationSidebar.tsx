@@ -131,16 +131,19 @@ export function NavigationSidebar() {
     setSearchQuery(value);
     if (!value.trim() || !profile?.organization_id) {
       setSearchResults([]);
+      setSearchVaults([]);
+      setSearchFiles([]);
       return;
     }
-    const { data } = await supabase
-      .from("conversations")
-      .select("id, title, created_at")
-      .eq("organization_id", profile.organization_id)
-      .ilike("title", `%${value}%`)
-      .order("updated_at", { ascending: false })
-      .limit(10);
-    setSearchResults(data || []);
+    // Search all tabs in parallel
+    const [chatsRes, vaultsRes, filesRes] = await Promise.all([
+      supabase.from("conversations").select("id, title, created_at").eq("organization_id", profile.organization_id).ilike("title", `%${value}%`).order("updated_at", { ascending: false }).limit(10),
+      supabase.from("vaults").select("id, name").eq("organization_id", profile.organization_id).ilike("name", `%${value}%`).order("created_at", { ascending: false }).limit(10),
+      supabase.from("files").select("id, name, vault_id").eq("organization_id", profile.organization_id).ilike("name", `%${value}%`).order("created_at", { ascending: false }).limit(10),
+    ]);
+    setSearchResults(chatsRes.data || []);
+    setSearchVaults(vaultsRes.data || []);
+    setSearchFiles(filesRes.data || []);
   }, [profile?.organization_id]);
 
   const handleShareChat = async (chatId: string, e: React.MouseEvent) => {
