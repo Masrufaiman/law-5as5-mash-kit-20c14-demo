@@ -765,6 +765,13 @@ serve(async (req) => {
             knowledgeContext = "\n\n## Knowledge Base\n" + knowledgeEntries.map((e: any) => `### ${e.title} (${e.category || "general"})\n${e.content}`).join("\n\n");
           }
 
+          // Load agent memory (last 10 entries for this user)
+          let agentMemoryContext = "";
+          const { data: memoryEntries } = await adminClient.from("agent_memory").select("content, category, created_at").eq("organization_id", orgId).eq("user_id", userId).order("created_at", { ascending: false }).limit(10);
+          if (memoryEntries?.length) {
+            agentMemoryContext = "\n\n## Agent Memory\n" + memoryEntries.map((e: any) => `- [${e.category || "general"}] ${e.content}`).join("\n");
+          }
+
           let vaultName = clientVaultName || "";
           let vaultInventory = "";
           const isUploadsVault = vaultName === "Uploads" || clientVaultName === "Uploads";
