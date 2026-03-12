@@ -1152,7 +1152,12 @@ ${followUpInstruction}
           const effectiveBasePrompt = redFlagModePrompt || draftingModePrompt || reviewModePrompt || (basePrompt + followUpInstruction);
           let finalSystemPrompt = effectiveBasePrompt;
           if (workflowSystemPrompt) finalSystemPrompt = workflowSystemPrompt + "\n\n" + finalSystemPrompt;
-          finalSystemPrompt += `\n${knowledgeContext}\n${vaultInventory}\n${allContext}\n${documentEditingContext}`;
+          finalSystemPrompt += `\n${knowledgeContext}\n${agentMemoryContext}\n${vaultInventory}\n${allContext}\n${documentEditingContext}`;
+
+          // Inject explicit attachment context into synthesis prompt
+          if (attachedFileIds?.length && attachedFileNames?.length) {
+            finalSystemPrompt += `\n\n## EXPLICIT ATTACHMENTS\nThe user explicitly attached these files for analysis: ${attachedFileNames.join(", ")}. Analyze ALL attached files directly. Do NOT ask which file to analyze. Do NOT search the vault for other files. The attached files ARE your scope.`;
+          }
 
           // Build messages
           const aiMessages = [
