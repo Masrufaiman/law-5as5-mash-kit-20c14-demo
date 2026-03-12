@@ -903,7 +903,7 @@ serve(async (req) => {
             trackStep(stepLabel, "done", toolResult.summary);
 
             // ── INNER MONOLOGUE ──
-            const monologue = await innerMonologue(aiUrl, aiKey, modelId, aiHeaders, message, currentPlan, accumulatedContext, toolResult, iteration, currentPlan.length);
+            const monologue = await innerMonologue(aiUrl, aiKey, modelId, aiHeaders, message, currentPlan, accumulatedContext, toolResult, iteration, currentPlan.length, attachedFileNames);
 
             emitThinking(monologue.thinking_narration);
 
