@@ -539,7 +539,7 @@ export default function Chat() {
         currentDocumentContent: editorDoc?.content,
       };
       // For Uploads vault, scope to the originally attached files
-      if (vaultName === "Uploads" && conversationAttachedFileIds.length > 0) {
+      if ((vaultName === "Uploads" || vaultName === "Prompt Uploads") && conversationAttachedFileIds.length > 0) {
         opts.attachedFileIds = conversationAttachedFileIds;
         opts.attachedFileNames = conversationAttachedFileNames;
       }
