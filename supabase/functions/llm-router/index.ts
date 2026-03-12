@@ -1203,7 +1203,7 @@ ${followUpInstruction}
 
           let documentEditingContext = "";
           if (currentDocumentContent) {
-            documentEditingContext = `\n\n## Currently Open Document (VERSION UPDATE MODE)\nUPDATE the existing document, do NOT create new. Output COMPLETE updated document with "# [Same Title]".\n\nCurrent:\n${currentDocumentContent.substring(0, 10000)}`;
+            documentEditingContext = `\n\n## Currently Open Document (VERSION UPDATE MODE)\nWhen the user asks to modify a document, output the COMPLETE updated document as markdown starting with "# [Same Title]".\nNEVER output JSON operations, file_path objects, or structured edit instructions. Always output the full updated document text.\nUPDATE the existing document, do NOT create new.\n\nCurrent:\n${currentDocumentContent.substring(0, 10000)}`;
           }
 
           const basePrompt = customPrompt || getLawKitBasePrompt(
