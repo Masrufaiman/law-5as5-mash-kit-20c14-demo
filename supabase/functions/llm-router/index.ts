@@ -1063,9 +1063,9 @@ serve(async (req) => {
 
           // Build a tool queue from user-selected sources (ensures ALL selected tools run)
           const toolQueue: string[] = [];
-          if (sources?.includes("CourtListener") && courtListenerKey) toolQueue.push("courtlistener");
-          if (sources?.includes("EDGAR (SEC)") && edgarEnabled) toolQueue.push("edgar");
-          if (sources?.includes("EUR-Lex") && eurlexEnabled) toolQueue.push("eurlex");
+          if (sources?.includes("CourtListener")) toolQueue.push("courtlistener");
+          if (sources?.includes("EDGAR (SEC)")) toolQueue.push("edgar");
+          if (sources?.includes("EUR-Lex")) toolQueue.push("eurlex");
 
           let nextTool: string;
 
