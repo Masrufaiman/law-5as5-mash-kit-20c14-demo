@@ -765,11 +765,29 @@ serve(async (req) => {
             knowledgeContext = "\n\n## Knowledge Base\n" + knowledgeEntries.map((e: any) => `### ${e.title} (${e.category || "general"})\n${e.content}`).join("\n\n");
           }
 
-          // Load agent memory (last 10 entries for this user)
+          // Load agent memory — mode-filtered structured facts
           let agentMemoryContext = "";
-          const { data: memoryEntries } = await adminClient.from("agent_memory").select("content, category, created_at").eq("organization_id", orgId).eq("user_id", userId).order("created_at", { ascending: false }).limit(10);
-          if (memoryEntries?.length) {
-            agentMemoryContext = "\n\n## Agent Memory\n" + memoryEntries.map((e: any) => `- [${e.category || "general"}] ${e.content}`).join("\n");
+          {
+            // Prioritize mode-relevant facts
+            const priorityCategories: string[] = [];
+            if (effectiveMode === "drafting") priorityCategories.push("user_standard", "preference");
+            else if (effectiveMode === "red_flags" || effectiveMode === "review") priorityCategories.push("document_reviewed");
+
+            let memoryEntries: any[] = [];
+
+            if (priorityCategories.length > 0) {
+              // Load up to 7 priority entries + 5 general
+              const { data: priorityData } = await adminClient.from("agent_memory").select("content, category, created_at").eq("organization_id", orgId).eq("user_id", userId).in("category", priorityCategories).order("created_at", { ascending: false }).limit(7);
+              const { data: generalData } = await adminClient.from("agent_memory").select("content, category, created_at").eq("organization_id", orgId).eq("user_id", userId).not("category", "in", `(${priorityCategories.join(",")})` ).order("created_at", { ascending: false }).limit(5);
+              memoryEntries = [...(priorityData || []), ...(generalData || [])];
+            } else {
+              const { data } = await adminClient.from("agent_memory").select("content, category, created_at").eq("organization_id", orgId).eq("user_id", userId).order("created_at", { ascending: false }).limit(10);
+              memoryEntries = data || [];
+            }
+
+            if (memoryEntries.length) {
+              agentMemoryContext = "\n\n## Agent Memory (Known Facts)\n" + memoryEntries.map((e: any) => `- [${e.category || "general"}] ${e.content}`).join("\n");
+            }
           }
 
           let vaultName = clientVaultName || "";
