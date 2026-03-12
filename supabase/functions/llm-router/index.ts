@@ -216,59 +216,131 @@ async function toolCourtListener(query: string, apiKey: string): Promise<ToolRes
 // Tool: EDGAR (SEC) Search
 // ──────────────────────────────────────────────
 async function toolEdgar(query: string, userAgent: string): Promise<ToolResult> {
-  const headers = { "User-Agent": userAgent, Accept: "application/json" };
+  const ua = userAgent || "LawKit/1.0 contact@lawkit.ai";
+  const headers: Record<string, string> = { "User-Agent": ua, Accept: "application/json" };
 
-  // Try EDGAR full-text search API (correct endpoint)
+  // Known CIK mapping for common companies
+  const CIK_MAP: Record<string, string> = {
+    apple: "0000320193", microsoft: "0000789019", tesla: "0001318605",
+    google: "0001652044", alphabet: "0001652044", amazon: "0001018724",
+    meta: "0001326801", facebook: "0001326801", nvidia: "0001045810",
+    jpmorgan: "0000019617", "goldman sachs": "0000886982",
+  };
+
+  // Extract form type from query
+  const formMatch = query.match(/\b(10-K|10-Q|8-K|S-1|DEF\s*14A|20-F|6-K|proxy\s*statement)\b/i);
+  const formType = formMatch ? formMatch[1].replace(/\s+/g, " ").toUpperCase().replace("PROXY STATEMENT", "DEF 14A") : "";
+
+  // Try EDGAR EFTS full-text search API
+  const eftsBase = "https://efts.sec.gov/LATEST/search-index";
+  const formParam = formType ? `&forms=${encodeURIComponent(formType)}` : "&forms=10-K,10-Q,8-K,S-1,DEF+14A";
   const endpoints = [
-    `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}&dateRange=custom&startdt=2020-01-01&forms=10-K,10-Q,8-K,S-1,DEF+14A`,
-    `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}`,
+    `${eftsBase}?q=${encodeURIComponent(query)}&dateRange=custom&startdt=2020-01-01${formParam}`,
+    `${eftsBase}?q=${encodeURIComponent(query)}`,
   ];
 
   for (const url of endpoints) {
     try {
       const resp = await fetch(url, { headers });
-      if (!resp.ok) continue;
+      if (!resp.ok) { console.error(`EDGAR EFTS ${resp.status} for ${url}`); continue; }
       const data = await resp.json();
-      const hits = (data.hits?.hits || data.filings || []).slice(0, 8);
+      const hits = (data.hits?.hits || data.filings || []).slice(0, 10);
       if (!hits.length) continue;
 
-      const citations = hits.map((h: any, i: number) => ({
-        index: i + 1,
-        source: `${h._source?.entity_name || h.company_name || "Unknown"} — ${h._source?.form_type || h.form_type || "Filing"}`,
-        excerpt: (h._source?.file_description || h.description || "").substring(0, 200),
-        url: h._source?.file_url ? `https://www.sec.gov/Archives/edgar/data/${h._source.file_url}` : (h.filing_href || undefined),
-      }));
-      const context = hits.map((h: any) => {
+      const parsed = hits.map((h: any) => {
         const s = h._source || h;
-        return `## ${s.entity_name || s.company_name || "Unknown"} — ${s.form_type || "Filing"}\nCIK: ${s.entity_id || s.cik || "N/A"} | Filed: ${s.file_date || s.date_filed || "N/A"}\n${s.file_description || s.description || ""}`;
-      }).join("\n\n");
-      return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${hits.length} filings found` };
+        return {
+          company: s.entity_name || s.display_names?.[0] || s.company_name || "Unknown",
+          form_type: s.file_type || s.form_type || "Filing",
+          filed_date: s.file_date || s.date_filed || "N/A",
+          period: s.period_of_report || "",
+          cik: s.entity_id || s.cik || "N/A",
+          description: s.file_description || s.description || "",
+          url: s.file_num
+            ? `https://www.sec.gov/Archives/edgar/data/${s.entity_id}/${s.file_num.replace(/-/g, "")}`
+            : (h.filing_href || `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${s.entity_id || s.cik}&type=${s.file_type || ""}&dateb=&owner=include&count=10`),
+        };
+      });
+
+      const contextLines = parsed.map((p: any, i: number) =>
+        `Filing ${i + 1}: ${p.company} — ${p.form_type} filed ${p.filed_date}${p.period ? ` (period: ${p.period})` : ""}. CIK: ${p.cik}. ${p.description}`
+      );
+      const context = `EDGAR returned ${parsed.length} filings.\n\n${contextLines.join("\n\n")}`;
+      const citations = parsed.map((p: any, i: number) => ({
+        index: i + 1,
+        source: `${p.company} — ${p.form_type}`,
+        excerpt: `Filed: ${p.filed_date}. ${p.description}`.substring(0, 200),
+        url: p.url,
+      }));
+      return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${parsed.length} filings found` };
     } catch (e) {
       console.error("EDGAR endpoint failed:", url, e);
       continue;
     }
   }
 
-  // Tertiary fallback: EDGAR company search (Atom feed)
+  // Fallback: Try CIK-based lookup for known companies
+  const queryLower = query.toLowerCase();
+  for (const [name, cik] of Object.entries(CIK_MAP)) {
+    if (queryLower.includes(name)) {
+      try {
+        const subUrl = `https://data.sec.gov/submissions/CIK${cik}.json`;
+        const subResp = await fetch(subUrl, { headers: { "User-Agent": ua, Accept: "application/json" } });
+        if (subResp.ok) {
+          const subData = await subResp.json();
+          const recent = subData.filings?.recent;
+          if (recent?.form) {
+            const filings = [];
+            for (let i = 0; i < Math.min(recent.form.length, 15); i++) {
+              if (formType && recent.form[i] !== formType) continue;
+              filings.push({
+                company: subData.name || name,
+                form_type: recent.form[i],
+                filed_date: recent.filingDate[i],
+                accession: recent.accessionNumber[i],
+                url: `https://www.sec.gov/Archives/edgar/data/${cik.replace(/^0+/, "")}/${recent.accessionNumber[i].replace(/-/g, "")}`,
+              });
+              if (filings.length >= 8) break;
+            }
+            if (filings.length > 0) {
+              const contextLines = filings.map((f, i) =>
+                `Filing ${i + 1}: ${f.company} — ${f.form_type} filed ${f.filed_date}. Accession: ${f.accession}`
+              );
+              const context = `EDGAR returned ${filings.length} filings for ${subData.name || name} (CIK: ${cik}).\n\n${contextLines.join("\n\n")}`;
+              const citations = filings.map((f, i) => ({
+                index: i + 1, source: `${f.company} — ${f.form_type}`, excerpt: `Filed: ${f.filed_date}`, url: f.url,
+              }));
+              return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${filings.length} filings found` };
+            }
+          }
+        }
+      } catch (e) {
+        console.error("EDGAR CIK lookup failed:", e);
+      }
+      break;
+    }
+  }
+
+  // Final fallback: company search Atom feed
   try {
     const companyName = query.replace(/\b(10-K|10-Q|8-K|S-1|SEC|EDGAR|filing|annual|report|quarterly)\b/gi, "").trim();
     if (companyName.length > 2) {
-      const atomUrl = `https://www.sec.gov/cgi-bin/browse-edgar?company=${encodeURIComponent(companyName)}&CIK=&type=10-K&dateb=&owner=include&count=10&search_text=&action=getcompany&output=atom`;
-      const atomResp = await fetch(atomUrl, { headers: { "User-Agent": userAgent, Accept: "application/atom+xml" } });
+      const atomUrl = `https://www.sec.gov/cgi-bin/browse-edgar?company=${encodeURIComponent(companyName)}&CIK=&type=${formType || "10-K"}&dateb=&owner=include&count=10&search_text=&action=getcompany&output=atom`;
+      const atomResp = await fetch(atomUrl, { headers: { "User-Agent": ua, Accept: "application/atom+xml" } });
       if (atomResp.ok) {
         const atomText = await atomResp.text();
-        // Parse Atom XML for entries
         const entries = [...atomText.matchAll(/<entry>([\s\S]*?)<\/entry>/g)];
         if (entries.length > 0) {
-          const results = entries.slice(0, 8).map((e, i) => {
+          const results = entries.slice(0, 8).map((e) => {
             const title = e[1].match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1]?.trim() || "Filing";
             const link = e[1].match(/<link[^>]*href="([^"]+)"/)?.[1] || "";
             const updated = e[1].match(/<updated>([\s\S]*?)<\/updated>/)?.[1]?.trim() || "";
             const summary = e[1].match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1]?.replace(/<[^>]*>/g, "").trim() || "";
             return { title, link, updated, summary };
           });
+          const contextLines = results.map((r, i) => `Filing ${i + 1}: ${r.title}. Date: ${r.updated}. ${r.summary}`);
+          const context = `EDGAR company search returned ${results.length} results.\n\n${contextLines.join("\n\n")}`;
           const citations = results.map((r, i) => ({ index: i + 1, source: r.title, excerpt: r.summary.substring(0, 200), url: r.link }));
-          const context = results.map(r => `## ${r.title}\nDate: ${r.updated}\n${r.summary}`).join("\n\n");
           return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${results.length} company filings found` };
         }
       }
@@ -277,7 +349,7 @@ async function toolEdgar(query: string, userAgent: string): Promise<ToolResult> 
     console.error("EDGAR company search fallback failed:", e);
   }
 
-  return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
+  return { context: `EDGAR search for "${query}" returned no results. Try searching with a specific company name or CIK number.`, citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
 }
 
 
