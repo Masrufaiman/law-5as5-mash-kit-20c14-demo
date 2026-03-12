@@ -366,14 +366,7 @@ async function innerMonologue(
   const contextSummary = accumulatedContext.map((c, i) => `--- Context block ${i + 1} ---\n${c.substring(0, 2000)}`).join("\n");
 
   try {
-    const resp = await fetch(aiUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          { role: "system", content: INNER_MONOLOGUE_PROMPT },
-          { role: "user", content: JSON.stringify({
+    const monologueInput: any = {
             original_query: query,
             plan,
             iteration,
@@ -381,7 +374,21 @@ async function innerMonologue(
             accumulated_context_summary: contextSummary.substring(0, 6000),
             latest_tool_result: latestResult.summary,
             latest_tool_context_preview: latestResult.context.substring(0, 2000),
-          }) },
+          };
+    // Signal explicit attachments to prevent monologue from asking "which file?"
+    if (explicitAttachmentNames?.length) {
+      monologueInput.has_explicit_attachments = true;
+      monologueInput.attached_file_names = explicitAttachmentNames;
+    }
+
+    const resp = await fetch(aiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: modelId,
+        messages: [
+          { role: "system", content: INNER_MONOLOGUE_PROMPT },
+          { role: "user", content: JSON.stringify(monologueInput) },
         ],
         max_tokens: 500,
         temperature: 0,
