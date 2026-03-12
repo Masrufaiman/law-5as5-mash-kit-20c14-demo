@@ -7,8 +7,9 @@ import { StorageTab } from "@/components/admin/StorageTab";
 import { KnowledgeTab } from "@/components/admin/KnowledgeTab";
 import { AgentTab } from "@/components/admin/AgentTab";
 import { FeedbackTab } from "@/components/admin/FeedbackTab";
-import { Shield, Brain, Search, HardDrive, BookOpen, Bot, ThumbsUp } from "lucide-react";
+import { Shield, Brain, Search, HardDrive, BookOpen, Bot, ThumbsUp, Scale } from "lucide-react";
 import { Navigate } from "react-router-dom";
+import { LegalApisTab } from "@/components/admin/LegalApisTab";
 
 export default function Admin() {
   const { profile } = useAuth();
