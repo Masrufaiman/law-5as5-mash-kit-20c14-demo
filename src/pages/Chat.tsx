@@ -539,7 +539,7 @@ export default function Chat() {
         currentDocumentContent: editorDoc?.content,
       };
       // For Uploads vault, scope to the originally attached files
-      if (vaultName === "Uploads" && conversationAttachedFileIds.length > 0) {
+      if ((vaultName === "Uploads" || vaultName === "Prompt Uploads") && conversationAttachedFileIds.length > 0) {
         opts.attachedFileIds = conversationAttachedFileIds;
         opts.attachedFileNames = conversationAttachedFileNames;
       }
@@ -558,18 +558,14 @@ export default function Chat() {
     const scrollTop = viewport?.scrollTop || 0;
 
     setHighlightExcerpt(excerpt);
-    
-    // If same title, append as new version
-    if (editorDoc?.title === title && !excerpt) {
-      setEditorDoc(null); // toggle off
-    } else {
-      setEditorDoc({ title, content });
-    }
+    setEditorDoc({ title, content }); // Always replace, never toggle
 
     requestAnimationFrame(() => {
-      if (viewport) viewport.scrollTop = scrollTop;
+      requestAnimationFrame(() => {
+        if (viewport) viewport.scrollTop = scrollTop;
+      });
     });
-  }, [editorDoc]);
+  }, []);
 
   const handleSheetOpen = useCallback((data: SheetData) => {
     const container = scrollContainerRef.current;
@@ -834,14 +830,14 @@ export default function Chat() {
   const rightPanel = sheetDoc ? (
     <SheetEditor
       data={sheetDoc}
-      onClose={() => {
+    onClose={() => {
         const container = scrollContainerRef.current;
         const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
         const scrollTop = viewport?.scrollTop || 0;
         setSheetDoc(null);
-        requestAnimationFrame(() => {
+        requestAnimationFrame(() => { requestAnimationFrame(() => {
           if (viewport) viewport.scrollTop = scrollTop;
-        });
+        }); });
       }}
       onUpdate={(updated) => setSheetDoc(updated)}
     />
@@ -873,9 +869,9 @@ export default function Chat() {
         const scrollTop = viewport?.scrollTop || 0;
         setEditorDoc(null);
         setHighlightExcerpt(undefined);
-        requestAnimationFrame(() => {
+        requestAnimationFrame(() => { requestAnimationFrame(() => {
           if (viewport) viewport.scrollTop = scrollTop;
-        });
+        }); });
       }}
     />
   ) : undefined;
