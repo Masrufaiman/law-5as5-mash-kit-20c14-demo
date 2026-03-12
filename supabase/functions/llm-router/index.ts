@@ -1784,6 +1784,17 @@ ${followUpInstruction}
             }
           }
 
+          // Flush any remaining buffered first tokens
+          if (!firstTokensEmitted && firstTokensBuffer.length > 0) {
+            let cleaned = firstTokensBuffer;
+            const badOpenerMatch = cleaned.match(/^(I don't have sufficient information[^.]*\.|I do not have sufficient[^.]*\.|My internal knowledge[^.]*\.|Unfortunately,? I[^.]*\.)\s*/i);
+            if (badOpenerMatch) {
+              cleaned = cleaned.slice(badOpenerMatch[0].length);
+              fullContent = fullContent.slice(badOpenerMatch[0].length);
+            }
+            emit(controller, encoder, { type: "token", content: cleaned });
+          }
+
           // Extract follow-ups
           const followUps: string[] = [];
           fullContent.split("\n").filter(l => l.startsWith(">>FOLLOWUP: ")).forEach(l => {
