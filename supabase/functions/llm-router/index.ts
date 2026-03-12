@@ -93,6 +93,9 @@ function assessComplexity(query: string, context: { jurisdictions?: string[]; ha
   if (/multi.?jurisdict|cross.?border|international/i.test(query)) score += 2;
   if (/what is|define|meaning of|explain briefly/i.test(query)) score -= 2;
   if (/deep research|comprehensive|exhaustive|thorough analysis/i.test(query)) score += 3;
+  // Floor at sonar-pro for any jurisdiction/legal query
+  if (/jurisdiction|statute|case law|precedent|v\.\s|non-?compete|restraint of trade|confidential|fiduciary|negligence|tort|contract law|common law/i.test(query)) score = Math.max(score, 3);
+  if (context.jurisdictions && context.jurisdictions.length >= 1) score = Math.max(score, 3);
   return Math.max(0, Math.min(10, score));
 }
 
