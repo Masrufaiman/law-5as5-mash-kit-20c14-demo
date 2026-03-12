@@ -241,6 +241,39 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
     return () => clearTimeout(timer);
   }, [highlightExcerpt]);
 
+  // Selection-to-reply in editor
+  useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container || !onSelectionReply) return;
+
+    const handleMouseUp = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+        setSelectionTooltip(null);
+        return;
+      }
+      const text = selection.toString().trim();
+      if (text.length < 3) { setSelectionTooltip(null); return; }
+      const anchorNode = selection.anchorNode;
+      if (!anchorNode || !container.contains(anchorNode)) { setSelectionTooltip(null); return; }
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      setSelectionTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, text });
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-editor-reply-tooltip]")) setSelectionTooltip(null);
+    };
+
+    container.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => {
+      container.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
+  }, [onSelectionReply]);
+
   const isViewingOldVersion = currentVersion < versions.length - 1;
 
   const handleSaveVersion = () => {
