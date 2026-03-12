@@ -92,6 +92,24 @@ function selectPerplexityModel(score: number, deepResearch: boolean): { model: s
 }
 
 // ──────────────────────────────────────────────
+// Request Type Classification (hard-coded routing)
+// ──────────────────────────────────────────────
+function classifyRequestType(message: string, hasAttachedFiles: boolean, hasVault: boolean, conversationHistory: any[]): 1 | 2 | 3 | 4 {
+  // TYPE 3 — Document task (file attached or explicit doc reference)
+  if (hasAttachedFiles) return 3;
+  if (/this document|the uploaded|these contracts|attached file|this NDA|this contract|this agreement/i.test(message)) return 3;
+  
+  // TYPE 2 — Case/research lookup
+  if (/v\.\s|vs?\.\s|court|appeal|ruling|judgment|citation|\d+\s+(So|F|U\.S|S\.Ct)|case\s+(no|number|#)/i.test(message)) return 2;
+  
+  // TYPE 4 — Vault task
+  if (/\b(our|my vault|saved|previous|from\s+(?:the\s+)?vault)\b/i.test(message)) return 4;
+  
+  // TYPE 1 — Factual/legal question (default)
+  return 1;
+}
+
+// ──────────────────────────────────────────────
 // Jurisdiction Prefix Map
 // ──────────────────────────────────────────────
 const JURISDICTION_PREFIX: Record<string, string> = {
