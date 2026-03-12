@@ -7,6 +7,7 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { SourcesPanel } from "@/components/chat/SourcesPanel";
 import { DocumentEditor } from "@/components/editor/DocumentEditor";
+import { RedlineView } from "@/components/editor/RedlineView";
 import { SheetEditor } from "@/components/editor/SheetEditor";
 import type { SheetData } from "@/components/editor/SheetEditor";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -14,6 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { parseRedFlags } from "@/components/chat/RedFlagCard";
+import type { RedFlagData } from "@/components/chat/RedFlagCard";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -91,6 +94,7 @@ export default function Chat() {
   const [promptMode, setPromptMode] = useState<string | undefined>();
   const [editorDoc, setEditorDoc] = useState<{ title: string; content: string } | null>(null);
   const [sheetDoc, setSheetDoc] = useState<SheetData | null>(null);
+  const [redFlagData, setRedFlagData] = useState<import("@/components/chat/RedFlagCard").RedFlagData | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState("");
   const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
@@ -422,6 +426,27 @@ export default function Chat() {
       toast({ title: "Error", description: error, variant: "destructive" });
     }
   }, [error]);
+
+  // Auto-open document in redline view after red flag analysis completes
+  const prevStreamingRef = useRef(false);
+  useEffect(() => {
+    if (prevStreamingRef.current && !isStreaming && promptMode === "red_flags") {
+      // Streaming just finished — check if last assistant message has red flags
+      const lastAssistant = [...messages].reverse().find(m => m.role === "assistant");
+      if (lastAssistant) {
+        const rfData = parseRedFlags(lastAssistant.content);
+        if (rfData) {
+          setRedFlagData(rfData);
+          // Auto-open the first attached file
+          const refs = fileRefs || lastAssistant.frozenFileRefs;
+          if (refs?.[0]) {
+            handleFileClick(refs[0].name, refs[0].id);
+          }
+        }
+      }
+    }
+    prevStreamingRef.current = isStreaming;
+  }, [isStreaming]);
 
   const lastStreamOptions = useRef<any>(null);
 
@@ -819,6 +844,21 @@ export default function Chat() {
         });
       }}
       onUpdate={(updated) => setSheetDoc(updated)}
+    />
+  ) : editorDoc && redFlagData ? (
+    <RedlineView
+      title={editorDoc.title}
+      content={editorDoc.content}
+      redFlagData={redFlagData}
+      onClose={() => {
+        setEditorDoc(null);
+        setRedFlagData(null);
+        setHighlightExcerpt(undefined);
+      }}
+      onContentUpdate={(newContent) => {
+        setEditorDoc({ ...editorDoc, content: newContent });
+        setRedFlagData(null); // Clear redline after applying
+      }}
     />
   ) : editorDoc ? (
     <DocumentEditor

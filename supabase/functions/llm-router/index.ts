@@ -508,7 +508,8 @@ RULES:
 - For research queries: include vault search + web search + cross-reference + synthesis
 - For drafting queries: include research relevant templates + draft document + review clauses
 - For analysis queries: include document analysis + identify key provisions + compare against standards
-- IMPORTANT: When the AI needs to ask for clarification, it MUST generate context-relevant numbered options in the response (not generic ones). Each option should relate to the specific topic being discussed.` },
+- IMPORTANT: When the AI needs to ask for clarification, it MUST generate context-relevant numbered options in the response (not generic ones). Each option should relate to the specific topic being discussed.
+- If the user message is short or ambiguous (under 10 words), resolve it against the conversation history before treating it as a new query. Combine the previous topic with the new message to form a complete query.` },
           { role: "user", content: `Query: "${query}"\nHas vault documents: ${hasVault}\nHas search sources: ${hasSources}\nMode: ${effectiveMode || "chat"}` },
         ],
         tools: [{
@@ -599,6 +600,7 @@ ${orgKnowledge ? `## Organization Knowledge\n${orgKnowledge}\n` : ""}
 - Always attribute every factual claim to its source
 - Surface contradictions rather than hiding them
 - A partial answer clearly labeled is better than a confident wrong answer
+- NEVER start a response with "I don't have sufficient information" or "My internal knowledge base does not contain." If tools are available, use them silently and return the answer. Never announce what you cannot do.
 
 ## Citation Format
 - Inline: [filename · p.4] or [Perplexity Search · URL]
@@ -848,8 +850,15 @@ serve(async (req) => {
           // Determine first action: always vault first if available
           // For red_flags mode OR when explicit files are attached, force read_files first
           // Auto-trigger web search when Perplexity is available, even without explicit source selection
+          // If legal research sources are explicitly selected and query contains case/court refs, skip vault
+          const hasExplicitLegalSources = sources?.some((s: string) => ["CourtListener", "US Law", "UK Law"].includes(s));
+          const isCaseQuery = /case|v\.\s|vs?\.\s|court|appeal|ruling|judgment|citation|\d+\s+(So|F|U\.S|S\.Ct)/i.test(message);
+
           let nextTool: string;
-          if (attachedFileIds?.length) {
+          if (hasExplicitLegalSources && isCaseQuery && perplexityKey) {
+            // Legal research sources explicitly selected with case query — skip vault, search first
+            nextTool = "web_search";
+          } else if (attachedFileIds?.length) {
             // Explicit files attached — always read them first, regardless of mode
             nextTool = "read_files";
           } else if (effectiveMode === "red_flags" && hasVault) {
@@ -1172,6 +1181,17 @@ WHEN extracting payment terms, extract all sub-values separately:
 - Management fee offset % (only if explicitly stated)
 DO NOT use industry-standard or typical values.
 Omit any sub-value not stated in the document.
+
+### Rule 5 — Per-Document Independence (prevents context drift)
+Apply ALL grounding rules independently for EACH document. Do not let the extraction from document 1 influence document 2.
+Do not infer any document's governing law from LP identity, address, or nationality.
+Each document must be read as if it is the only document you have ever seen.
+The governing law of document 1 has ZERO bearing on document 2. Re-read the governing law clause fresh for each document.
+
+### Rule 6 — Self-Verification (prevents hallucination)
+After extracting governing law from each document, state the verbatim sentence you found in a "verification" field in the row values.
+If the verbatim sentence does not contain the jurisdiction you extracted, your extraction is wrong — re-read the document.
+Format: "values": { "Governing Law": "laws of England and Wales", "Governing Law Verification": "This Agreement shall be governed by and construed in accordance with the laws of England and Wales." }
 
 ${followUpInstruction}
 ` : "";

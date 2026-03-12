@@ -602,13 +602,6 @@ export function MessageBubble({
               const docName = fileRefs?.[0]?.name || redFlagData.title;
               const docId = fileRefs?.[0]?.id;
               onFileClick(docName, docId);
-            } : onDocumentOpen ? () => {
-              // Fallback: strip REDFLAGS JSON block from content before opening in editor
-              const strippedContent = cleanContent
-                .replace(/<!--\s*REDFLAGS:[\s\S]*?```/g, "")
-                .replace(/```json[\s\S]*?```/g, "")
-                .trim();
-              onDocumentOpen(redFlagData.title, strippedContent);
             } : undefined}
           />
           {!isUser && !isStreaming && citations.length > 0 && (
