@@ -123,7 +123,7 @@ export function RedFlagCard({ data, onOpenInEditor }: { data: RedFlagData; onOpe
             </div>
           </div>
           <div className={cn("text-lg font-bold", riskColor)}>
-            {summary.risk_score}/10
+            {Math.min(summary.risk_score, 10)}/10
           </div>
         </div>
 
