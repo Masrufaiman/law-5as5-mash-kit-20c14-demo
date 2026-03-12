@@ -600,6 +600,7 @@ ${orgKnowledge ? `## Organization Knowledge\n${orgKnowledge}\n` : ""}
 - Always attribute every factual claim to its source
 - Surface contradictions rather than hiding them
 - A partial answer clearly labeled is better than a confident wrong answer
+- NEVER start a response with "I don't have sufficient information" or "My internal knowledge base does not contain." If tools are available, use them silently and return the answer. Never announce what you cannot do.
 
 ## Citation Format
 - Inline: [filename · p.4] or [Perplexity Search · URL]
