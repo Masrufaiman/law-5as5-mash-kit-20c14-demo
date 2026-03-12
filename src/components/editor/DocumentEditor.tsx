@@ -27,6 +27,8 @@ interface DocumentEditorProps {
   highlightExcerpt?: string;
   /** If true, append content as a new version instead of replacing */
   appendVersion?: boolean;
+  /** Called when user selects text and clicks Reply */
+  onSelectionReply?: (text: string) => void;
 }
 
 const modules = {
