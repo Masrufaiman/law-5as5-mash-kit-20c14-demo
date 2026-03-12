@@ -94,13 +94,20 @@ function selectPerplexityModel(score: number, deepResearch: boolean): { model: s
 // ──────────────────────────────────────────────
 // Request Type Classification (hard-coded routing)
 // ──────────────────────────────────────────────
-function classifyRequestType(message: string, hasAttachedFiles: boolean, hasVault: boolean, conversationHistory: any[]): 1 | 2 | 3 | 4 {
+function classifyRequestType(message: string, hasAttachedFiles: boolean, hasVault: boolean, conversationHistory: any[], sources?: string[]): 1 | 2 | 3 | 4 | 5 | 6 {
   // TYPE 3 — Document task (file attached or explicit doc reference)
   if (hasAttachedFiles) return 3;
   if (/this document|the uploaded|these contracts|attached file|this NDA|this contract|this agreement/i.test(message)) return 3;
   
-  // TYPE 2 — Case/research lookup
+  // TYPE 5 — EDGAR/SEC lookup
+  if (/\b(SEC|EDGAR|10-K|10-Q|8-K|S-1|proxy\s*statement|annual\s*report|quarterly\s*filing)\b/i.test(message) || sources?.includes("EDGAR (SEC)")) return 5;
+  
+  // TYPE 6 — EUR-Lex lookup
+  if (/\b(EUR-Lex|EU\s*regulation|EU\s*directive|GDPR|MiFID|AIFMD|european\s*court|CJEU|ECJ)\b/i.test(message) || sources?.includes("EUR-Lex")) return 6;
+  
+  // TYPE 2 — Case/research lookup (including CourtListener)
   if (/v\.\s|vs?\.\s|court|appeal|ruling|judgment|citation|\d+\s+(So|F|U\.S|S\.Ct)|case\s+(no|number|#)/i.test(message)) return 2;
+  if (sources?.includes("CourtListener")) return 2;
   
   // TYPE 4 — Vault task
   if (/\b(our|my vault|saved|previous|from\s+(?:the\s+)?vault)\b/i.test(message)) return 4;
