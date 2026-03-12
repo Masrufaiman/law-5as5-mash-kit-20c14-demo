@@ -15,6 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { parseRedFlags } from "@/components/chat/RedFlagCard";
+import type { RedFlagData } from "@/components/chat/RedFlagCard";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
