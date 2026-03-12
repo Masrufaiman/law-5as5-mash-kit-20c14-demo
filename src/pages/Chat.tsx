@@ -715,6 +715,7 @@ export default function Chat() {
     setEditorDoc(null);
     setSheetDoc(null);
     setConversationAttachedFileIds([]);
+    setConversationAttachedFileNames([]);
     initialMessageSentRef.current = false;
     clearMessages();
     navigate("/chat", { replace: true });
