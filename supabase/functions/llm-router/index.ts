@@ -1074,32 +1074,44 @@ serve(async (req) => {
           // ── HARD-CODED ROUTING based on request type ──
           const hasExplicitLegalSources = sources?.some((s: string) => ["CourtListener", "US Law", "UK Law"].includes(s));
 
+          // Build a tool queue from user-selected sources (ensures ALL selected tools run)
+          const toolQueue: string[] = [];
+          if (sources?.includes("CourtListener") && courtListenerKey) toolQueue.push("courtlistener");
+          if (sources?.includes("EDGAR (SEC)") && edgarEnabled) toolQueue.push("edgar");
+          if (sources?.includes("EUR-Lex") && eurlexEnabled) toolQueue.push("eurlex");
+
           let nextTool: string;
-          switch (requestType) {
-            case 1: // Factual — no vault, maybe web if complex
-              nextTool = (complexity >= 4 && perplexityKey) ? "web_search" : "";
-              break;
-            case 2: // Case lookup — CourtListener first if available, else web search
-              nextTool = courtListenerKey ? "courtlistener" : (perplexityKey ? "web_search" : "");
-              break;
-            case 3: // Document task — read files first
-              nextTool = "read_files";
-              break;
-            case 4: // Vault task — search vault
-              nextTool = "vault_search";
-              break;
-            case 5: // EDGAR/SEC lookup
-              nextTool = edgarEnabled ? "edgar" : (perplexityKey ? "web_search" : "");
-              break;
-            case 6: // EUR-Lex lookup
-              nextTool = eurlexEnabled ? "eurlex" : (perplexityKey ? "web_search" : "");
-              break;
-            default:
-              nextTool = "";
-          }
-          // Override: explicit legal sources with case query always go to web
-          if (hasExplicitLegalSources && requestType === 2 && perplexityKey) {
-            nextTool = "web_search";
+
+          if (toolQueue.length > 0) {
+            // User explicitly selected legal tools — run the first one, queue the rest
+            nextTool = toolQueue.shift()!;
+          } else {
+            switch (requestType) {
+              case 1: // Factual — no vault, maybe web if complex
+                nextTool = (complexity >= 4 && perplexityKey) ? "web_search" : "";
+                break;
+              case 2: // Case lookup — CourtListener first if available, else web search
+                nextTool = courtListenerKey ? "courtlistener" : (perplexityKey ? "web_search" : "");
+                break;
+              case 3: // Document task — read files first
+                nextTool = "read_files";
+                break;
+              case 4: // Vault task — search vault
+                nextTool = "vault_search";
+                break;
+              case 5: // EDGAR/SEC lookup
+                nextTool = edgarEnabled ? "edgar" : (perplexityKey ? "web_search" : "");
+                break;
+              case 6: // EUR-Lex lookup
+                nextTool = eurlexEnabled ? "eurlex" : (perplexityKey ? "web_search" : "");
+                break;
+              default:
+                nextTool = "";
+            }
+            // Override: explicit legal sources with case query always go to web
+            if (hasExplicitLegalSources && requestType === 2 && perplexityKey) {
+              nextTool = "web_search";
+            }
           }
           // Override: red_flags mode with vault always reads files first
           if (effectiveMode === "red_flags" && hasVault && requestType !== 2) {
