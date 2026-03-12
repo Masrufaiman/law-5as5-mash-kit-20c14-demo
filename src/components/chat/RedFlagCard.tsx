@@ -106,7 +106,8 @@ export function RedFlagCard({ data, onOpenInEditor }: { data: RedFlagData; onOpe
     return acc;
   }, {});
 
-  const riskColor = summary.risk_score >= 7 ? "text-destructive" : summary.risk_score >= 4 ? "text-orange-600 dark:text-orange-400" : "text-yellow-600 dark:text-yellow-400";
+  const cappedScore = Math.min(summary.risk_score, 10);
+  const riskColor = cappedScore >= 7 ? "text-destructive" : cappedScore >= 4 ? "text-orange-600 dark:text-orange-400" : "text-yellow-600 dark:text-yellow-400";
 
   return (
     <Card className="border-border/60 overflow-hidden">
@@ -123,7 +124,7 @@ export function RedFlagCard({ data, onOpenInEditor }: { data: RedFlagData; onOpe
             </div>
           </div>
           <div className={cn("text-lg font-bold", riskColor)}>
-            {summary.risk_score}/10
+            {Math.min(summary.risk_score, 10)}/10
           </div>
         </div>
 
