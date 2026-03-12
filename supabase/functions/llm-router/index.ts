@@ -1215,7 +1215,19 @@ serve(async (req) => {
             // The monologue tends to suggest vault_search or ask "which document?" — bypass it completely.
             if (attachedFileIds?.length && nextTool === "read_files" && toolResult.context) {
               emitThinking("Documents loaded. Preparing analysis...");
+              // But if there are queued legal tools, run those first
+              if (toolQueue.length > 0) {
+                nextTool = toolQueue.shift()!;
+                continue;
+              }
               break;
+            }
+
+            // ══ QUEUED TOOLS: run remaining legal tools before monologue decides ══
+            if (toolQueue.length > 0) {
+              nextTool = toolQueue.shift()!;
+              nextInput = { query: message };
+              continue;
             }
 
             // ── INNER MONOLOGUE ──

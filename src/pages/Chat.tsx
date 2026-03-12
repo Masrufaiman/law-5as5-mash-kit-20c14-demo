@@ -439,10 +439,13 @@ export default function Chat() {
         const rfData = parseRedFlags(lastAssistant.content);
         if (rfData && rfData.flags.length > 0) {
           setRedFlagData(rfData);
-          // Auto-open the first attached file
+          // Try to open the first attached file using multiple fallbacks
           const refs = (lastAssistant as any).frozenFileRefs || fileRefs;
           if (refs?.[0]) {
             handleFileClick(refs[0].name, refs[0].id);
+          } else if (conversationAttachedFileIds.length > 0) {
+            // Fallback: open the first conversation-attached file by ID
+            handleFileClick(conversationAttachedFileNames[0] || "document", conversationAttachedFileIds[0]);
           }
         }
       }
