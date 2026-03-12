@@ -164,7 +164,7 @@ function processChildren(
 
 const CITATION_PATTERN = /(\[\*{0,2}\d+\*{0,2}\]|\[[\u2070\u00b9\u00b2\u00b3\u2074-\u2079][,\s\u2070\u00b9\u00b2\u00b3\u2074-\u2079]*\]|[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+)/g;
 
-function injectCitations(text: string, citations: Citation[]): React.ReactNode[] {
+function injectCitations(text: string, citations: Citation[], onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void): React.ReactNode[] {
   const parts = text.split(CITATION_PATTERN);
   if (parts.length === 1) return [text];
 
@@ -173,7 +173,7 @@ function injectCitations(text: string, citations: Citation[]): React.ReactNode[]
     if (bracketMatch) {
       const idx = parseInt(bracketMatch[1], 10);
       const citation = citations.find((c) => c.index === idx);
-      if (citation) return <CitationPopover key={`cite-${idx}-${i}`} citation={citation} />;
+      if (citation) return <CitationPopover key={`cite-${idx}-${i}`} citation={citation} onFileClick={onFileClick} />;
     }
 
     const superscriptChars = part.replace(/[\[\],\s]/g, "");
@@ -186,9 +186,9 @@ function injectCitations(text: string, citations: Citation[]): React.ReactNode[]
         const idx = superscriptToNumber(trimmed);
         const citation = citations.find((c) => c.index === idx || c.index === idx + 99);
         if (citation) {
-          elements.push(<CitationPopover key={`cite-s-${idx}-${i}-${j}`} citation={{ ...citation, index: idx }} />);
+          elements.push(<CitationPopover key={`cite-s-${idx}-${i}-${j}`} citation={{ ...citation, index: idx }} onFileClick={onFileClick} />);
         } else {
-          elements.push(<CitationPopover key={`cite-s-${idx}-${i}-${j}`} citation={{ index: idx, source: `Source ${idx}`, excerpt: "" }} />);
+          elements.push(<CitationPopover key={`cite-s-${idx}-${i}-${j}`} citation={{ index: idx, source: `Source ${idx}`, excerpt: "" }} onFileClick={onFileClick} />);
         }
       });
       if (elements.length > 0) return <>{elements}</>;
