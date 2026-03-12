@@ -498,7 +498,7 @@ export default function Chat() {
 
     if (!conversationId) {
       const fileIds = conversationAttachedFileIds.length > 0 ? conversationAttachedFileIds : undefined;
-      const fileNames = attachedFiles.length > 0 ? attachedFiles.map(f => f.name) : undefined;
+      const fileNames = conversationAttachedFileNames.length > 0 ? conversationAttachedFileNames : undefined;
       await createConversationAndSend(msg, vaultId, deepResearch, activeSources, promptMode, vaultName, workflowTag?.systemPrompt, fileIds, fileNames);
     } else {
       const opts: any = {
@@ -516,6 +516,7 @@ export default function Chat() {
       // For Uploads vault, scope to the originally attached files
       if (vaultName === "Uploads" && conversationAttachedFileIds.length > 0) {
         opts.attachedFileIds = conversationAttachedFileIds;
+        opts.attachedFileNames = conversationAttachedFileNames;
       }
       lastStreamOptions.current = opts;
       sendMessage(msg, opts);
