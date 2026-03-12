@@ -367,6 +367,7 @@ export function MessageBubble({
   planUpdateReason,
   progress,
   onFileClick,
+  onRedFlagOpen,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const citations = message.citations || [];
