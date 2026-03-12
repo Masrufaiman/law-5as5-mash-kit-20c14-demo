@@ -434,7 +434,6 @@ export default function Chat() {
       // Streaming just finished — check if last assistant message has red flags
       const lastAssistant = [...messages].reverse().find(m => m.role === "assistant");
       if (lastAssistant) {
-        const { parseRedFlags } = require("@/components/chat/RedFlagCard");
         const rfData = parseRedFlags(lastAssistant.content);
         if (rfData) {
           setRedFlagData(rfData);
