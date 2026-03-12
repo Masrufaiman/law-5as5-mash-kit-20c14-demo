@@ -977,33 +977,36 @@ serve(async (req) => {
             }
 
             // Decide next action
-            // GUARD: If explicit files are attached, NEVER switch to vault_search — attached files ARE the scope
-            if (attachedFileIds?.length && monologue.next_tool === "vault_search") {
-              nextTool = "";
-            }
-            // Check vault fallback: if vault returned irrelevant results, auto-switch to web
-            const vaultWasIrrelevant = monologue.vault_result_relevant === false;
-            if (monologue.next_action === "FINISH" && !vaultWasIrrelevant) {
-              nextTool = "";
-            } else if (attachedFileIds?.length && monologue.next_tool === "vault_search") {
-              // Already guarded above — force finish
-              nextTool = "";
-            } else if (vaultWasIrrelevant && !webSearchDone && perplexityKey) {
-              // Vault results irrelevant — auto fallback to web search
-              nextTool = "web_search";
-              nextInput = monologue.next_tool_input || { query: message };
-              emitThinking("Document results not relevant to query. Searching online sources...");
-              // Clear irrelevant vault citations
-              allCitations = allCitations.filter(c => c.url);
-              allFileRefs = [];
-            } else if (monologue.next_action === "TOOL" && monologue.next_tool) {
-              nextTool = monologue.next_tool;
-              nextInput = monologue.next_tool_input || { query: message };
+            // HARD GUARD: If explicit files are attached, only allow web_search (never vault_search or read_files again)
+            if (attachedFileIds?.length) {
+              if (monologue.next_action === "FINISH") {
+                nextTool = "";
+              } else if (monologue.next_tool === "web_search" && !webSearchDone && perplexityKey) {
+                nextTool = "web_search";
+                nextInput = monologue.next_tool_input || { query: message };
+              } else {
+                // Force finish — don't let monologue loop with vault_search or read_files
+                nextTool = "";
+              }
             } else {
-              // Default: if vault not searched and available, do that; else if web not searched, do that; else finish
-              if (!vaultSearchDone && hasVault && !attachedFileIds?.length) { nextTool = "vault_search"; }
-              else if (!webSearchDone && perplexityKey) { nextTool = "web_search"; }
-              else { nextTool = ""; }
+              // Check vault fallback: if vault returned irrelevant results, auto-switch to web
+              const vaultWasIrrelevant = monologue.vault_result_relevant === false;
+              if (monologue.next_action === "FINISH" && !vaultWasIrrelevant) {
+                nextTool = "";
+              } else if (vaultWasIrrelevant && !webSearchDone && perplexityKey) {
+                nextTool = "web_search";
+                nextInput = monologue.next_tool_input || { query: message };
+                emitThinking("Document results not relevant to query. Searching online sources...");
+                allCitations = allCitations.filter(c => c.url);
+                allFileRefs = [];
+              } else if (monologue.next_action === "TOOL" && monologue.next_tool) {
+                nextTool = monologue.next_tool;
+                nextInput = monologue.next_tool_input || { query: message };
+              } else {
+                if (!vaultSearchDone && hasVault) { nextTool = "vault_search"; }
+                else if (!webSearchDone && perplexityKey) { nextTool = "web_search"; }
+                else { nextTool = ""; }
+              }
             }
           }
 
