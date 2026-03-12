@@ -14,7 +14,7 @@ function getDomain(url: string): string {
   }
 }
 
-export function CitationPopover({ citation }: CitationPopoverProps) {
+export function CitationPopover({ citation, onFileClick }: CitationPopoverProps & { onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void }) {
   const domain = citation.url ? getDomain(citation.url) : null;
 
   return (
