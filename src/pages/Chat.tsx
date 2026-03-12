@@ -830,14 +830,14 @@ export default function Chat() {
   const rightPanel = sheetDoc ? (
     <SheetEditor
       data={sheetDoc}
-      onClose={() => {
+    onClose={() => {
         const container = scrollContainerRef.current;
         const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
         const scrollTop = viewport?.scrollTop || 0;
         setSheetDoc(null);
-        requestAnimationFrame(() => {
+        requestAnimationFrame(() => { requestAnimationFrame(() => {
           if (viewport) viewport.scrollTop = scrollTop;
-        });
+        }); });
       }}
       onUpdate={(updated) => setSheetDoc(updated)}
     />
