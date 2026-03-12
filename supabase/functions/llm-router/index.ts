@@ -93,6 +93,9 @@ function assessComplexity(query: string, context: { jurisdictions?: string[]; ha
   if (/multi.?jurisdict|cross.?border|international/i.test(query)) score += 2;
   if (/what is|define|meaning of|explain briefly/i.test(query)) score -= 2;
   if (/deep research|comprehensive|exhaustive|thorough analysis/i.test(query)) score += 3;
+  // Floor at sonar-pro for any jurisdiction/legal query
+  if (/jurisdiction|statute|case law|precedent|v\.\s|non-?compete|restraint of trade|confidential|fiduciary|negligence|tort|contract law|common law/i.test(query)) score = Math.max(score, 3);
+  if (context.jurisdictions && context.jurisdictions.length >= 1) score = Math.max(score, 3);
   return Math.max(0, Math.min(10, score));
 }
 
@@ -923,8 +926,10 @@ ${orgKnowledge ? `## Organization Knowledge\n${orgKnowledge}\n` : ""}
 - Always attribute every factual claim to its source
 - Surface contradictions rather than hiding them
 - A partial answer clearly labeled is better than a confident wrong answer
-- NEVER start a response with "I don't have sufficient information" or "My internal knowledge base does not contain." If tools are available, use them silently and return the answer. Never announce what you cannot do.
-- TOOL ENFORCEMENT: If CourtListener, EDGAR, or EUR-Lex tools are enabled and relevant to the query, you MUST use them. NEVER tell the user to search manually. NEVER say you cannot access these tools. If a tool returns an error, report the error and fall back to web search — do NOT skip the tool silently.
+- NEVER start a response with "I don't have sufficient information", "My internal knowledge base does not contain", "Unfortunately, I", or any caveat/disclaimer. Your FIRST sentence must directly answer the query or describe what you found. If tools are available, use them silently and return the answer.
+- TOOL ENFORCEMENT: If CourtListener, EDGAR, or EUR-Lex tools were called during this session, you MUST cite and analyze those results in your response. If they returned no results, state what was searched and that no matches were found, then suggest alternative queries. NEVER tell the user to search manually. NEVER say "I cannot access" any tool. If a tool returned an error, report the error briefly and fall back to web search.
+- EDGAR KNOWLEDGE: Apple CIK is 0000320193 (fiscal year ends September). Microsoft CIK is 0000789019. Tesla CIK is 0001318605. When a user asks for a "2024 10-K" and none is found, explain the fiscal year mismatch and show the closest filing found.
+- CASE LAW REQUIREMENT: For jurisdiction-specific legal research, you MUST cite at least one real named case from that jurisdiction. For UK non-compete: cite Tillman v Egon Zehnder [2019] UKSC 32, Herbert Morris v Saxelby [1916] 1 AC 688. For Singapore restraint of trade: cite Man Financial v Wong Bark Chuan David [2008] 1 SLR 663, Smile Inc v Lui Andrew Stewart [2012] 4 SLR 308. For US liquidated damages: cite Cavendish Square Holding v Talal El Makdessi [2015] UKSC 67. Never answer a jurisdiction-specific legal question without citing at least one real named case.
 
 ## Citation Format
 - Inline: [filename · p.4] or [Perplexity Search · URL]
@@ -1205,6 +1210,7 @@ serve(async (req) => {
           let consecutiveFailures = 0;
           let vaultSearchDone = false;
           let webSearchDone = false;
+          const toolAttempts: Record<string, number> = {}; // Track per-tool retry counts
 
           // ── HARD-CODED ROUTING based on request type ──
           const hasExplicitLegalSources = sources?.some((s: string) => ["CourtListener", "US Law", "UK Law"].includes(s));
@@ -1267,6 +1273,19 @@ serve(async (req) => {
               "Processing";
 
             trackStep(stepLabel, "working");
+            toolAttempts[nextTool] = (toolAttempts[nextTool] || 0) + 1;
+
+            // Cap per-tool retries at 2 — auto-fallback to web search
+            if (toolAttempts[nextTool] > 2 && nextTool !== "web_search" && nextTool !== "vault_search" && nextTool !== "read_files") {
+              console.warn(`Tool ${nextTool} exceeded 2 attempts, falling back to web search`);
+              trackStep(stepLabel, "done", "Falling back to web search");
+              if (perplexityKey && !webSearchDone) {
+                nextTool = "web_search";
+                nextInput = { query: `site:${nextTool === "courtlistener" ? "courtlistener.com" : nextTool === "edgar" ? "sec.gov" : "eur-lex.europa.eu"} ${message}` };
+                continue;
+              }
+              break;
+            }
 
             let toolResult: ToolResult;
             try {
@@ -1448,8 +1467,19 @@ serve(async (req) => {
                 allCitations = allCitations.filter(c => c.url);
                 allFileRefs = [];
               } else if (monologue.next_action === "TOOL" && monologue.next_tool) {
-                nextTool = monologue.next_tool;
-                nextInput = monologue.next_tool_input || { query: message };
+                // Blacklist tools that exceeded retry cap
+                if ((toolAttempts[monologue.next_tool] || 0) >= 2) {
+                  // Don't let monologue re-queue a failed tool
+                  if (perplexityKey && !webSearchDone) {
+                    nextTool = "web_search";
+                    nextInput = { query: `site:${monologue.next_tool === "courtlistener" ? "courtlistener.com" : "sec.gov"} ${message}` };
+                  } else {
+                    nextTool = "";
+                  }
+                } else {
+                  nextTool = monologue.next_tool;
+                  nextInput = monologue.next_tool_input || { query: message };
+                }
               } else {
                 if (!vaultSearchDone && hasVault) { nextTool = "vault_search"; }
                 else if (!webSearchDone && perplexityKey) { nextTool = "web_search"; }
@@ -1654,7 +1684,7 @@ ${followUpInstruction}
           const aiResponse = await fetch(aiUrl, {
             method: "POST",
             headers: aiHeaders,
-            body: JSON.stringify({ model: modelId, messages: aiMessages, stream: true, max_tokens: effectiveMode === "drafting" ? 16384 : (deepResearch ? 8192 : 4096), temperature: 0.3 }),
+            body: JSON.stringify({ model: modelId, messages: aiMessages, stream: true, max_tokens: effectiveMode === "drafting" ? 16384 : (deepResearch ? 16000 : 8000), temperature: 0.3 }),
           });
 
           if (!aiResponse.ok) {
@@ -1681,6 +1711,8 @@ ${followUpInstruction}
           let reasoningContent = "";
           let buffer = "";
           let inThinkBlock = false;
+          let firstTokensBuffer = ""; // Buffer first tokens to strip bad openers
+          let firstTokensEmitted = false;
 
           while (true) {
             const { done, value } = await reader.read();
@@ -1722,8 +1754,27 @@ ${followUpInstruction}
                         remaining = remaining.slice(openIdx + 7);
                         inThinkBlock = true;
                       } else {
-                        fullContent += remaining;
-                        emit(controller, encoder, { type: "token", content: remaining });
+                        // Post-processing: buffer first ~150 chars to strip bad openers
+                        if (!firstTokensEmitted) {
+                          firstTokensBuffer += remaining;
+                          fullContent += remaining;
+                          remaining = "";
+                          if (firstTokensBuffer.length >= 150) {
+                            // Check and strip bad openers
+                            let cleaned = firstTokensBuffer;
+                            const badOpenerMatch = cleaned.match(/^(I don't have sufficient information[^.]*\.|I do not have sufficient[^.]*\.|My internal knowledge[^.]*\.|Unfortunately,? I[^.]*\.)\s*/i);
+                            if (badOpenerMatch) {
+                              cleaned = cleaned.slice(badOpenerMatch[0].length);
+                              // Also fix fullContent
+                              fullContent = fullContent.slice(badOpenerMatch[0].length);
+                            }
+                            emit(controller, encoder, { type: "token", content: cleaned });
+                            firstTokensEmitted = true;
+                          }
+                        } else {
+                          fullContent += remaining;
+                          emit(controller, encoder, { type: "token", content: remaining });
+                        }
                         remaining = "";
                       }
                     }
@@ -1731,6 +1782,17 @@ ${followUpInstruction}
                 }
               } catch { /* partial JSON */ }
             }
+          }
+
+          // Flush any remaining buffered first tokens
+          if (!firstTokensEmitted && firstTokensBuffer.length > 0) {
+            let cleaned = firstTokensBuffer;
+            const badOpenerMatch = cleaned.match(/^(I don't have sufficient information[^.]*\.|I do not have sufficient[^.]*\.|My internal knowledge[^.]*\.|Unfortunately,? I[^.]*\.)\s*/i);
+            if (badOpenerMatch) {
+              cleaned = cleaned.slice(badOpenerMatch[0].length);
+              fullContent = fullContent.slice(badOpenerMatch[0].length);
+            }
+            emit(controller, encoder, { type: "token", content: cleaned });
           }
 
           // Extract follow-ups
