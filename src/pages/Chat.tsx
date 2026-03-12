@@ -431,21 +431,80 @@ export default function Chat() {
 
   // Auto-open document in redline view after red flag analysis completes
   const prevStreamingRef = useRef(false);
+
+  // Helper: robustly load file content with 3-tier fallback, then atomically set both states
+  const openRedFlagPanel = useCallback(async (rfData: RedFlagData, fileName: string, fileId?: string) => {
+    if (!profile?.organization_id) return;
+
+    // Tier 1: files table extracted_text
+    let content: string | null = null;
+    let resolvedName = fileName;
+
+    if (fileId) {
+      const { data } = await supabase.from("files").select("name, extracted_text").eq("id", fileId).maybeSingle();
+      if (data?.extracted_text) { content = data.extracted_text; resolvedName = data.name || fileName; }
+    }
+
+    if (!content) {
+      const { data } = await supabase.from("files").select("name, extracted_text").eq("organization_id", profile.organization_id).eq("name", fileName).maybeSingle();
+      if (data?.extracted_text) { content = data.extracted_text; resolvedName = data.name || fileName; }
+    }
+
+    // Tier 2: file_chunks table concatenated
+    if (!content && fileId) {
+      const { data: chunks } = await supabase
+        .from("file_chunks")
+        .select("content, chunk_index")
+        .eq("file_id", fileId)
+        .order("chunk_index", { ascending: true })
+        .limit(200);
+      if (chunks && chunks.length > 0) {
+        content = chunks.map(c => c.content).join("\n\n");
+      }
+    }
+
+    if (!content && !fileId) {
+      // Try to find file by name, then load chunks
+      const { data: fileRow } = await supabase.from("files").select("id").eq("organization_id", profile.organization_id).eq("name", fileName).maybeSingle();
+      if (fileRow) {
+        const { data: chunks } = await supabase
+          .from("file_chunks")
+          .select("content, chunk_index")
+          .eq("file_id", fileRow.id)
+          .order("chunk_index", { ascending: true })
+          .limit(200);
+        if (chunks && chunks.length > 0) {
+          content = chunks.map(c => c.content).join("\n\n");
+        }
+      }
+    }
+
+    // Tier 3: placeholder
+    if (!content) {
+      content = "Document is still being processed. The redline view will update when processing completes.";
+    }
+
+    // Atomic update — set both states together so the panel always renders
+    setRedFlagData(rfData);
+    setEditorDoc({ title: resolvedName, content });
+  }, [profile?.organization_id]);
+
   useEffect(() => {
     if (prevStreamingRef.current && !isStreaming) {
-      // Streaming just finished — check if last assistant message has red flags (any mode)
+      // Streaming just finished — check if last assistant message has red flags
       const lastAssistant = [...messages].reverse().find(m => m.role === "assistant");
       if (lastAssistant) {
         const rfData = parseRedFlags(lastAssistant.content);
         if (rfData && rfData.flags.length > 0) {
-          setRedFlagData(rfData);
-          // Try to open the first attached file using multiple fallbacks
           const refs = (lastAssistant as any).frozenFileRefs || fileRefs;
           if (refs?.[0]) {
-            handleFileClick(refs[0].name, refs[0].id);
+            openRedFlagPanel(rfData, refs[0].name, refs[0].id);
           } else if (conversationAttachedFileIds.length > 0) {
-            // Fallback: open the first conversation-attached file by ID
-            handleFileClick(conversationAttachedFileNames[0] || "document", conversationAttachedFileIds[0]);
+            openRedFlagPanel(rfData, conversationAttachedFileNames[0] || "document", conversationAttachedFileIds[0]);
+          } else {
+            // No file ref at all — still open the panel with flag data
+            setRedFlagData(rfData);
+            setEditorDoc({ title: rfData.title || "Document", content: "Original document content unavailable." });
           }
         }
       }
