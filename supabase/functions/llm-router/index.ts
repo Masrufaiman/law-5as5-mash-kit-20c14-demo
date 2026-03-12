@@ -1312,6 +1312,42 @@ ${followUpInstruction}
             }
           }
 
+          // ════════════════════════════════════
+          // PHASE 7: SAVE AGENT MEMORY
+          // ════════════════════════════════════
+          try {
+            const memoryResp = await fetch(aiUrl, {
+              method: "POST",
+              headers: aiHeaders,
+              body: JSON.stringify({
+                model: modelId,
+                messages: [
+                  { role: "system", content: "Summarize this conversation exchange in exactly 2 concise sentences for future context. Focus on: what the user asked, what was found/decided, and any important facts learned. Output ONLY the 2 sentences, nothing else." },
+                  { role: "user", content: `User: ${message}\n\nAssistant: ${cleanedContent.substring(0, 2000)}` },
+                ],
+                max_tokens: 150,
+                temperature: 0,
+              }),
+            });
+            if (memoryResp.ok) {
+              const memData = await memoryResp.json();
+              const memorySummary = memData.choices?.[0]?.message?.content?.trim();
+              if (memorySummary) {
+                const category = intent.taskType || "general";
+                await adminClient.from("agent_memory").insert({
+                  organization_id: orgId, user_id: userId, content: memorySummary, category,
+                });
+                // Prune old entries — keep only last 50 per user
+                const { data: oldEntries } = await adminClient.from("agent_memory").select("id").eq("organization_id", orgId).eq("user_id", userId).order("created_at", { ascending: false }).range(50, 1000);
+                if (oldEntries?.length) {
+                  await adminClient.from("agent_memory").delete().in("id", oldEntries.map((e: any) => e.id));
+                }
+              }
+            }
+          } catch (memErr) {
+            console.error("Agent memory save error:", memErr);
+          }
+
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
         } catch (err) {
