@@ -1273,6 +1273,19 @@ serve(async (req) => {
               "Processing";
 
             trackStep(stepLabel, "working");
+            toolAttempts[nextTool] = (toolAttempts[nextTool] || 0) + 1;
+
+            // Cap per-tool retries at 2 — auto-fallback to web search
+            if (toolAttempts[nextTool] > 2 && nextTool !== "web_search" && nextTool !== "vault_search" && nextTool !== "read_files") {
+              console.warn(`Tool ${nextTool} exceeded 2 attempts, falling back to web search`);
+              trackStep(stepLabel, "done", "Falling back to web search");
+              if (perplexityKey && !webSearchDone) {
+                nextTool = "web_search";
+                nextInput = { query: `site:${nextTool === "courtlistener" ? "courtlistener.com" : nextTool === "edgar" ? "sec.gov" : "eur-lex.europa.eu"} ${message}` };
+                continue;
+              }
+              break;
+            }
 
             let toolResult: ToolResult;
             try {
