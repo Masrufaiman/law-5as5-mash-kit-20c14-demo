@@ -909,6 +909,14 @@ serve(async (req) => {
 
             trackStep(stepLabel, "done", toolResult.summary);
 
+            // ══ FORCE FINISH when attached files have been read ══
+            // If the user explicitly attached files and we just read them, skip monologue entirely.
+            // The monologue tends to suggest vault_search or ask "which document?" — bypass it completely.
+            if (attachedFileIds?.length && nextTool === "read_files" && toolResult.context) {
+              emitThinking("Documents loaded. Preparing analysis...");
+              break;
+            }
+
             // ── INNER MONOLOGUE ──
             const monologue = await innerMonologue(aiUrl, aiKey, modelId, aiHeaders, message, currentPlan, accumulatedContext, toolResult, iteration, currentPlan.length, attachedFileNames);
 
