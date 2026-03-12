@@ -99,8 +99,9 @@ export default function Chat() {
   const [workflowTag, setWorkflowTag] = useState<{ title: string; systemPrompt?: string } | null>(null);
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [replyContext, setReplyContext] = useState<string | null>(null);
-  // Track attached file IDs for Uploads vault scoping across messages
+  // Track attached file IDs and names for Uploads vault scoping across messages
   const [conversationAttachedFileIds, setConversationAttachedFileIds] = useState<string[]>([]);
+  const [conversationAttachedFileNames, setConversationAttachedFileNames] = useState<string[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [highlightExcerpt, setHighlightExcerpt] = useState<string | undefined>();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -334,8 +335,9 @@ export default function Chat() {
         const effectiveVaultName = vName || "Uploads";
         setVaultId(effectiveVault);
         setVaultName(effectiveVaultName);
-        // Track attached file IDs for subsequent messages
+        // Track attached file IDs and names for subsequent messages
         setConversationAttachedFileIds(preProcessedFileIds);
+        setConversationAttachedFileNames(preProcessedFileNames);
         createConversationAndSend(msg, effectiveVault, deep, srcs, pMode, effectiveVaultName, wfTag?.systemPrompt, preProcessedFileIds, preProcessedFileNames);
       } else {
         createConversationAndSend(msg, vault, deep, srcs, pMode, vName, wfTag?.systemPrompt);
@@ -496,7 +498,7 @@ export default function Chat() {
 
     if (!conversationId) {
       const fileIds = conversationAttachedFileIds.length > 0 ? conversationAttachedFileIds : undefined;
-      const fileNames = attachedFiles.length > 0 ? attachedFiles.map(f => f.name) : undefined;
+      const fileNames = conversationAttachedFileNames.length > 0 ? conversationAttachedFileNames : undefined;
       await createConversationAndSend(msg, vaultId, deepResearch, activeSources, promptMode, vaultName, workflowTag?.systemPrompt, fileIds, fileNames);
     } else {
       const opts: any = {
@@ -514,6 +516,7 @@ export default function Chat() {
       // For Uploads vault, scope to the originally attached files
       if (vaultName === "Uploads" && conversationAttachedFileIds.length > 0) {
         opts.attachedFileIds = conversationAttachedFileIds;
+        opts.attachedFileNames = conversationAttachedFileNames;
       }
       lastStreamOptions.current = opts;
       sendMessage(msg, opts);
@@ -608,6 +611,7 @@ export default function Chat() {
     try {
       const result = await processAttachedFiles(attachedFiles);
       setConversationAttachedFileIds(prev => [...prev, ...result.fileIds]);
+      setConversationAttachedFileNames(prev => [...prev, ...attachedFiles.map(f => f.name)]);
       setVaultId(result.vaultId);
       setVaultName("Uploads");
 
@@ -693,7 +697,7 @@ export default function Chat() {
       currentSheetState: sheetDoc,
       workflowSystemPrompt: workflowTag?.systemPrompt,
       currentDocumentContent: editorDoc?.content,
-      ...(vaultName === "Uploads" && conversationAttachedFileIds.length > 0 ? { attachedFileIds: conversationAttachedFileIds } : {}),
+      ...(vaultName === "Uploads" && conversationAttachedFileIds.length > 0 ? { attachedFileIds: conversationAttachedFileIds, attachedFileNames: conversationAttachedFileNames } : {}),
     };
     lastStreamOptions.current = opts;
     sendMessage(newContent, opts);
@@ -711,6 +715,7 @@ export default function Chat() {
     setEditorDoc(null);
     setSheetDoc(null);
     setConversationAttachedFileIds([]);
+    setConversationAttachedFileNames([]);
     initialMessageSentRef.current = false;
     clearMessages();
     navigate("/chat", { replace: true });
