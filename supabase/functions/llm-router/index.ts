@@ -279,21 +279,8 @@ async function toolEdgar(query: string, userAgent: string): Promise<ToolResult> 
 
   return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
 }
-  const data = await resp.json();
-  const hits = (data.hits?.hits || []).slice(0, 8);
-  if (!hits.length) return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
-  const citations = hits.map((h: any, i: number) => ({
-    index: i + 1,
-    source: `${h._source?.entity_name || "Unknown"} — ${h._source?.form_type || "Filing"}`,
-    excerpt: (h._source?.file_description || "").substring(0, 200),
-    url: h._source?.file_url ? `https://www.sec.gov/Archives/edgar/data/${h._source.file_url}` : undefined,
-  }));
-  const context = hits.map((h: any) => {
-    const s = h._source || {};
-    return `## ${s.entity_name || "Unknown"} — ${s.form_type || "Filing"}\nCIK: ${s.entity_id || "N/A"} | Filed: ${s.file_date || "N/A"}\n${s.file_description || ""}`;
-  }).join("\n\n");
-  return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${hits.length} filings found` };
-}
+
+
 
 // ──────────────────────────────────────────────
 // Tool: EUR-Lex Search
