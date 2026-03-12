@@ -432,15 +432,15 @@ export default function Chat() {
   // Auto-open document in redline view after red flag analysis completes
   const prevStreamingRef = useRef(false);
   useEffect(() => {
-    if (prevStreamingRef.current && !isStreaming && promptMode === "red_flags") {
-      // Streaming just finished — check if last assistant message has red flags
+    if (prevStreamingRef.current && !isStreaming) {
+      // Streaming just finished — check if last assistant message has red flags (any mode)
       const lastAssistant = [...messages].reverse().find(m => m.role === "assistant");
       if (lastAssistant) {
         const rfData = parseRedFlags(lastAssistant.content);
-        if (rfData) {
+        if (rfData && rfData.flags.length > 0) {
           setRedFlagData(rfData);
           // Auto-open the first attached file
-          const refs = fileRefs || lastAssistant.frozenFileRefs;
+          const refs = (lastAssistant as any).frozenFileRefs || fileRefs;
           if (refs?.[0]) {
             handleFileClick(refs[0].name, refs[0].id);
           }
@@ -448,7 +448,8 @@ export default function Chat() {
       }
     }
     prevStreamingRef.current = isStreaming;
-  }, [isStreaming]);
+  }, [isStreaming, messages.length]);
+
 
   const lastStreamOptions = useRef<any>(null);
 
@@ -615,6 +616,13 @@ export default function Chat() {
       handleDocumentOpen(data.name || fileName, data.extracted_text, excerpt);
     }
   }, [profile?.organization_id, handleDocumentOpen]);
+
+  // Callback for "Open in Editor" from RedFlagCard — sets redFlagData AND opens the file
+  const handleRedFlagOpen = useCallback((data: RedFlagData, fileName: string, fileId?: string) => {
+    setRedFlagData(data);
+    handleFileClick(fileName, fileId);
+  }, [handleFileClick]);
+
 
   const handleFileSelect = useCallback(() => {
     fileInputRef.current?.click();
@@ -1081,6 +1089,7 @@ export default function Chat() {
                         planUpdateReason={isCurrentlyStreaming ? planUpdateReason : null}
                         progress={isCurrentlyStreaming ? progress : null}
                         onFileClick={handleFileClick}
+                        onRedFlagOpen={handleRedFlagOpen}
                         onEditMessage={handleEditMessage}
                       />
 
