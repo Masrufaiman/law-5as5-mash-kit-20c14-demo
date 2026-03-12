@@ -522,7 +522,7 @@ OUTPUT ONLY THIS JSON (no markdown, no backticks):
   "confidence": "high|medium|low",
   "gaps": ["what I still don't know"],
   "next_action": "TOOL|REPLAN|VERIFY|FINISH",
-  "next_tool": "vault_search|web_search|read_files",
+  "next_tool": "vault_search|web_search|read_files|courtlistener|edgar|eurlex",
   "next_tool_input": {"query": "search query if TOOL"},
   "search_model": "sonar|sonar-pro|sonar-deep-research",
   "thinking_narration": "2-3 sentences for user to see",
