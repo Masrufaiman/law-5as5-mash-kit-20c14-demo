@@ -457,7 +457,7 @@ export function StepTracker({
                 return (
                   <button
                     key={c.index}
-                    onClick={() => onFileClick?.(displayName)}
+                    onClick={() => onFileClick?.(displayName, undefined, c.excerpt)}
                     className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground hover:bg-accent/50 transition-colors cursor-pointer"
                   >
                     <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
