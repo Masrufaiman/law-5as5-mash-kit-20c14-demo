@@ -412,7 +412,7 @@ export default function Chat() {
       container.removeEventListener("mouseup", handleMouseUp);
       document.removeEventListener("mousedown", handleMouseDown);
     };
-  }, []);
+  }, [messages.length > 0]);
 
   const handleReplyWithSelection = () => {
     if (!selectionTooltip) return;
