@@ -1087,6 +1087,7 @@ export default function Chat() {
                         planUpdateReason={isCurrentlyStreaming ? planUpdateReason : null}
                         progress={isCurrentlyStreaming ? progress : null}
                         onFileClick={handleFileClick}
+                        onRedFlagOpen={handleRedFlagOpen}
                         onEditMessage={handleEditMessage}
                       />
 
