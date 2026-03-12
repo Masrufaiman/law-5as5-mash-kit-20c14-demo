@@ -1467,8 +1467,19 @@ serve(async (req) => {
                 allCitations = allCitations.filter(c => c.url);
                 allFileRefs = [];
               } else if (monologue.next_action === "TOOL" && monologue.next_tool) {
-                nextTool = monologue.next_tool;
-                nextInput = monologue.next_tool_input || { query: message };
+                // Blacklist tools that exceeded retry cap
+                if ((toolAttempts[monologue.next_tool] || 0) >= 2) {
+                  // Don't let monologue re-queue a failed tool
+                  if (perplexityKey && !webSearchDone) {
+                    nextTool = "web_search";
+                    nextInput = { query: `site:${monologue.next_tool === "courtlistener" ? "courtlistener.com" : "sec.gov"} ${message}` };
+                  } else {
+                    nextTool = "";
+                  }
+                } else {
+                  nextTool = monologue.next_tool;
+                  nextInput = monologue.next_tool_input || { query: message };
+                }
               } else {
                 if (!vaultSearchDone && hasVault) { nextTool = "vault_search"; }
                 else if (!webSearchDone && perplexityKey) { nextTool = "web_search"; }
