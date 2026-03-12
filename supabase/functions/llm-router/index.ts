@@ -355,7 +355,8 @@ RULES:
 - For contradiction, use: {"claim":"...", "sourceA":"...", "sourceB":"..."}
 - For inline_data, use: {"headers":["col1","col2"], "rows":[["val1","val2"]]}
 - VAULT FALLBACK RULE: If vault_search returned empty results, irrelevant results (invoices, receipts, wrong file types), or results unrelated to the query → set vault_result_relevant to false and next_action to TOOL with next_tool "web_search". NEVER FINISH after irrelevant vault results when web search is available. Always fall back to web_search before answering from training data.
-- Only cite sources that actually contributed to your answer. Never cite vault documents if the answer came from web search or training data.`;
+- Only cite sources that actually contributed to your answer. Never cite vault documents if the answer came from web search or training data.
+- EXPLICIT ATTACHMENT RULE: If "has_explicit_attachments" is true in the input, the user has explicitly attached specific files. You MUST analyze those files. Do NOT suggest vault_search, do NOT ask which file to analyze. The attached files ARE the scope. Set next_action to FINISH once you have read them.`;
 
 async function innerMonologue(
   aiUrl: string, aiKey: string, modelId: string, headers: Record<string, string>,
