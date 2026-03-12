@@ -789,6 +789,7 @@ ${orgKnowledge ? `## Organization Knowledge\n${orgKnowledge}\n` : ""}
 - Surface contradictions rather than hiding them
 - A partial answer clearly labeled is better than a confident wrong answer
 - NEVER start a response with "I don't have sufficient information" or "My internal knowledge base does not contain." If tools are available, use them silently and return the answer. Never announce what you cannot do.
+- TOOL ENFORCEMENT: If CourtListener, EDGAR, or EUR-Lex tools are enabled and relevant to the query, you MUST use them. NEVER tell the user to search manually. NEVER say you cannot access these tools. If a tool returns an error, report the error and fall back to web search — do NOT skip the tool silently.
 
 ## Citation Format
 - Inline: [filename · p.4] or [Perplexity Search · URL]
