@@ -112,7 +112,7 @@ export default function Chat() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isReplyingRef = useRef(false);
 
-  // Persist prompt state to sessionStorage
+  // Persist prompt state to localStorage (survives reload)
   const storageKey = conversationId ? `chat_state_${conversationId}` : "chat_state_new";
 
   // Save prompt state on changes
@@ -124,9 +124,10 @@ export default function Chat() {
       promptMode,
       selectedVault,
       workflowTag,
+      replyContext,
     };
-    try { sessionStorage.setItem(storageKey, JSON.stringify(state)); } catch {}
-  }, [input, deepResearch, activeSources, promptMode, selectedVault, workflowTag, storageKey]);
+    try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch {}
+  }, [input, deepResearch, activeSources, promptMode, selectedVault, workflowTag, replyContext, storageKey]);
 
   // Restore prompt state on mount / conversation change
   const hasRestoredRef = useRef<string | null>(null);
@@ -134,7 +135,7 @@ export default function Chat() {
     if (hasRestoredRef.current === storageKey) return;
     hasRestoredRef.current = storageKey;
     try {
-      const saved = sessionStorage.getItem(storageKey);
+      const saved = localStorage.getItem(storageKey);
       if (!saved) return;
       const state = JSON.parse(saved);
       if (state.input) setInput(state.input);
@@ -147,6 +148,7 @@ export default function Chat() {
         setVaultName(state.selectedVault.name);
       }
       if (state.workflowTag) setWorkflowTag(state.workflowTag);
+      if (state.replyContext) setReplyContext(state.replyContext);
     } catch {}
   }, [storageKey]);
 
