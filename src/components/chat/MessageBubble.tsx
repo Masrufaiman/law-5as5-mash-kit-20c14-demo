@@ -145,16 +145,17 @@ function superscriptToNumber(s: string): number {
 
 function processChildren(
   children: React.ReactNode,
-  citations: Citation[]
+  citations: Citation[],
+  onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void
 ): React.ReactNode {
   return React.Children.map(children, (child) => {
     if (typeof child === "string") {
-      return injectCitations(child, citations);
+      return injectCitations(child, citations, onFileClick);
     }
     if (React.isValidElement(child) && child.props?.children) {
       return React.cloneElement(child, {
         ...child.props,
-        children: processChildren(child.props.children, citations),
+        children: processChildren(child.props.children, citations, onFileClick),
       } as any);
     }
     return child;
