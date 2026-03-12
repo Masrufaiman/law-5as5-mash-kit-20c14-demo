@@ -962,9 +962,16 @@ serve(async (req) => {
             }
 
             // Decide next action
+            // GUARD: If explicit files are attached, NEVER switch to vault_search — attached files ARE the scope
+            if (attachedFileIds?.length && monologue.next_tool === "vault_search") {
+              nextTool = "";
+            }
             // Check vault fallback: if vault returned irrelevant results, auto-switch to web
             const vaultWasIrrelevant = monologue.vault_result_relevant === false;
             if (monologue.next_action === "FINISH" && !vaultWasIrrelevant) {
+              nextTool = "";
+            } else if (attachedFileIds?.length && monologue.next_tool === "vault_search") {
+              // Already guarded above — force finish
               nextTool = "";
             } else if (vaultWasIrrelevant && !webSearchDone && perplexityKey) {
               // Vault results irrelevant — auto fallback to web search
@@ -979,7 +986,7 @@ serve(async (req) => {
               nextInput = monologue.next_tool_input || { query: message };
             } else {
               // Default: if vault not searched and available, do that; else if web not searched, do that; else finish
-              if (!vaultSearchDone && hasVault) { nextTool = "vault_search"; }
+              if (!vaultSearchDone && hasVault && !attachedFileIds?.length) { nextTool = "vault_search"; }
               else if (!webSearchDone && perplexityKey) { nextTool = "web_search"; }
               else { nextTool = ""; }
             }
