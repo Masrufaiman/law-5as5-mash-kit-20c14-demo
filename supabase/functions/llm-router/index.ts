@@ -216,30 +216,69 @@ async function toolCourtListener(query: string, apiKey: string): Promise<ToolRes
 // Tool: EDGAR (SEC) Search
 // ──────────────────────────────────────────────
 async function toolEdgar(query: string, userAgent: string): Promise<ToolResult> {
-  const url = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}&dateRange=custom&startdt=2020-01-01&forms=10-K,10-Q,8-K,S-1,DEF+14A`;
-  const resp = await fetch(url, { headers: { "User-Agent": userAgent, Accept: "application/json" } });
-  if (!resp.ok) {
-    // Fallback to full-text search API
-    const fallbackUrl = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}`;
-    const fallbackResp = await fetch(fallbackUrl, { headers: { "User-Agent": userAgent, Accept: "application/json" } });
-    if (!fallbackResp.ok) {
-      return { context: "", citations: [], domains: ["sec.gov"], fileRefs: [], summary: `EDGAR error: ${resp.status}` };
+  const headers = { "User-Agent": userAgent, Accept: "application/json" };
+
+  // Try EDGAR full-text search API (correct endpoint)
+  const endpoints = [
+    `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}&dateRange=custom&startdt=2020-01-01&forms=10-K,10-Q,8-K,S-1,DEF+14A`,
+    `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const hits = (data.hits?.hits || data.filings || []).slice(0, 8);
+      if (!hits.length) continue;
+
+      const citations = hits.map((h: any, i: number) => ({
+        index: i + 1,
+        source: `${h._source?.entity_name || h.company_name || "Unknown"} — ${h._source?.form_type || h.form_type || "Filing"}`,
+        excerpt: (h._source?.file_description || h.description || "").substring(0, 200),
+        url: h._source?.file_url ? `https://www.sec.gov/Archives/edgar/data/${h._source.file_url}` : (h.filing_href || undefined),
+      }));
+      const context = hits.map((h: any) => {
+        const s = h._source || h;
+        return `## ${s.entity_name || s.company_name || "Unknown"} — ${s.form_type || "Filing"}\nCIK: ${s.entity_id || s.cik || "N/A"} | Filed: ${s.file_date || s.date_filed || "N/A"}\n${s.file_description || s.description || ""}`;
+      }).join("\n\n");
+      return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${hits.length} filings found` };
+    } catch (e) {
+      console.error("EDGAR endpoint failed:", url, e);
+      continue;
     }
-    const fallbackData = await fallbackResp.json();
-    const hits = (fallbackData.hits?.hits || []).slice(0, 8);
-    if (!hits.length) return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
-    const citations = hits.map((h: any, i: number) => ({
-      index: i + 1,
-      source: `${h._source?.entity_name || "Unknown"} — ${h._source?.form_type || "Filing"}`,
-      excerpt: (h._source?.file_description || "").substring(0, 200),
-      url: h._source?.file_url ? `https://www.sec.gov/Archives/edgar/data/${h._source.file_url}` : undefined,
-    }));
-    const context = hits.map((h: any) => {
-      const s = h._source || {};
-      return `## ${s.entity_name || "Unknown"} — ${s.form_type || "Filing"}\nCIK: ${s.entity_id || "N/A"} | Filed: ${s.file_date || "N/A"}\n${s.file_description || ""}`;
-    }).join("\n\n");
-    return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${hits.length} filings found` };
   }
+
+  // Tertiary fallback: EDGAR company search (Atom feed)
+  try {
+    const companyName = query.replace(/\b(10-K|10-Q|8-K|S-1|SEC|EDGAR|filing|annual|report|quarterly)\b/gi, "").trim();
+    if (companyName.length > 2) {
+      const atomUrl = `https://www.sec.gov/cgi-bin/browse-edgar?company=${encodeURIComponent(companyName)}&CIK=&type=10-K&dateb=&owner=include&count=10&search_text=&action=getcompany&output=atom`;
+      const atomResp = await fetch(atomUrl, { headers: { "User-Agent": userAgent, Accept: "application/atom+xml" } });
+      if (atomResp.ok) {
+        const atomText = await atomResp.text();
+        // Parse Atom XML for entries
+        const entries = [...atomText.matchAll(/<entry>([\s\S]*?)<\/entry>/g)];
+        if (entries.length > 0) {
+          const results = entries.slice(0, 8).map((e, i) => {
+            const title = e[1].match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1]?.trim() || "Filing";
+            const link = e[1].match(/<link[^>]*href="([^"]+)"/)?.[1] || "";
+            const updated = e[1].match(/<updated>([\s\S]*?)<\/updated>/)?.[1]?.trim() || "";
+            const summary = e[1].match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1]?.replace(/<[^>]*>/g, "").trim() || "";
+            return { title, link, updated, summary };
+          });
+          const citations = results.map((r, i) => ({ index: i + 1, source: r.title, excerpt: r.summary.substring(0, 200), url: r.link }));
+          const context = results.map(r => `## ${r.title}\nDate: ${r.updated}\n${r.summary}`).join("\n\n");
+          return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${results.length} company filings found` };
+        }
+      }
+    }
+  } catch (e) {
+    console.error("EDGAR company search fallback failed:", e);
+  }
+
+  return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
+}
   const data = await resp.json();
   const hits = (data.hits?.hits || []).slice(0, 8);
   if (!hits.length) return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
