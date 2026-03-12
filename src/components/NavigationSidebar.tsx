@@ -23,6 +23,7 @@ import {
   Pencil,
   PanelLeftClose,
   PanelLeft,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
