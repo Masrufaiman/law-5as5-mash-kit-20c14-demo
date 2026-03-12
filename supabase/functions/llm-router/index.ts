@@ -710,12 +710,17 @@ serve(async (req) => {
       }
     }
 
-    const effectiveMode = promptMode || useCase;
+    let effectiveMode = promptMode || useCase;
     const needsSearch = (sources && sources.length > 0) || deepResearch;
-    const isUploadsVaultEarly = clientVaultName === "Uploads";
+    const isUploadsVaultEarly = clientVaultName === "Uploads" || clientVaultName === "Prompt Uploads";
     // Treat as "has vault" if explicit file IDs exist OR a non-Uploads vault is selected
     const hasVault = !!(attachedFileIds?.length) || !!(vaultId && !isUploadsVaultEarly);
 
+    // Auto-detect red flag intent from message keywords regardless of mode
+    const isRedFlagIntent = /red\s*flag|red\s*line|flag.*clause|risky.*clause|analyze.*risk/i.test(message);
+    if (isRedFlagIntent && effectiveMode !== "red_flags") {
+      effectiveMode = "red_flags";
+    }
     // ──────── RESOLVE AI CONFIG ────────
     let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
     let aiKey = Deno.env.get("LOVABLE_API_KEY") || "";
