@@ -1225,8 +1225,8 @@ serve(async (req) => {
               case 1: // Factual — no vault, maybe web if complex
                 nextTool = (complexity >= 4 && perplexityKey) ? "web_search" : "";
                 break;
-              case 2: // Case lookup — CourtListener first if available, else web search
-                nextTool = courtListenerKey ? "courtlistener" : (perplexityKey ? "web_search" : "");
+              case 2: // Case lookup — CourtListener first (works without key too), else web search
+                nextTool = "courtlistener";
                 break;
               case 3: // Document task — read files first
                 nextTool = "read_files";
@@ -1234,11 +1234,11 @@ serve(async (req) => {
               case 4: // Vault task — search vault
                 nextTool = "vault_search";
                 break;
-              case 5: // EDGAR/SEC lookup
-                nextTool = edgarEnabled ? "edgar" : (perplexityKey ? "web_search" : "");
+              case 5: // EDGAR/SEC lookup — always try EDGAR
+                nextTool = "edgar";
                 break;
-              case 6: // EUR-Lex lookup
-                nextTool = eurlexEnabled ? "eurlex" : (perplexityKey ? "web_search" : "");
+              case 6: // EUR-Lex lookup — always try EUR-Lex
+                nextTool = "eurlex";
                 break;
               default:
                 nextTool = "";
