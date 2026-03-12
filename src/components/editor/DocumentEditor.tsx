@@ -294,10 +294,20 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
     if (!showEdits || currentVersion === 0) return null;
     return computeDiff(versions[currentVersion - 1], versions[currentVersion]);
   }, [showEdits, versions, currentVersion]);
+  /** Strip AI conversational preamble before first heading */
+  const stripPreamble = (html: string): string => {
+    // Find first <h1> or <h2> tag — everything before it is preamble
+    const headingMatch = html.match(/<h[12][^>]*>/i);
+    if (headingMatch && headingMatch.index !== undefined && headingMatch.index > 0) {
+      return html.substring(headingMatch.index);
+    }
+    return html;
+  };
 
   const handleExportTxt = () => {
+    const cleanedHtml = stripPreamble(editorContent);
     // Convert HTML to plain text
-    const txt = editorContent
+    const txt = cleanedHtml
       .replace(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/gi, "$1\n\n")
       .replace(/<strong>(.*?)<\/strong>/gi, "$1")
       .replace(/<em>(.*?)<\/em>/gi, "$1")
