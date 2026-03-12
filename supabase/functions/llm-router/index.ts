@@ -1754,8 +1754,27 @@ ${followUpInstruction}
                         remaining = remaining.slice(openIdx + 7);
                         inThinkBlock = true;
                       } else {
-                        fullContent += remaining;
-                        emit(controller, encoder, { type: "token", content: remaining });
+                        // Post-processing: buffer first ~150 chars to strip bad openers
+                        if (!firstTokensEmitted) {
+                          firstTokensBuffer += remaining;
+                          fullContent += remaining;
+                          remaining = "";
+                          if (firstTokensBuffer.length >= 150) {
+                            // Check and strip bad openers
+                            let cleaned = firstTokensBuffer;
+                            const badOpenerMatch = cleaned.match(/^(I don't have sufficient information[^.]*\.|I do not have sufficient[^.]*\.|My internal knowledge[^.]*\.|Unfortunately,? I[^.]*\.)\s*/i);
+                            if (badOpenerMatch) {
+                              cleaned = cleaned.slice(badOpenerMatch[0].length);
+                              // Also fix fullContent
+                              fullContent = fullContent.slice(badOpenerMatch[0].length);
+                            }
+                            emit(controller, encoder, { type: "token", content: cleaned });
+                            firstTokensEmitted = true;
+                          }
+                        } else {
+                          fullContent += remaining;
+                          emit(controller, encoder, { type: "token", content: remaining });
+                        }
                         remaining = "";
                       }
                     }
