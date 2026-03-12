@@ -450,11 +450,6 @@ export default function Chat() {
     prevStreamingRef.current = isStreaming;
   }, [isStreaming, messages.length]);
 
-  // Callback for "Open in Editor" from RedFlagCard — sets redFlagData AND opens the file
-  const handleRedFlagOpen = useCallback((data: RedFlagData, fileName: string, fileId?: string) => {
-    setRedFlagData(data);
-    handleFileClick(fileName, fileId);
-  }, [handleFileClick]);
 
   const lastStreamOptions = useRef<any>(null);
 
