@@ -83,9 +83,9 @@ function UserMessageActions({ content, onEdit }: { content: string; onEdit?: () 
 }
 
 /** Attachment badges (vault, files, config tags) shown under user messages */
-function AttachmentBadges({ attachments }: { attachments: ChatMessage["attachments"] }) {
+function AttachmentBadges({ attachments, onFileClick }: { attachments: ChatMessage["attachments"]; onFileClick?: (fileName: string) => void }) {
   if (!attachments) return null;
-  const { vaultName, fileNames, promptMode, sources, deepResearch, workflowTitle } = attachments as any;
+  const { vaultName, fileNames, fileIds, promptMode, sources, deepResearch, workflowTitle } = attachments as any;
   const hasAnything = vaultName || (fileNames && fileNames.length > 0) || promptMode || (sources && sources.length > 0) || deepResearch || workflowTitle;
   if (!hasAnything) return null;
 
@@ -118,7 +118,12 @@ function AttachmentBadges({ attachments }: { attachments: ChatMessage["attachmen
         </Badge>
       ))}
       {fileNames?.map((name: string, i: number) => (
-        <Badge key={i} variant="outline" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
+        <Badge
+          key={i}
+          variant="outline"
+          className="text-[10px] py-0 px-1.5 gap-1 font-normal cursor-pointer hover:bg-muted/50 transition-colors"
+          onClick={() => onFileClick?.(name)}
+        >
           <Paperclip className="h-2.5 w-2.5" />
           {name}
         </Badge>
