@@ -175,6 +175,7 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
   const [currentVersion, setCurrentVersion] = useState(0);
   const [showEdits, setShowEdits] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
+  const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const prevTitleRef = useRef<string>("");
 
