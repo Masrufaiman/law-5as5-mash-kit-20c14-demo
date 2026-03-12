@@ -357,32 +357,108 @@ async function toolEdgar(query: string, userAgent: string): Promise<ToolResult> 
 // ──────────────────────────────────────────────
 // Tool: EUR-Lex Search
 // ──────────────────────────────────────────────
+// Known CELEX numbers for common EU regulations
+const KNOWN_CELEX: Record<string, { celex: string; title: string }> = {
+  "gdpr": { celex: "32016R0679", title: "General Data Protection Regulation (GDPR)" },
+  "general data protection": { celex: "32016R0679", title: "General Data Protection Regulation (GDPR)" },
+  "ai act": { celex: "32024R1689", title: "EU Artificial Intelligence Act" },
+  "artificial intelligence act": { celex: "32024R1689", title: "EU Artificial Intelligence Act" },
+  "mifid": { celex: "32014L0065", title: "MiFID II - Markets in Financial Instruments Directive" },
+  "mifid ii": { celex: "32014L0065", title: "MiFID II - Markets in Financial Instruments Directive" },
+  "dora": { celex: "32022R2554", title: "Digital Operational Resilience Act (DORA)" },
+  "trade secrets": { celex: "32016L0943", title: "Trade Secrets Directive" },
+  "ecommerce directive": { celex: "32000L0031", title: "E-Commerce Directive" },
+  "digital services act": { celex: "32022R2065", title: "Digital Services Act (DSA)" },
+  "dsa": { celex: "32022R2065", title: "Digital Services Act (DSA)" },
+  "digital markets act": { celex: "32022R1925", title: "Digital Markets Act (DMA)" },
+  "dma": { celex: "32022R1925", title: "Digital Markets Act (DMA)" },
+  "nis2": { celex: "32022L2555", title: "NIS 2 Directive" },
+};
+
 async function toolEurLex(query: string): Promise<ToolResult> {
-  // Use EUR-Lex REST search (returns HTML, extract key info)
-  const url = `https://eur-lex.europa.eu/search.html?scope=EURLEX&text=${encodeURIComponent(query)}&type=quick&lang=en`;
+  const queryLower = query.toLowerCase();
+
+  // Check for known regulations first — direct CELEX fetch is faster and more reliable
+  for (const [keyword, info] of Object.entries(KNOWN_CELEX)) {
+    if (queryLower.includes(keyword)) {
+      const celexUrl = `https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:${info.celex}`;
+      try {
+        const resp = await fetch(celexUrl, { headers: { Accept: "text/html" } });
+        if (resp.ok) {
+          const html = await resp.text();
+          // Extract first ~2000 chars of body text
+          const bodyMatch = html.match(/<div[^>]*id="TexteOnly"[^>]*>([\s\S]*?)<\/div>/i)
+            || html.match(/<div[^>]*class="eli-main-title"[^>]*>([\s\S]*?)<\/div>/i);
+          const bodyText = bodyMatch ? bodyMatch[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().substring(0, 2000) : "";
+
+          const context = `EUR-Lex: ${info.title}\nCELEX: ${info.celex}\nURL: ${celexUrl}\n\n${bodyText || "Full text available at the URL above."}`;
+          return {
+            context,
+            citations: [{ index: 1, source: info.title, excerpt: `CELEX: ${info.celex}`, url: celexUrl }],
+            domains: ["eur-lex.europa.eu"],
+            fileRefs: [],
+            summary: `Found: ${info.title}`,
+          };
+        }
+      } catch (e) {
+        console.error("EUR-Lex CELEX fetch failed:", e);
+      }
+    }
+  }
+
+  // General search via EUR-Lex search page
+  const searchUrl = `https://eur-lex.europa.eu/search.html?scope=EURLEX&text=${encodeURIComponent(query)}&type=quick&lang=en`;
   try {
-    const resp = await fetch(url, { headers: { Accept: "text/html" } });
+    const resp = await fetch(searchUrl, { headers: { Accept: "text/html", "User-Agent": "LawKit/1.0" } });
     if (!resp.ok) {
-      return { context: `EUR-Lex search URL: ${url}\nPlease search EUR-Lex directly for: ${query}`, citations: [{ index: 1, source: "EUR-Lex", excerpt: `Search for: ${query}`, url }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "EUR-Lex link provided" };
+      return { context: `EUR-Lex search for "${query}" failed (${resp.status}). Direct search URL: ${searchUrl}`, citations: [{ index: 1, source: "EUR-Lex", excerpt: query, url: searchUrl }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "EUR-Lex search failed" };
     }
     const html = await resp.text();
-    // Extract result titles from HTML
-    const titleMatches = [...html.matchAll(/<a[^>]*class="title"[^>]*>([\s\S]*?)<\/a>/gi)];
-    const celexMatches = [...html.matchAll(/CELEX[^"]*?(\d{5}[A-Z]\d{4})/gi)];
-    if (!titleMatches.length) {
-      return { context: `EUR-Lex search for "${query}" returned results. View at: ${url}`, citations: [{ index: 1, source: "EUR-Lex Search", excerpt: query, url }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "Results available on EUR-Lex" };
+
+    // Try multiple patterns to extract results from EUR-Lex HTML
+    const results: { title: string; celex: string; url: string }[] = [];
+
+    // Pattern 1: SearchResult titles (class may vary)
+    const titlePatterns = [
+      /<a[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+      /<a[^>]*href="[^"]*CELEX[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+      /<div[^>]*class="[^"]*SearchResult[^"]*"[\s\S]*?<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,
+    ];
+
+    // Extract CELEX numbers from the whole page
+    const allCelex = [...html.matchAll(/CELEX[:=](\d{5}[A-Z]\d{4})/gi)].map(m => m[1]);
+
+    for (const pattern of titlePatterns) {
+      if (results.length >= 6) break;
+      const matches = [...html.matchAll(pattern)];
+      for (let i = 0; i < Math.min(matches.length, 6); i++) {
+        const match = matches[i];
+        const title = (match[2] || match[1]).replace(/<[^>]*>/g, "").trim();
+        if (!title || title.length < 5) continue;
+        const celex = allCelex[results.length] || "";
+        const resultUrl = celex ? `https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:${celex}` : searchUrl;
+        results.push({ title: title.substring(0, 200), celex, url: resultUrl });
+      }
     }
-    const results = titleMatches.slice(0, 6).map((m, i) => {
-      const title = m[1].replace(/<[^>]*>/g, "").trim();
-      const celex = celexMatches[i]?.[1] || "";
-      const resultUrl = celex ? `https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:${celex}` : url;
-      return { title, celex, url: resultUrl };
-    });
+
+    if (results.length === 0) {
+      // Fallback: just provide the search URL with context
+      return {
+        context: `EUR-Lex search for "${query}" completed. ${allCelex.length} CELEX references found on page. View results at: ${searchUrl}${allCelex.length > 0 ? `\n\nCELEX numbers found: ${allCelex.slice(0, 5).join(", ")}` : ""}`,
+        citations: [{ index: 1, source: "EUR-Lex Search", excerpt: query, url: searchUrl }],
+        domains: ["eur-lex.europa.eu"],
+        fileRefs: [],
+        summary: `${allCelex.length} references found`,
+      };
+    }
+
+    const contextLines = results.map((r, i) => `Result ${i + 1}: ${r.title}${r.celex ? ` (CELEX: ${r.celex})` : ""}. URL: ${r.url}`);
+    const context = `EUR-Lex returned ${results.length} results for "${query}".\n\n${contextLines.join("\n\n")}`;
     const citations = results.map((r, i) => ({ index: i + 1, source: r.title.substring(0, 100), excerpt: r.celex ? `CELEX: ${r.celex}` : "", url: r.url }));
-    const context = results.map(r => `## ${r.title}\n${r.celex ? `CELEX: ${r.celex}` : ""}\nURL: ${r.url}`).join("\n\n");
     return { context, citations, domains: ["eur-lex.europa.eu"], fileRefs: [], summary: `${results.length} EU law results` };
   } catch (e) {
-    return { context: `Search EUR-Lex directly: ${url}`, citations: [{ index: 1, source: "EUR-Lex", excerpt: query, url }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "EUR-Lex link provided" };
+    console.error("EUR-Lex search failed:", e);
+    return { context: `EUR-Lex search error. Direct search URL: ${searchUrl}`, citations: [{ index: 1, source: "EUR-Lex", excerpt: query, url: searchUrl }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "EUR-Lex search error" };
   }
 }
 

@@ -598,18 +598,7 @@ export function MessageBubble({
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{remainingContent.replace(/<!--\s*REDFLAGS:[\s\S]*?```/, "").trim()}</ReactMarkdown>
             </div>
           )}
-          <RedFlagCard
-            data={redFlagData}
-            onOpenInEditor={() => {
-              const docName = fileRefs?.[0]?.name || redFlagData.title;
-              const docId = fileRefs?.[0]?.id;
-              if (onRedFlagOpen) {
-                onRedFlagOpen(redFlagData, docName, docId);
-              } else if (onFileClick) {
-                onFileClick(docName, docId);
-              }
-            }}
-          />
+          <RedFlagCard data={redFlagData} />
           {!isUser && !isStreaming && citations.length > 0 && (
             <CollapsibleReferences citations={citations} onFileClick={onFileClick} />
           )}

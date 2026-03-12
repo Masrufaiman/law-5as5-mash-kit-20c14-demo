@@ -316,6 +316,15 @@ export function VaultDetail({ vault, files, onBack, onUpload, uploading, onRenam
           <Upload className="h-3.5 w-3.5" />
           Upload files
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 text-xs"
+          onClick={() => toast({ title: "Google Drive", description: "Google Drive integration coming soon — connect your Google account in Settings." })}
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Import from Drive
+        </Button>
         <input
           ref={fileInputRef}
           type="file"

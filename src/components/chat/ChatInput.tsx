@@ -368,6 +368,19 @@ export function ChatInput({
                   </>
                 )}
 
+                {/* Google Drive */}
+                <button
+                  onClick={() => {
+                    toast({ title: "Google Drive", description: "Google Drive integration coming soon — connect your Google account in Settings." });
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                  Google Drive
+                  <Badge variant="outline" className="text-[8px] py-0 px-1 ml-auto">Soon</Badge>
+                </button>
+                <div className="my-1 h-px bg-border" />
+
                 {effectiveVaults.length > 0 && (
                   <>
                     <p className="text-[10px] font-medium text-muted-foreground px-2.5 py-1 uppercase tracking-wider">
