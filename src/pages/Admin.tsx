@@ -59,6 +59,7 @@ export default function Admin() {
 
             <TabsContent value="llm"><LlmTab orgId={orgId} /></TabsContent>
             <TabsContent value="search"><SearchTab orgId={orgId} /></TabsContent>
+            <TabsContent value="legal_apis"><LegalApisTab orgId={orgId} /></TabsContent>
             <TabsContent value="storage"><StorageTab orgId={orgId} /></TabsContent>
             <TabsContent value="knowledge"><KnowledgeTab orgId={orgId} /></TabsContent>
             <TabsContent value="agent"><AgentTab orgId={orgId} /></TabsContent>
