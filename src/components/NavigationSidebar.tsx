@@ -23,6 +23,7 @@ import {
   Pencil,
   PanelLeftClose,
   PanelLeft,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +77,9 @@ export function NavigationSidebar() {
   const [deleteTarget, setDeleteTarget] = useState<RecentChat | null>(null);
   const [renameTarget, setRenameTarget] = useState<RecentChat | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [searchTab, setSearchTab] = useState<"chats" | "vaults" | "files">("chats");
+  const [searchVaults, setSearchVaults] = useState<VaultItem[]>([]);
+  const [searchFiles, setSearchFiles] = useState<any[]>([]);
 
   useEffect(() => {
     if (!profile?.organization_id) return;
@@ -127,16 +131,19 @@ export function NavigationSidebar() {
     setSearchQuery(value);
     if (!value.trim() || !profile?.organization_id) {
       setSearchResults([]);
+      setSearchVaults([]);
+      setSearchFiles([]);
       return;
     }
-    const { data } = await supabase
-      .from("conversations")
-      .select("id, title, created_at")
-      .eq("organization_id", profile.organization_id)
-      .ilike("title", `%${value}%`)
-      .order("updated_at", { ascending: false })
-      .limit(10);
-    setSearchResults(data || []);
+    // Search all tabs in parallel
+    const [chatsRes, vaultsRes, filesRes] = await Promise.all([
+      supabase.from("conversations").select("id, title, created_at").eq("organization_id", profile.organization_id).ilike("title", `%${value}%`).order("updated_at", { ascending: false }).limit(10),
+      supabase.from("vaults").select("id, name").eq("organization_id", profile.organization_id).ilike("name", `%${value}%`).order("created_at", { ascending: false }).limit(10),
+      supabase.from("files").select("id, name, vault_id").eq("organization_id", profile.organization_id).ilike("name", `%${value}%`).order("created_at", { ascending: false }).limit(10),
+    ]);
+    setSearchResults(chatsRes.data || []);
+    setSearchVaults(vaultsRes.data || []);
+    setSearchFiles(filesRes.data || []);
   }, [profile?.organization_id]);
 
   const handleShareChat = async (chatId: string, e: React.MouseEvent) => {
@@ -457,17 +464,34 @@ export function NavigationSidebar() {
       {/* Search dialog */}
       <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
         <CommandInput
-          placeholder="Search conversations..."
+          placeholder="Search chats, vaults, files..."
           value={searchQuery}
           onValueChange={handleSearchChange}
         />
+        <div className="flex gap-1 px-3 py-2 border-b border-border">
+          {(["chats", "vaults", "files"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setSearchTab(tab)}
+              className={cn(
+                "px-2.5 py-1 text-xs font-medium rounded-md transition-colors capitalize",
+                searchTab === tab
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              )}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
-          {searchResults.length > 0 && (
+          {searchTab === "chats" && searchResults.length > 0 && (
             <CommandGroup heading="Conversations">
               {searchResults.map((r) => (
                 <CommandItem
                   key={r.id}
+                  value={r.id}
                   onSelect={() => {
                     navigate(`/chat?id=${r.id}`);
                     setSearchOpen(false);
@@ -479,11 +503,12 @@ export function NavigationSidebar() {
               ))}
             </CommandGroup>
           )}
-          {recentChats.length > 0 && !searchQuery && (
+          {searchTab === "chats" && recentChats.length > 0 && !searchQuery && (
             <CommandGroup heading="Recent Conversations">
               {recentChats.map((r) => (
                 <CommandItem
                   key={r.id}
+                  value={r.id}
                   onSelect={() => {
                     navigate(`/chat?id=${r.id}`);
                     setSearchOpen(false);
@@ -491,6 +516,40 @@ export function NavigationSidebar() {
                 >
                   <MessageSquare className="mr-2 h-4 w-4" />
                   {r.title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {searchTab === "vaults" && searchVaults.length > 0 && (
+            <CommandGroup heading="Vaults">
+              {searchVaults.map((v) => (
+                <CommandItem
+                  key={v.id}
+                  value={v.id}
+                  onSelect={() => {
+                    navigate(`/vault?id=${v.id}`);
+                    setSearchOpen(false);
+                  }}
+                >
+                  <FolderOpen className="mr-2 h-4 w-4" />
+                  {v.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {searchTab === "files" && searchFiles.length > 0 && (
+            <CommandGroup heading="Files">
+              {searchFiles.map((f: any) => (
+                <CommandItem
+                  key={f.id}
+                  value={f.id}
+                  onSelect={() => {
+                    navigate(`/vault?id=${f.vault_id}`);
+                    setSearchOpen(false);
+                  }}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  {f.name}
                 </CommandItem>
               ))}
             </CommandGroup>

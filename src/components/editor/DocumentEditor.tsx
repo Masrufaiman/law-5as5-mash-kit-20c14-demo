@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-import { X, Eye, EyeOff, Save, Clock, ChevronDown, ChevronsLeft, ChevronsRight, Download } from "lucide-react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { X, Eye, EyeOff, Save, Clock, ChevronDown, ChevronsLeft, ChevronsRight, Download, Reply } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -27,6 +27,8 @@ interface DocumentEditorProps {
   highlightExcerpt?: string;
   /** If true, append content as a new version instead of replacing */
   appendVersion?: boolean;
+  /** Called when user selects text and clicks Reply */
+  onSelectionReply?: (text: string) => void;
 }
 
 const modules = {
@@ -167,12 +169,13 @@ function computeDiff(oldText: string, newText: string): string {
   return result.join(" ");
 }
 
-export function DocumentEditor({ title, content, onClose, highlightExcerpt, appendVersion }: DocumentEditorProps) {
+export function DocumentEditor({ title, content, onClose, highlightExcerpt, appendVersion, onSelectionReply }: DocumentEditorProps) {
   const [editorContent, setEditorContent] = useState("");
   const [versions, setVersions] = useState<string[]>([]);
   const [currentVersion, setCurrentVersion] = useState(0);
   const [showEdits, setShowEdits] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
+  const [selectionTooltip, setSelectionTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const prevTitleRef = useRef<string>("");
 
@@ -238,6 +241,39 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
     return () => clearTimeout(timer);
   }, [highlightExcerpt]);
 
+  // Selection-to-reply in editor
+  useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container || !onSelectionReply) return;
+
+    const handleMouseUp = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+        setSelectionTooltip(null);
+        return;
+      }
+      const text = selection.toString().trim();
+      if (text.length < 3) { setSelectionTooltip(null); return; }
+      const anchorNode = selection.anchorNode;
+      if (!anchorNode || !container.contains(anchorNode)) { setSelectionTooltip(null); return; }
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      setSelectionTooltip({ x: rect.left + rect.width / 2, y: rect.top - 8, text });
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-editor-reply-tooltip]")) setSelectionTooltip(null);
+    };
+
+    container.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => {
+      container.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
+  }, [onSelectionReply]);
+
   const isViewingOldVersion = currentVersion < versions.length - 1;
 
   const handleSaveVersion = () => {
@@ -258,10 +294,20 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
     if (!showEdits || currentVersion === 0) return null;
     return computeDiff(versions[currentVersion - 1], versions[currentVersion]);
   }, [showEdits, versions, currentVersion]);
+  /** Strip AI conversational preamble before first heading */
+  const stripPreamble = (html: string): string => {
+    // Find first <h1> or <h2> tag — everything before it is preamble
+    const headingMatch = html.match(/<h[12][^>]*>/i);
+    if (headingMatch && headingMatch.index !== undefined && headingMatch.index > 0) {
+      return html.substring(headingMatch.index);
+    }
+    return html;
+  };
 
   const handleExportTxt = () => {
+    const cleanedHtml = stripPreamble(editorContent);
     // Convert HTML to plain text
-    const txt = editorContent
+    const txt = cleanedHtml
       .replace(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/gi, "$1\n\n")
       .replace(/<strong>(.*?)<\/strong>/gi, "$1")
       .replace(/<em>(.*?)<\/em>/gi, "$1")
@@ -286,7 +332,8 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
 
   const handleExportDocx = () => {
     // Export as .doc (HTML-based, opens in Word)
-    const fullHtml = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Calibri',sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.8;color:#1a1a1a;}h1{font-size:1.5rem;font-weight:700;border-bottom:2px solid #e5e5e5;padding-bottom:0.5rem;margin-top:2rem;}h2{font-size:1.25rem;font-weight:600;margin-top:1.75rem;}h3{font-size:1.1rem;font-weight:600;margin-top:1.25rem;}table{width:100%;border-collapse:collapse;margin:1rem 0;}th,td{border:1px solid #e5e5e5;padding:0.5rem 0.75rem;text-align:left;}th{background:#f5f5f5;font-weight:600;}</style></head><body>${editorContent}</body></html>`;
+    const cleanedDocHtml = stripPreamble(editorContent);
+    const fullHtml = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Calibri',sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.8;color:#1a1a1a;}h1{font-size:1.5rem;font-weight:700;border-bottom:2px solid #e5e5e5;padding-bottom:0.5rem;margin-top:2rem;}h2{font-size:1.25rem;font-weight:600;margin-top:1.75rem;}h3{font-size:1.1rem;font-weight:600;margin-top:1.25rem;}table{width:100%;border-collapse:collapse;margin:1rem 0;}th,td{border:1px solid #e5e5e5;padding:0.5rem 0.75rem;text-align:left;}th{background:#f5f5f5;font-weight:600;}</style></head><body>${cleanedDocHtml}</body></html>`;
     const blob = new Blob([fullHtml], { type: "application/msword" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -297,7 +344,31 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
   };
 
   return (
-    <div className="flex flex-col h-full bg-card" ref={editorContainerRef}>
+    <div className="flex flex-col h-full bg-card relative" ref={editorContainerRef}>
+      {/* Selection Reply tooltip */}
+      {selectionTooltip && onSelectionReply && (
+        <div
+          data-editor-reply-tooltip
+          className="fixed z-50 animate-in fade-in-0 zoom-in-95"
+          style={{ left: selectionTooltip.x, top: selectionTooltip.y, transform: "translate(-50%, -100%)" }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-7 text-xs gap-1.5 shadow-md border border-border"
+            onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            onClick={() => {
+              onSelectionReply(selectionTooltip.text);
+              setSelectionTooltip(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+          >
+            <Reply className="h-3 w-3" />
+            Reply
+          </Button>
+        </div>
+      )}
       {/* Font face CSS for app fonts */}
       <style>{`
         .ql-editor { font-family: 'Instrument Sans', sans-serif; line-height: 1.8; padding: 2rem 2.5rem; max-width: 800px; margin: 0 auto; }

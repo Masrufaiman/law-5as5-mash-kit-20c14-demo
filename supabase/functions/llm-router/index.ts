@@ -765,11 +765,29 @@ serve(async (req) => {
             knowledgeContext = "\n\n## Knowledge Base\n" + knowledgeEntries.map((e: any) => `### ${e.title} (${e.category || "general"})\n${e.content}`).join("\n\n");
           }
 
-          // Load agent memory (last 10 entries for this user)
+          // Load agent memory — mode-filtered structured facts
           let agentMemoryContext = "";
-          const { data: memoryEntries } = await adminClient.from("agent_memory").select("content, category, created_at").eq("organization_id", orgId).eq("user_id", userId).order("created_at", { ascending: false }).limit(10);
-          if (memoryEntries?.length) {
-            agentMemoryContext = "\n\n## Agent Memory\n" + memoryEntries.map((e: any) => `- [${e.category || "general"}] ${e.content}`).join("\n");
+          {
+            // Prioritize mode-relevant facts
+            const priorityCategories: string[] = [];
+            if (effectiveMode === "drafting") priorityCategories.push("user_standard", "preference");
+            else if (effectiveMode === "red_flags" || effectiveMode === "review") priorityCategories.push("document_reviewed");
+
+            let memoryEntries: any[] = [];
+
+            if (priorityCategories.length > 0) {
+              // Load up to 7 priority entries + 5 general
+              const { data: priorityData } = await adminClient.from("agent_memory").select("content, category, created_at").eq("organization_id", orgId).eq("user_id", userId).in("category", priorityCategories).order("created_at", { ascending: false }).limit(7);
+              const { data: generalData } = await adminClient.from("agent_memory").select("content, category, created_at").eq("organization_id", orgId).eq("user_id", userId).not("category", "in", `(${priorityCategories.join(",")})` ).order("created_at", { ascending: false }).limit(5);
+              memoryEntries = [...(priorityData || []), ...(generalData || [])];
+            } else {
+              const { data } = await adminClient.from("agent_memory").select("content, category, created_at").eq("organization_id", orgId).eq("user_id", userId).order("created_at", { ascending: false }).limit(10);
+              memoryEntries = data || [];
+            }
+
+            if (memoryEntries.length) {
+              agentMemoryContext = "\n\n## Agent Memory (Known Facts)\n" + memoryEntries.map((e: any) => `- [${e.category || "general"}] ${e.content}`).join("\n");
+            }
           }
 
           let vaultName = clientVaultName || "";
@@ -1093,13 +1111,17 @@ ${followUpInstruction}
 You are LawKit AI, an expert legal document drafting assistant.
 CRITICAL RULES:
 - You MUST generate a complete, properly formatted legal document. NEVER output JSON, extraction data, or structured data.
-- Start with "# [Document Title]" followed by the full document body.
+- Start your response with "# [Document Title]" as the FIRST line. Do NOT include any conversational preamble, explanations, caveats, "as an AI..." text, or any text before the document title heading. The very first character of your output must be "#".
 - Use proper legal formatting: numbered sections (1., 1.1, 1.2), subsections, defined terms in **bold**, signature blocks.
 - Fill in ALL details using user info and org context. NEVER use placeholder text like [PARTY NAME].
 - Include all standard clauses expected for the document type.
 - RESEARCH jurisdiction requirements BEFORE drafting — ensure compliance with applicable laws.
+- Unless the user specifies a jurisdiction, always draft under the laws of England and Wales with exclusive jurisdiction of the courts of England and Wales. Never default to US law (California, New York, etc.).
 - End the document with a "## Drafting Notes" section explaining key decisions, assumptions made, and any areas requiring client review.
 - Use clear modern legal language — avoid archaic legalese.
+- When the user requests multiple documents (e.g., "write 5 NDAs"), draft ALL of them in sequence within the same response. Use placeholder party names (Vendor 1, Vendor 2, Party A, etc.), England and Wales as default governing law, and 2-year confidentiality period as default unless specified. List all assumptions in the Drafting Notes at the end.
+- NEVER say "I can only generate one document at a time". Generate as many documents as requested.
+- Only ask for clarification if ZERO information was provided about the document type or purpose. If the user has specified a purpose, document type, or said details should be random/varied, proceed immediately with reasonable defaults and placeholders. Never ask for information the user has already implicitly or explicitly provided.
 ${followUpInstruction}
 ` : "";
 
@@ -1186,7 +1208,7 @@ ${followUpInstruction}
           const aiResponse = await fetch(aiUrl, {
             method: "POST",
             headers: aiHeaders,
-            body: JSON.stringify({ model: modelId, messages: aiMessages, stream: true, max_tokens: deepResearch ? 8192 : 4096, temperature: 0.3 }),
+            body: JSON.stringify({ model: modelId, messages: aiMessages, stream: true, max_tokens: effectiveMode === "drafting" ? 16384 : (deepResearch ? 8192 : 4096), temperature: 0.3 }),
           });
 
           if (!aiResponse.ok) {
@@ -1333,25 +1355,58 @@ ${followUpInstruction}
               body: JSON.stringify({
                 model: modelId,
                 messages: [
-                  { role: "system", content: "Summarize this conversation exchange in exactly 2 concise sentences for future context. Focus on: what the user asked, what was found/decided, and any important facts learned. Output ONLY the 2 sentences, nothing else." },
-                  { role: "user", content: `User: ${message}\n\nAssistant: ${cleanedContent.substring(0, 2000)}` },
+                  { role: "system", content: `Extract key legal facts from this conversation exchange as a JSON array. Each fact should be an object with: {type, field, value, source_doc?}.
+Types: "user_standard" (user's stated standard terms/preferences), "document_reviewed" (key facts from reviewed documents), "decision_made" (decisions or conclusions reached), "preference" (user workflow/style preferences).
+Only extract CONCRETE facts: specific durations, jurisdictions, names, rates, amounts, dates, governing laws.
+Skip generic observations like "user asked about NDAs" — only save facts that would be useful in future sessions.
+If no concrete facts exist, output an empty array: []
+Output ONLY the JSON array, no other text.` },
+                  { role: "user", content: `User: ${message}\n\nAssistant: ${cleanedContent.substring(0, 3000)}` },
                 ],
-                max_tokens: 150,
+                max_tokens: 500,
                 temperature: 0,
               }),
             });
             if (memoryResp.ok) {
               const memData = await memoryResp.json();
-              const memorySummary = memData.choices?.[0]?.message?.content?.trim();
-              if (memorySummary) {
-                const category = intent.taskType || "general";
-                await adminClient.from("agent_memory").insert({
-                  organization_id: orgId, user_id: userId, content: memorySummary, category,
-                });
-                // Prune old entries — keep only last 50 per user
-                const { data: oldEntries } = await adminClient.from("agent_memory").select("id").eq("organization_id", orgId).eq("user_id", userId).order("created_at", { ascending: false }).range(50, 1000);
-                if (oldEntries?.length) {
-                  await adminClient.from("agent_memory").delete().in("id", oldEntries.map((e: any) => e.id));
+              const memoryRaw = memData.choices?.[0]?.message?.content?.trim();
+              if (memoryRaw) {
+                try {
+                  // Parse JSON array of facts
+                  const jsonMatch = memoryRaw.match(/\[[\s\S]*\]/);
+                  const facts = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+                  if (Array.isArray(facts) && facts.length > 0) {
+                    for (const fact of facts) {
+                      if (!fact.field || !fact.value) continue;
+                      const factContent = `${fact.field}: ${fact.value}${fact.source_doc ? ` (from: ${fact.source_doc})` : ""}`;
+                      const category = fact.type || "general";
+
+                      // Supersession: delete existing entries with the same field for this user
+                      const { data: existing } = await adminClient.from("agent_memory")
+                        .select("id, content")
+                        .eq("organization_id", orgId)
+                        .eq("user_id", userId)
+                        .ilike("content", `${fact.field}:%`)
+                        .limit(5);
+                      if (existing?.length) {
+                        await adminClient.from("agent_memory").delete().in("id", existing.map((e: any) => e.id));
+                      }
+
+                      await adminClient.from("agent_memory").insert({
+                        organization_id: orgId, user_id: userId, content: factContent, category,
+                      });
+                    }
+                    // Prune old entries — keep only last 50 per user
+                    const { data: oldEntries } = await adminClient.from("agent_memory").select("id").eq("organization_id", orgId).eq("user_id", userId).order("created_at", { ascending: false }).range(50, 1000);
+                    if (oldEntries?.length) {
+                      await adminClient.from("agent_memory").delete().in("id", oldEntries.map((e: any) => e.id));
+                    }
+                  }
+                } catch (parseErr) {
+                  // Fallback: save as-is if JSON parse fails
+                  await adminClient.from("agent_memory").insert({
+                    organization_id: orgId, user_id: userId, content: memoryRaw.substring(0, 500), category: intent.taskType || "general",
+                  });
                 }
               }
             }
