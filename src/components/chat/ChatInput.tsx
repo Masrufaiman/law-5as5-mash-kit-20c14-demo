@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Sparkles, Send, Plus, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, FolderOpen, Scale, Table2, Zap, Reply, X, Upload, BookOpen, Globe } from "lucide-react";
+import { Sparkles, Send, Plus, Loader2, MessageSquare, FileText, AlertTriangle, ChevronDown, FolderOpen, Scale, Table2, Zap, Reply, X, Upload, BookOpen, Globe, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -367,6 +367,19 @@ export function ChatInput({
                     <div className="my-1 h-px bg-border" />
                   </>
                 )}
+
+                {/* Google Drive */}
+                <button
+                  onClick={() => {
+                    toast({ title: "Google Drive", description: "Google Drive integration coming soon — connect your Google account in Settings." });
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                  Google Drive
+                  <Badge variant="outline" className="text-[8px] py-0 px-1 ml-auto">Soon</Badge>
+                </button>
+                <div className="my-1 h-px bg-border" />
 
                 {effectiveVaults.length > 0 && (
                   <>

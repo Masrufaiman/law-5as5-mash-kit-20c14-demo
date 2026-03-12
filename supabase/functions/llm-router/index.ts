@@ -216,59 +216,131 @@ async function toolCourtListener(query: string, apiKey: string): Promise<ToolRes
 // Tool: EDGAR (SEC) Search
 // ──────────────────────────────────────────────
 async function toolEdgar(query: string, userAgent: string): Promise<ToolResult> {
-  const headers = { "User-Agent": userAgent, Accept: "application/json" };
+  const ua = userAgent || "LawKit/1.0 contact@lawkit.ai";
+  const headers: Record<string, string> = { "User-Agent": ua, Accept: "application/json" };
 
-  // Try EDGAR full-text search API (correct endpoint)
+  // Known CIK mapping for common companies
+  const CIK_MAP: Record<string, string> = {
+    apple: "0000320193", microsoft: "0000789019", tesla: "0001318605",
+    google: "0001652044", alphabet: "0001652044", amazon: "0001018724",
+    meta: "0001326801", facebook: "0001326801", nvidia: "0001045810",
+    jpmorgan: "0000019617", "goldman sachs": "0000886982",
+  };
+
+  // Extract form type from query
+  const formMatch = query.match(/\b(10-K|10-Q|8-K|S-1|DEF\s*14A|20-F|6-K|proxy\s*statement)\b/i);
+  const formType = formMatch ? formMatch[1].replace(/\s+/g, " ").toUpperCase().replace("PROXY STATEMENT", "DEF 14A") : "";
+
+  // Try EDGAR EFTS full-text search API
+  const eftsBase = "https://efts.sec.gov/LATEST/search-index";
+  const formParam = formType ? `&forms=${encodeURIComponent(formType)}` : "&forms=10-K,10-Q,8-K,S-1,DEF+14A";
   const endpoints = [
-    `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}&dateRange=custom&startdt=2020-01-01&forms=10-K,10-Q,8-K,S-1,DEF+14A`,
-    `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(query)}`,
+    `${eftsBase}?q=${encodeURIComponent(query)}&dateRange=custom&startdt=2020-01-01${formParam}`,
+    `${eftsBase}?q=${encodeURIComponent(query)}`,
   ];
 
   for (const url of endpoints) {
     try {
       const resp = await fetch(url, { headers });
-      if (!resp.ok) continue;
+      if (!resp.ok) { console.error(`EDGAR EFTS ${resp.status} for ${url}`); continue; }
       const data = await resp.json();
-      const hits = (data.hits?.hits || data.filings || []).slice(0, 8);
+      const hits = (data.hits?.hits || data.filings || []).slice(0, 10);
       if (!hits.length) continue;
 
-      const citations = hits.map((h: any, i: number) => ({
-        index: i + 1,
-        source: `${h._source?.entity_name || h.company_name || "Unknown"} — ${h._source?.form_type || h.form_type || "Filing"}`,
-        excerpt: (h._source?.file_description || h.description || "").substring(0, 200),
-        url: h._source?.file_url ? `https://www.sec.gov/Archives/edgar/data/${h._source.file_url}` : (h.filing_href || undefined),
-      }));
-      const context = hits.map((h: any) => {
+      const parsed = hits.map((h: any) => {
         const s = h._source || h;
-        return `## ${s.entity_name || s.company_name || "Unknown"} — ${s.form_type || "Filing"}\nCIK: ${s.entity_id || s.cik || "N/A"} | Filed: ${s.file_date || s.date_filed || "N/A"}\n${s.file_description || s.description || ""}`;
-      }).join("\n\n");
-      return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${hits.length} filings found` };
+        return {
+          company: s.entity_name || s.display_names?.[0] || s.company_name || "Unknown",
+          form_type: s.file_type || s.form_type || "Filing",
+          filed_date: s.file_date || s.date_filed || "N/A",
+          period: s.period_of_report || "",
+          cik: s.entity_id || s.cik || "N/A",
+          description: s.file_description || s.description || "",
+          url: s.file_num
+            ? `https://www.sec.gov/Archives/edgar/data/${s.entity_id}/${s.file_num.replace(/-/g, "")}`
+            : (h.filing_href || `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${s.entity_id || s.cik}&type=${s.file_type || ""}&dateb=&owner=include&count=10`),
+        };
+      });
+
+      const contextLines = parsed.map((p: any, i: number) =>
+        `Filing ${i + 1}: ${p.company} — ${p.form_type} filed ${p.filed_date}${p.period ? ` (period: ${p.period})` : ""}. CIK: ${p.cik}. ${p.description}`
+      );
+      const context = `EDGAR returned ${parsed.length} filings.\n\n${contextLines.join("\n\n")}`;
+      const citations = parsed.map((p: any, i: number) => ({
+        index: i + 1,
+        source: `${p.company} — ${p.form_type}`,
+        excerpt: `Filed: ${p.filed_date}. ${p.description}`.substring(0, 200),
+        url: p.url,
+      }));
+      return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${parsed.length} filings found` };
     } catch (e) {
       console.error("EDGAR endpoint failed:", url, e);
       continue;
     }
   }
 
-  // Tertiary fallback: EDGAR company search (Atom feed)
+  // Fallback: Try CIK-based lookup for known companies
+  const queryLower = query.toLowerCase();
+  for (const [name, cik] of Object.entries(CIK_MAP)) {
+    if (queryLower.includes(name)) {
+      try {
+        const subUrl = `https://data.sec.gov/submissions/CIK${cik}.json`;
+        const subResp = await fetch(subUrl, { headers: { "User-Agent": ua, Accept: "application/json" } });
+        if (subResp.ok) {
+          const subData = await subResp.json();
+          const recent = subData.filings?.recent;
+          if (recent?.form) {
+            const filings = [];
+            for (let i = 0; i < Math.min(recent.form.length, 15); i++) {
+              if (formType && recent.form[i] !== formType) continue;
+              filings.push({
+                company: subData.name || name,
+                form_type: recent.form[i],
+                filed_date: recent.filingDate[i],
+                accession: recent.accessionNumber[i],
+                url: `https://www.sec.gov/Archives/edgar/data/${cik.replace(/^0+/, "")}/${recent.accessionNumber[i].replace(/-/g, "")}`,
+              });
+              if (filings.length >= 8) break;
+            }
+            if (filings.length > 0) {
+              const contextLines = filings.map((f, i) =>
+                `Filing ${i + 1}: ${f.company} — ${f.form_type} filed ${f.filed_date}. Accession: ${f.accession}`
+              );
+              const context = `EDGAR returned ${filings.length} filings for ${subData.name || name} (CIK: ${cik}).\n\n${contextLines.join("\n\n")}`;
+              const citations = filings.map((f, i) => ({
+                index: i + 1, source: `${f.company} — ${f.form_type}`, excerpt: `Filed: ${f.filed_date}`, url: f.url,
+              }));
+              return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${filings.length} filings found` };
+            }
+          }
+        }
+      } catch (e) {
+        console.error("EDGAR CIK lookup failed:", e);
+      }
+      break;
+    }
+  }
+
+  // Final fallback: company search Atom feed
   try {
     const companyName = query.replace(/\b(10-K|10-Q|8-K|S-1|SEC|EDGAR|filing|annual|report|quarterly)\b/gi, "").trim();
     if (companyName.length > 2) {
-      const atomUrl = `https://www.sec.gov/cgi-bin/browse-edgar?company=${encodeURIComponent(companyName)}&CIK=&type=10-K&dateb=&owner=include&count=10&search_text=&action=getcompany&output=atom`;
-      const atomResp = await fetch(atomUrl, { headers: { "User-Agent": userAgent, Accept: "application/atom+xml" } });
+      const atomUrl = `https://www.sec.gov/cgi-bin/browse-edgar?company=${encodeURIComponent(companyName)}&CIK=&type=${formType || "10-K"}&dateb=&owner=include&count=10&search_text=&action=getcompany&output=atom`;
+      const atomResp = await fetch(atomUrl, { headers: { "User-Agent": ua, Accept: "application/atom+xml" } });
       if (atomResp.ok) {
         const atomText = await atomResp.text();
-        // Parse Atom XML for entries
         const entries = [...atomText.matchAll(/<entry>([\s\S]*?)<\/entry>/g)];
         if (entries.length > 0) {
-          const results = entries.slice(0, 8).map((e, i) => {
+          const results = entries.slice(0, 8).map((e) => {
             const title = e[1].match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1]?.trim() || "Filing";
             const link = e[1].match(/<link[^>]*href="([^"]+)"/)?.[1] || "";
             const updated = e[1].match(/<updated>([\s\S]*?)<\/updated>/)?.[1]?.trim() || "";
             const summary = e[1].match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1]?.replace(/<[^>]*>/g, "").trim() || "";
             return { title, link, updated, summary };
           });
+          const contextLines = results.map((r, i) => `Filing ${i + 1}: ${r.title}. Date: ${r.updated}. ${r.summary}`);
+          const context = `EDGAR company search returned ${results.length} results.\n\n${contextLines.join("\n\n")}`;
           const citations = results.map((r, i) => ({ index: i + 1, source: r.title, excerpt: r.summary.substring(0, 200), url: r.link }));
-          const context = results.map(r => `## ${r.title}\nDate: ${r.updated}\n${r.summary}`).join("\n\n");
           return { context, citations, domains: ["sec.gov"], fileRefs: [], summary: `${results.length} company filings found` };
         }
       }
@@ -277,7 +349,7 @@ async function toolEdgar(query: string, userAgent: string): Promise<ToolResult> 
     console.error("EDGAR company search fallback failed:", e);
   }
 
-  return { context: "No EDGAR results found.", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
+  return { context: `EDGAR search for "${query}" returned no results. Try searching with a specific company name or CIK number.`, citations: [], domains: ["sec.gov"], fileRefs: [], summary: "0 results" };
 }
 
 
@@ -285,32 +357,108 @@ async function toolEdgar(query: string, userAgent: string): Promise<ToolResult> 
 // ──────────────────────────────────────────────
 // Tool: EUR-Lex Search
 // ──────────────────────────────────────────────
+// Known CELEX numbers for common EU regulations
+const KNOWN_CELEX: Record<string, { celex: string; title: string }> = {
+  "gdpr": { celex: "32016R0679", title: "General Data Protection Regulation (GDPR)" },
+  "general data protection": { celex: "32016R0679", title: "General Data Protection Regulation (GDPR)" },
+  "ai act": { celex: "32024R1689", title: "EU Artificial Intelligence Act" },
+  "artificial intelligence act": { celex: "32024R1689", title: "EU Artificial Intelligence Act" },
+  "mifid": { celex: "32014L0065", title: "MiFID II - Markets in Financial Instruments Directive" },
+  "mifid ii": { celex: "32014L0065", title: "MiFID II - Markets in Financial Instruments Directive" },
+  "dora": { celex: "32022R2554", title: "Digital Operational Resilience Act (DORA)" },
+  "trade secrets": { celex: "32016L0943", title: "Trade Secrets Directive" },
+  "ecommerce directive": { celex: "32000L0031", title: "E-Commerce Directive" },
+  "digital services act": { celex: "32022R2065", title: "Digital Services Act (DSA)" },
+  "dsa": { celex: "32022R2065", title: "Digital Services Act (DSA)" },
+  "digital markets act": { celex: "32022R1925", title: "Digital Markets Act (DMA)" },
+  "dma": { celex: "32022R1925", title: "Digital Markets Act (DMA)" },
+  "nis2": { celex: "32022L2555", title: "NIS 2 Directive" },
+};
+
 async function toolEurLex(query: string): Promise<ToolResult> {
-  // Use EUR-Lex REST search (returns HTML, extract key info)
-  const url = `https://eur-lex.europa.eu/search.html?scope=EURLEX&text=${encodeURIComponent(query)}&type=quick&lang=en`;
+  const queryLower = query.toLowerCase();
+
+  // Check for known regulations first — direct CELEX fetch is faster and more reliable
+  for (const [keyword, info] of Object.entries(KNOWN_CELEX)) {
+    if (queryLower.includes(keyword)) {
+      const celexUrl = `https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:${info.celex}`;
+      try {
+        const resp = await fetch(celexUrl, { headers: { Accept: "text/html" } });
+        if (resp.ok) {
+          const html = await resp.text();
+          // Extract first ~2000 chars of body text
+          const bodyMatch = html.match(/<div[^>]*id="TexteOnly"[^>]*>([\s\S]*?)<\/div>/i)
+            || html.match(/<div[^>]*class="eli-main-title"[^>]*>([\s\S]*?)<\/div>/i);
+          const bodyText = bodyMatch ? bodyMatch[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().substring(0, 2000) : "";
+
+          const context = `EUR-Lex: ${info.title}\nCELEX: ${info.celex}\nURL: ${celexUrl}\n\n${bodyText || "Full text available at the URL above."}`;
+          return {
+            context,
+            citations: [{ index: 1, source: info.title, excerpt: `CELEX: ${info.celex}`, url: celexUrl }],
+            domains: ["eur-lex.europa.eu"],
+            fileRefs: [],
+            summary: `Found: ${info.title}`,
+          };
+        }
+      } catch (e) {
+        console.error("EUR-Lex CELEX fetch failed:", e);
+      }
+    }
+  }
+
+  // General search via EUR-Lex search page
+  const searchUrl = `https://eur-lex.europa.eu/search.html?scope=EURLEX&text=${encodeURIComponent(query)}&type=quick&lang=en`;
   try {
-    const resp = await fetch(url, { headers: { Accept: "text/html" } });
+    const resp = await fetch(searchUrl, { headers: { Accept: "text/html", "User-Agent": "LawKit/1.0" } });
     if (!resp.ok) {
-      return { context: `EUR-Lex search URL: ${url}\nPlease search EUR-Lex directly for: ${query}`, citations: [{ index: 1, source: "EUR-Lex", excerpt: `Search for: ${query}`, url }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "EUR-Lex link provided" };
+      return { context: `EUR-Lex search for "${query}" failed (${resp.status}). Direct search URL: ${searchUrl}`, citations: [{ index: 1, source: "EUR-Lex", excerpt: query, url: searchUrl }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "EUR-Lex search failed" };
     }
     const html = await resp.text();
-    // Extract result titles from HTML
-    const titleMatches = [...html.matchAll(/<a[^>]*class="title"[^>]*>([\s\S]*?)<\/a>/gi)];
-    const celexMatches = [...html.matchAll(/CELEX[^"]*?(\d{5}[A-Z]\d{4})/gi)];
-    if (!titleMatches.length) {
-      return { context: `EUR-Lex search for "${query}" returned results. View at: ${url}`, citations: [{ index: 1, source: "EUR-Lex Search", excerpt: query, url }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "Results available on EUR-Lex" };
+
+    // Try multiple patterns to extract results from EUR-Lex HTML
+    const results: { title: string; celex: string; url: string }[] = [];
+
+    // Pattern 1: SearchResult titles (class may vary)
+    const titlePatterns = [
+      /<a[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+      /<a[^>]*href="[^"]*CELEX[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+      /<div[^>]*class="[^"]*SearchResult[^"]*"[\s\S]*?<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,
+    ];
+
+    // Extract CELEX numbers from the whole page
+    const allCelex = [...html.matchAll(/CELEX[:=](\d{5}[A-Z]\d{4})/gi)].map(m => m[1]);
+
+    for (const pattern of titlePatterns) {
+      if (results.length >= 6) break;
+      const matches = [...html.matchAll(pattern)];
+      for (let i = 0; i < Math.min(matches.length, 6); i++) {
+        const match = matches[i];
+        const title = (match[2] || match[1]).replace(/<[^>]*>/g, "").trim();
+        if (!title || title.length < 5) continue;
+        const celex = allCelex[results.length] || "";
+        const resultUrl = celex ? `https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:${celex}` : searchUrl;
+        results.push({ title: title.substring(0, 200), celex, url: resultUrl });
+      }
     }
-    const results = titleMatches.slice(0, 6).map((m, i) => {
-      const title = m[1].replace(/<[^>]*>/g, "").trim();
-      const celex = celexMatches[i]?.[1] || "";
-      const resultUrl = celex ? `https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:${celex}` : url;
-      return { title, celex, url: resultUrl };
-    });
+
+    if (results.length === 0) {
+      // Fallback: just provide the search URL with context
+      return {
+        context: `EUR-Lex search for "${query}" completed. ${allCelex.length} CELEX references found on page. View results at: ${searchUrl}${allCelex.length > 0 ? `\n\nCELEX numbers found: ${allCelex.slice(0, 5).join(", ")}` : ""}`,
+        citations: [{ index: 1, source: "EUR-Lex Search", excerpt: query, url: searchUrl }],
+        domains: ["eur-lex.europa.eu"],
+        fileRefs: [],
+        summary: `${allCelex.length} references found`,
+      };
+    }
+
+    const contextLines = results.map((r, i) => `Result ${i + 1}: ${r.title}${r.celex ? ` (CELEX: ${r.celex})` : ""}. URL: ${r.url}`);
+    const context = `EUR-Lex returned ${results.length} results for "${query}".\n\n${contextLines.join("\n\n")}`;
     const citations = results.map((r, i) => ({ index: i + 1, source: r.title.substring(0, 100), excerpt: r.celex ? `CELEX: ${r.celex}` : "", url: r.url }));
-    const context = results.map(r => `## ${r.title}\n${r.celex ? `CELEX: ${r.celex}` : ""}\nURL: ${r.url}`).join("\n\n");
     return { context, citations, domains: ["eur-lex.europa.eu"], fileRefs: [], summary: `${results.length} EU law results` };
   } catch (e) {
-    return { context: `Search EUR-Lex directly: ${url}`, citations: [{ index: 1, source: "EUR-Lex", excerpt: query, url }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "EUR-Lex link provided" };
+    console.error("EUR-Lex search failed:", e);
+    return { context: `EUR-Lex search error. Direct search URL: ${searchUrl}`, citations: [{ index: 1, source: "EUR-Lex", excerpt: query, url: searchUrl }], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "EUR-Lex search error" };
   }
 }
 
@@ -1063,9 +1211,9 @@ serve(async (req) => {
 
           // Build a tool queue from user-selected sources (ensures ALL selected tools run)
           const toolQueue: string[] = [];
-          if (sources?.includes("CourtListener") && courtListenerKey) toolQueue.push("courtlistener");
-          if (sources?.includes("EDGAR (SEC)") && edgarEnabled) toolQueue.push("edgar");
-          if (sources?.includes("EUR-Lex") && eurlexEnabled) toolQueue.push("eurlex");
+          if (sources?.includes("CourtListener")) toolQueue.push("courtlistener");
+          if (sources?.includes("EDGAR (SEC)")) toolQueue.push("edgar");
+          if (sources?.includes("EUR-Lex")) toolQueue.push("eurlex");
 
           let nextTool: string;
 
@@ -1077,8 +1225,8 @@ serve(async (req) => {
               case 1: // Factual — no vault, maybe web if complex
                 nextTool = (complexity >= 4 && perplexityKey) ? "web_search" : "";
                 break;
-              case 2: // Case lookup — CourtListener first if available, else web search
-                nextTool = courtListenerKey ? "courtlistener" : (perplexityKey ? "web_search" : "");
+              case 2: // Case lookup — CourtListener first (works without key too), else web search
+                nextTool = "courtlistener";
                 break;
               case 3: // Document task — read files first
                 nextTool = "read_files";
@@ -1086,11 +1234,11 @@ serve(async (req) => {
               case 4: // Vault task — search vault
                 nextTool = "vault_search";
                 break;
-              case 5: // EDGAR/SEC lookup
-                nextTool = edgarEnabled ? "edgar" : (perplexityKey ? "web_search" : "");
+              case 5: // EDGAR/SEC lookup — always try EDGAR
+                nextTool = "edgar";
                 break;
-              case 6: // EUR-Lex lookup
-                nextTool = eurlexEnabled ? "eurlex" : (perplexityKey ? "web_search" : "");
+              case 6: // EUR-Lex lookup — always try EUR-Lex
+                nextTool = "eurlex";
                 break;
               default:
                 nextTool = "";
