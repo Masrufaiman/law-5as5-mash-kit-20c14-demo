@@ -344,7 +344,31 @@ export function DocumentEditor({ title, content, onClose, highlightExcerpt, appe
   };
 
   return (
-    <div className="flex flex-col h-full bg-card" ref={editorContainerRef}>
+    <div className="flex flex-col h-full bg-card relative" ref={editorContainerRef}>
+      {/* Selection Reply tooltip */}
+      {selectionTooltip && onSelectionReply && (
+        <div
+          data-editor-reply-tooltip
+          className="fixed z-50 animate-in fade-in-0 zoom-in-95"
+          style={{ left: selectionTooltip.x, top: selectionTooltip.y, transform: "translate(-50%, -100%)" }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-7 text-xs gap-1.5 shadow-md border border-border"
+            onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            onClick={() => {
+              onSelectionReply(selectionTooltip.text);
+              setSelectionTooltip(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+          >
+            <Reply className="h-3 w-3" />
+            Reply
+          </Button>
+        </div>
+      )}
       {/* Font face CSS for app fonts */}
       <style>{`
         .ql-editor { font-family: 'Instrument Sans', sans-serif; line-height: 1.8; padding: 2rem 2.5rem; max-width: 800px; margin: 0 auto; }
