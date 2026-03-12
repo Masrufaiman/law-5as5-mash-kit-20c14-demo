@@ -425,6 +425,28 @@ export default function Chat() {
     }
   }, [error]);
 
+  // Auto-open document in redline view after red flag analysis completes
+  const prevStreamingRef = useRef(false);
+  useEffect(() => {
+    if (prevStreamingRef.current && !isStreaming && promptMode === "red_flags") {
+      // Streaming just finished — check if last assistant message has red flags
+      const lastAssistant = [...messages].reverse().find(m => m.role === "assistant");
+      if (lastAssistant) {
+        const { parseRedFlags } = require("@/components/chat/RedFlagCard");
+        const rfData = parseRedFlags(lastAssistant.content);
+        if (rfData) {
+          setRedFlagData(rfData);
+          // Auto-open the first attached file
+          const refs = fileRefs || lastAssistant.frozenFileRefs;
+          if (refs?.[0]) {
+            handleFileClick(refs[0].name, refs[0].id);
+          }
+        }
+      }
+    }
+    prevStreamingRef.current = isStreaming;
+  }, [isStreaming]);
+
   const lastStreamOptions = useRef<any>(null);
 
   const createConversationAndSend = async (
