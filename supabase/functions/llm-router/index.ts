@@ -436,12 +436,16 @@ async function toolWebSearch(
   const citations: ToolResult["citations"] = [];
   const domains: string[] = [];
 
+  // Extract search result titles from Perplexity response
+  const searchResultTitles: string[] = data.search_results?.map((r: any) => r.title || "") || [];
+
   if (citationUrls.length > 0) {
     context += "\n\n### Sources:\n" + citationUrls.map((url: string, i: number) => `[${i + 1}] ${url}`).join("\n");
     citationUrls.forEach((url: string, i: number) => {
       let domain = url;
       try { domain = new URL(url).hostname.replace("www.", ""); } catch {}
-      citations.push({ index: i + 1, source: domain, excerpt: url, url });
+      const title = searchResultTitles[i] || undefined;
+      citations.push({ index: i + 1, source: title || domain, excerpt: url, url, title });
       domains.push(domain);
     });
   }

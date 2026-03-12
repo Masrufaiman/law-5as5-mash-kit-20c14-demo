@@ -1194,6 +1194,7 @@ export default function Chat() {
           <SourcesPanel
             citations={allCitations}
             onClose={() => setShowSources(false)}
+            onFileClick={handleFileClick}
           />
         )}
       </div>

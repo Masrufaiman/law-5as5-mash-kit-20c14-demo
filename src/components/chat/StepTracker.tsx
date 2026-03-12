@@ -26,7 +26,7 @@ interface StepTrackerProps {
   planUpdateReason?: string | null;
   progress?: { current: number; total: number } | null;
   citations?: Citation[];
-  onFileClick?: (fileName: string, fileId?: string) => void;
+  onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void;
 }
 
 function isPlanStepDone(planStep: string, steps: AgentStep[]): boolean {
