@@ -536,7 +536,7 @@ export function MessageBubble({
           ),
           td: ({ children }) => (
             <td className="px-3 py-2 border-b border-border text-xs whitespace-normal break-words align-top">
-              {citations.length > 0 ? processChildren(children, citations) : children}
+              {citations.length > 0 ? processChildren(children, citations, onFileClick) : children}
             </td>
           ),
           th: ({ children }) => (
