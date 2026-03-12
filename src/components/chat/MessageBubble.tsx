@@ -599,12 +599,15 @@ export function MessageBubble({
           )}
           <RedFlagCard
             data={redFlagData}
-            onOpenInEditor={onFileClick ? () => {
-              // Try to find the document name from file refs or red flag title
+            onOpenInEditor={() => {
               const docName = fileRefs?.[0]?.name || redFlagData.title;
               const docId = fileRefs?.[0]?.id;
-              onFileClick(docName, docId);
-            } : undefined}
+              if (onRedFlagOpen) {
+                onRedFlagOpen(redFlagData, docName, docId);
+              } else if (onFileClick) {
+                onFileClick(docName, docId);
+              }
+            }}
           />
           {!isUser && !isStreaming && citations.length > 0 && (
             <CollapsibleReferences citations={citations} onFileClick={onFileClick} />
