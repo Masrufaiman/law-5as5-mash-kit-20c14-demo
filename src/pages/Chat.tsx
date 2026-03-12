@@ -697,7 +697,7 @@ export default function Chat() {
       currentSheetState: sheetDoc,
       workflowSystemPrompt: workflowTag?.systemPrompt,
       currentDocumentContent: editorDoc?.content,
-      ...(vaultName === "Uploads" && conversationAttachedFileIds.length > 0 ? { attachedFileIds: conversationAttachedFileIds } : {}),
+      ...(vaultName === "Uploads" && conversationAttachedFileIds.length > 0 ? { attachedFileIds: conversationAttachedFileIds, attachedFileNames: conversationAttachedFileNames } : {}),
     };
     lastStreamOptions.current = opts;
     sendMessage(newContent, opts);
