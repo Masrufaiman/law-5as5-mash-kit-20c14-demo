@@ -169,7 +169,7 @@ function computeDiff(oldText: string, newText: string): string {
   return result.join(" ");
 }
 
-export function DocumentEditor({ title, content, onClose, highlightExcerpt, appendVersion }: DocumentEditorProps) {
+export function DocumentEditor({ title, content, onClose, highlightExcerpt, appendVersion, onSelectionReply }: DocumentEditorProps) {
   const [editorContent, setEditorContent] = useState("");
   const [versions, setVersions] = useState<string[]>([]);
   const [currentVersion, setCurrentVersion] = useState(0);
