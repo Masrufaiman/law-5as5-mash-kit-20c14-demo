@@ -457,17 +457,34 @@ export function NavigationSidebar() {
       {/* Search dialog */}
       <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
         <CommandInput
-          placeholder="Search conversations..."
+          placeholder="Search chats, vaults, files..."
           value={searchQuery}
           onValueChange={handleSearchChange}
         />
+        <div className="flex gap-1 px-3 py-2 border-b border-border">
+          {(["chats", "vaults", "files"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setSearchTab(tab)}
+              className={cn(
+                "px-2.5 py-1 text-xs font-medium rounded-md transition-colors capitalize",
+                searchTab === tab
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              )}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
-          {searchResults.length > 0 && (
+          {searchTab === "chats" && searchResults.length > 0 && (
             <CommandGroup heading="Conversations">
               {searchResults.map((r) => (
                 <CommandItem
                   key={r.id}
+                  value={r.id}
                   onSelect={() => {
                     navigate(`/chat?id=${r.id}`);
                     setSearchOpen(false);
@@ -479,11 +496,12 @@ export function NavigationSidebar() {
               ))}
             </CommandGroup>
           )}
-          {recentChats.length > 0 && !searchQuery && (
+          {searchTab === "chats" && recentChats.length > 0 && !searchQuery && (
             <CommandGroup heading="Recent Conversations">
               {recentChats.map((r) => (
                 <CommandItem
                   key={r.id}
+                  value={r.id}
                   onSelect={() => {
                     navigate(`/chat?id=${r.id}`);
                     setSearchOpen(false);
@@ -491,6 +509,40 @@ export function NavigationSidebar() {
                 >
                   <MessageSquare className="mr-2 h-4 w-4" />
                   {r.title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {searchTab === "vaults" && searchVaults.length > 0 && (
+            <CommandGroup heading="Vaults">
+              {searchVaults.map((v) => (
+                <CommandItem
+                  key={v.id}
+                  value={v.id}
+                  onSelect={() => {
+                    navigate(`/vault?id=${v.id}`);
+                    setSearchOpen(false);
+                  }}
+                >
+                  <FolderOpen className="mr-2 h-4 w-4" />
+                  {v.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {searchTab === "files" && searchFiles.length > 0 && (
+            <CommandGroup heading="Files">
+              {searchFiles.map((f: any) => (
+                <CommandItem
+                  key={f.id}
+                  value={f.id}
+                  onSelect={() => {
+                    navigate(`/vault?id=${f.vault_id}`);
+                    setSearchOpen(false);
+                  }}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  {f.name}
                 </CommandItem>
               ))}
             </CommandGroup>

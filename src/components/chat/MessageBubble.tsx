@@ -817,7 +817,7 @@ export function MessageBubble({
           ) : (
             <div>
               <p className="text-sm text-foreground whitespace-pre-wrap">{message.content}</p>
-              <AttachmentBadges attachments={message.attachments} />
+              <AttachmentBadges attachments={message.attachments} onFileClick={(name) => onFileClick?.(name)} />
               <UserMessageActions
                 content={message.content}
                 onEdit={onEditMessage ? () => { setEditText(message.content); setIsEditing(true); } : undefined}
