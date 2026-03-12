@@ -5,16 +5,28 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Server-side AES-GCM decryption
 // ──────────────────────────────────────────────
 async function decryptApiKey(encryptedHex: string, ivHex: string): Promise<string> {
-  const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "PBKDF2" }, false, ["deriveKey"]);
-  const key = await crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: new TextEncoder().encode("lawkit-api-key-enc"), iterations: 100000, hash: "SHA-256" },
-    keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
-  );
-  const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
-  const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
-  return new TextDecoder().decode(decrypted);
+  // Guard: skip decryption if inputs are missing or invalid
+  if (!encryptedHex || !ivHex || ivHex.length < 2) return "";
+  try {
+    const ivBytes = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
+    // AES-GCM requires IV of 12 or 16 bytes
+    if (ivBytes.length !== 12 && ivBytes.length !== 16) {
+      console.error(`Invalid IV length: ${ivBytes.length} (expected 12 or 16)`);
+      return "";
+    }
+    const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "PBKDF2" }, false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: new TextEncoder().encode("lawkit-api-key-enc"), iterations: 100000, hash: "SHA-256" },
+      keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
+    );
+    const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes }, key, encrypted);
+    return new TextDecoder().decode(decrypted);
+  } catch (e) {
+    console.error("decryptApiKey failed:", e);
+    return "";
+  }
 }
 
 const corsHeaders = {
