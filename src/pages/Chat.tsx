@@ -826,6 +826,7 @@ export default function Chat() {
       content={editorDoc.content}
       highlightExcerpt={highlightExcerpt}
       appendVersion={true}
+      onSelectionReply={(text) => setReplyContext(text)}
       onClose={() => {
         const container = scrollContainerRef.current;
         const viewport = container?.querySelector?.('[data-radix-scroll-area-viewport]') as HTMLElement | null;
