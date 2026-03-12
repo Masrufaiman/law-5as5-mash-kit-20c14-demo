@@ -849,8 +849,15 @@ serve(async (req) => {
           // Determine first action: always vault first if available
           // For red_flags mode OR when explicit files are attached, force read_files first
           // Auto-trigger web search when Perplexity is available, even without explicit source selection
+          // If legal research sources are explicitly selected and query contains case/court refs, skip vault
+          const hasExplicitLegalSources = sources?.some((s: string) => ["CourtListener", "US Law", "UK Law"].includes(s));
+          const isCaseQuery = /case|v\.\s|vs?\.\s|court|appeal|ruling|judgment|citation|\d+\s+(So|F|U\.S|S\.Ct)/i.test(message);
+
           let nextTool: string;
-          if (attachedFileIds?.length) {
+          if (hasExplicitLegalSources && isCaseQuery && perplexityKey) {
+            // Legal research sources explicitly selected with case query — skip vault, search first
+            nextTool = "web_search";
+          } else if (attachedFileIds?.length) {
             // Explicit files attached — always read them first, regardless of mode
             nextTool = "read_files";
           } else if (effectiveMode === "red_flags" && hasVault) {
