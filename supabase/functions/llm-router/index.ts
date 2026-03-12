@@ -1210,6 +1210,7 @@ serve(async (req) => {
           let consecutiveFailures = 0;
           let vaultSearchDone = false;
           let webSearchDone = false;
+          const toolAttempts: Record<string, number> = {}; // Track per-tool retry counts
 
           // ── HARD-CODED ROUTING based on request type ──
           const hasExplicitLegalSources = sources?.some((s: string) => ["CourtListener", "US Law", "UK Law"].includes(s));
