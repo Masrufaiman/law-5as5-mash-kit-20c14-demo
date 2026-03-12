@@ -1182,6 +1182,17 @@ WHEN extracting payment terms, extract all sub-values separately:
 DO NOT use industry-standard or typical values.
 Omit any sub-value not stated in the document.
 
+### Rule 5 — Per-Document Independence (prevents context drift)
+Apply ALL grounding rules independently for EACH document. Do not let the extraction from document 1 influence document 2.
+Do not infer any document's governing law from LP identity, address, or nationality.
+Each document must be read as if it is the only document you have ever seen.
+The governing law of document 1 has ZERO bearing on document 2. Re-read the governing law clause fresh for each document.
+
+### Rule 6 — Self-Verification (prevents hallucination)
+After extracting governing law from each document, state the verbatim sentence you found in a "verification" field in the row values.
+If the verbatim sentence does not contain the jurisdiction you extracted, your extraction is wrong — re-read the document.
+Format: "values": { "Governing Law": "laws of England and Wales", "Governing Law Verification": "This Agreement shall be governed by and construed in accordance with the laws of England and Wales." }
+
 ${followUpInstruction}
 ` : "";
 
