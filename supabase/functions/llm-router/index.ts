@@ -1070,7 +1070,10 @@ serve(async (req) => {
 
           const redFlagModePrompt = effectiveMode === "red_flags" ? `
 You are LawKit AI performing Red Flag Analysis.
-Read the ENTIRE document carefully. For every risky, unusual, or potentially unfavorable clause:
+
+CRITICAL GROUNDING RULE: You MUST analyze ONLY the document content provided in the '## Document Contents' section below. Do not reference any other documents from memory, training data, or previous sessions. If the document content references parties, terms, dates, or jurisdictions, use ONLY those exact details. Never fabricate or substitute party names, dates, or clause text.
+
+Read the ENTIRE provided document carefully. For every risky, unusual, or potentially unfavorable clause:
 
 OUTPUT FORMAT — you MUST use this exact format:
 <!-- REDFLAGS: [Document Title] -->
@@ -1078,7 +1081,7 @@ OUTPUT FORMAT — you MUST use this exact format:
 {
   "flags": [
     {
-      "clause_text": "exact verbatim quote from the document",
+      "clause_text": "exact verbatim quote from the document — copy word for word",
       "risk_level": "CRITICAL|HIGH|MEDIUM|LOW",
       "category": "liability|IP|termination|payment|governance|data_protection|confidentiality|indemnification|non_compete|representations",
       "reason": "Clear explanation of why this clause is risky",
@@ -1091,7 +1094,7 @@ OUTPUT FORMAT — you MUST use this exact format:
     "high": N,
     "medium": N,
     "low": N,
-    "risk_score": N
+    "risk_score": N  // overall risk score 0-10. This is a holistic assessment, NOT a sum of individual flags. 0=no risk, 10=extreme risk.
   }
 }
 \`\`\`
@@ -1102,8 +1105,10 @@ Risk levels:
 - MEDIUM = worth negotiating, moderate concern
 - LOW = minor issue, note only
 
+JURISDICTION RULE: Only flag governing law as a risk if the jurisdiction is clearly mismatched with the parties' stated locations, or if the jurisdiction is unusual for the contract type. Do NOT flag a jurisdiction simply because it differs from England and Wales — assess based on the parties involved.
+
 Before the REDFLAGS block, write a brief 2-3 sentence overview of the document and overall risk assessment.
-After the REDFLAGS block, write a brief conclusion with key recommendations.
+After the REDFLAGS block, write ONLY key recommendations that are DIFFERENT from the overview. Do NOT repeat the overview paragraph. Keep recommendations actionable and specific.
 ${followUpInstruction}
 ` : "";
 

@@ -597,7 +597,19 @@ export function MessageBubble({
           )}
           <RedFlagCard
             data={redFlagData}
-            onOpenInEditor={onDocumentOpen ? () => onDocumentOpen(redFlagData.title, cleanContent) : undefined}
+            onOpenInEditor={onFileClick ? () => {
+              // Try to find the document name from file refs or red flag title
+              const docName = fileRefs?.[0]?.name || redFlagData.title;
+              const docId = fileRefs?.[0]?.id;
+              onFileClick(docName, docId);
+            } : onDocumentOpen ? () => {
+              // Fallback: strip REDFLAGS JSON block from content before opening in editor
+              const strippedContent = cleanContent
+                .replace(/<!--\s*REDFLAGS:[\s\S]*?```/g, "")
+                .replace(/```json[\s\S]*?```/g, "")
+                .trim();
+              onDocumentOpen(redFlagData.title, strippedContent);
+            } : undefined}
           />
           {!isUser && !isStreaming && citations.length > 0 && (
             <CollapsibleReferences citations={citations} onFileClick={onFileClick} />
