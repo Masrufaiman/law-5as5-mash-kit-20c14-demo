@@ -954,7 +954,7 @@ serve(async (req) => {
               nextInput = { query: message };
 
               // Re-run monologue to decide next step
-              const postVerify = await innerMonologue(aiUrl, aiKey, modelId, aiHeaders, message, currentPlan, accumulatedContext, toolResult, iteration, currentPlan.length);
+              const postVerify = await innerMonologue(aiUrl, aiKey, modelId, aiHeaders, message, currentPlan, accumulatedContext, toolResult, iteration, currentPlan.length, attachedFileNames);
               if (postVerify.next_action === "FINISH") break;
               nextTool = postVerify.next_tool || "";
               nextInput = postVerify.next_tool_input || { query: message };
