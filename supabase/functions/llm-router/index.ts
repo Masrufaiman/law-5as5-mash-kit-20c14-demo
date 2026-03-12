@@ -1657,7 +1657,7 @@ ${followUpInstruction}
           const aiResponse = await fetch(aiUrl, {
             method: "POST",
             headers: aiHeaders,
-            body: JSON.stringify({ model: modelId, messages: aiMessages, stream: true, max_tokens: effectiveMode === "drafting" ? 16384 : (deepResearch ? 8192 : 4096), temperature: 0.3 }),
+            body: JSON.stringify({ model: modelId, messages: aiMessages, stream: true, max_tokens: effectiveMode === "drafting" ? 16384 : (deepResearch ? 16000 : 8000), temperature: 0.3 }),
           });
 
           if (!aiResponse.ok) {
