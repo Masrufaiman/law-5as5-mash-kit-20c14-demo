@@ -46,6 +46,7 @@ interface MessageBubbleProps {
   progress?: { current: number; total: number } | null;
   onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void;
   onRedFlagOpen?: (data: import("./RedFlagCard").RedFlagData, fileName: string, fileId?: string) => void;
+  onFlagClick?: (index: number) => void;
 }
 
 /** User message action bar (edit, copy) */
