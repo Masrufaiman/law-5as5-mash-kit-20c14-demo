@@ -46,6 +46,7 @@ interface MessageBubbleProps {
   progress?: { current: number; total: number } | null;
   onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void;
   onRedFlagOpen?: (data: import("./RedFlagCard").RedFlagData, fileName: string, fileId?: string) => void;
+  onFlagClick?: (index: number) => void;
 }
 
 /** User message action bar (edit, copy) */
@@ -368,6 +369,7 @@ export function MessageBubble({
   progress,
   onFileClick,
   onRedFlagOpen,
+  onFlagClick,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const citations = message.citations || [];
@@ -598,7 +600,22 @@ export function MessageBubble({
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{remainingContent.replace(/<!--\s*REDFLAGS:[\s\S]*?```/, "").trim()}</ReactMarkdown>
             </div>
           )}
-          <RedFlagCard data={redFlagData} />
+          <RedFlagCard
+            data={redFlagData}
+            onOpenInEditor={() => {
+              const refs = (message as any).frozenFileRefs || fileRefs;
+              if (refs?.[0] && onRedFlagOpen) {
+                onRedFlagOpen(redFlagData, refs[0].name, refs[0].id);
+              }
+            }}
+            onFlagClick={(index) => {
+              const refs = (message as any).frozenFileRefs || fileRefs;
+              if (refs?.[0] && onRedFlagOpen) {
+                onRedFlagOpen(redFlagData, refs[0].name, refs[0].id);
+              }
+              onFlagClick?.(index);
+            }}
+          />
           {!isUser && !isStreaming && citations.length > 0 && (
             <CollapsibleReferences citations={citations} onFileClick={onFileClick} />
           )}

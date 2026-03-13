@@ -679,11 +679,18 @@ export default function Chat() {
     }
   }, [profile?.organization_id, handleDocumentOpen]);
 
-  // Callback for "Open in Editor" from RedFlagCard — sets redFlagData AND opens the file
+  // Active flag index for scroll sync with RedlineView
+  const [activeFlagIndex, setActiveFlagIndex] = useState<number | null>(null);
+
+  // Callback for "Open in Editor" from RedFlagCard — uses 3-tier fallback
   const handleRedFlagOpen = useCallback((data: RedFlagData, fileName: string, fileId?: string) => {
-    setRedFlagData(data);
-    handleFileClick(fileName, fileId);
-  }, [handleFileClick]);
+    openRedFlagPanel(data, fileName, fileId);
+  }, [openRedFlagPanel]);
+
+  // Callback for flag card click → scroll sync
+  const handleFlagClick = useCallback((index: number) => {
+    setActiveFlagIndex(index);
+  }, []);
 
 
   const handleFileSelect = useCallback(() => {
@@ -918,14 +925,17 @@ export default function Chat() {
       title={editorDoc.title}
       content={editorDoc.content}
       redFlagData={redFlagData}
+      activeFlagIndex={activeFlagIndex}
       onClose={() => {
         setEditorDoc(null);
         setRedFlagData(null);
         setHighlightExcerpt(undefined);
+        setActiveFlagIndex(null);
       }}
       onContentUpdate={(newContent) => {
         setEditorDoc({ ...editorDoc, content: newContent });
-        setRedFlagData(null); // Clear redline after applying
+        setRedFlagData(null);
+        setActiveFlagIndex(null);
       }}
     />
   ) : editorDoc ? (
@@ -1152,6 +1162,7 @@ export default function Chat() {
                         progress={isCurrentlyStreaming ? progress : null}
                         onFileClick={handleFileClick}
                         onRedFlagOpen={handleRedFlagOpen}
+                        onFlagClick={handleFlagClick}
                         onEditMessage={handleEditMessage}
                       />
 

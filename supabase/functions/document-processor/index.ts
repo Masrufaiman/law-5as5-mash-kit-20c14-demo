@@ -362,7 +362,8 @@ async function callMistralOCR(fileBytes: Uint8Array, mimeType: string, apiKey: s
         type: "document_url",
         document_url: dataUrl,
       },
-      include_image_base64: false,
+      include_image_base64: true,
+      table_format: "html",
     }),
   });
 
