@@ -1162,6 +1162,7 @@ export default function Chat() {
                         progress={isCurrentlyStreaming ? progress : null}
                         onFileClick={handleFileClick}
                         onRedFlagOpen={handleRedFlagOpen}
+                        onFlagClick={handleFlagClick}
                         onEditMessage={handleEditMessage}
                       />
 
