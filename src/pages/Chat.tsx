@@ -114,9 +114,11 @@ export default function Chat() {
 
   // Persist prompt state to localStorage (survives reload)
   const storageKey = conversationId ? `chat_state_${conversationId}` : "chat_state_new";
+  const saveEnabledRef = useRef(false);
 
-  // Save prompt state on changes
+  // Save prompt state on changes — but only after initial hydration
   useEffect(() => {
+    if (!saveEnabledRef.current) return;
     const state = {
       input,
       deepResearch,
@@ -125,9 +127,11 @@ export default function Chat() {
       selectedVault,
       workflowTag,
       replyContext,
+      conversationAttachedFileIds,
+      conversationAttachedFileNames,
     };
     try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch {}
-  }, [input, deepResearch, activeSources, promptMode, selectedVault, workflowTag, replyContext, storageKey]);
+  }, [input, deepResearch, activeSources, promptMode, selectedVault, workflowTag, replyContext, storageKey, conversationAttachedFileIds, conversationAttachedFileNames]);
 
   // Restore prompt state on mount / conversation change
   const hasRestoredRef = useRef<string | null>(null);
