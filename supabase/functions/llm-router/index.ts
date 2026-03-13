@@ -660,8 +660,45 @@ async function toolReadFiles(orgId: string, vaultId: string | undefined, attache
   }
 
   const readyFiles = (files || []).filter((f: any) => f.extracted_text);
+
+  // Build fileRefs even if text is unavailable (needed for editor linking)
+  const candidateFileRefs: { name: string; id?: string }[] = (files || []).map((f: any) => ({ name: f.name, id: f.id }));
+
   if (!readyFiles.length) {
-    return { context: "", citations: [], domains: [], fileRefs: [], summary: "No documents found" };
+    // Classify why no text
+    const allFiles = files || [];
+    const hasProcessing = allFiles.some((f: any) => f.status === "processing" || f.status === "uploading");
+    const hasError = allFiles.some((f: any) => f.status === "error");
+    const reason = hasProcessing ? "processing" : hasError ? "error" : allFiles.length > 0 ? "ready_but_empty" : "no_files";
+
+    // Fallback: try file_chunks for any file that has chunks but empty extracted_text
+    if (allFiles.length > 0) {
+      const fileIds = allFiles.map((f: any) => f.id);
+      const { data: chunks } = await adminClient.from("file_chunks").select("content, file_id, chunk_index").in("file_id", fileIds).order("chunk_index", { ascending: true }).limit(200);
+      if (chunks && chunks.length > 0) {
+        let context = "\n\n## Document Contents\n";
+        const citations: ToolResult["citations"] = [];
+        const fileGroups = new Map<string, string[]>();
+        for (const c of chunks) {
+          if (!fileGroups.has(c.file_id)) fileGroups.set(c.file_id, []);
+          fileGroups.get(c.file_id)!.push(c.content);
+        }
+        let idx = 0;
+        for (const [fId, contents] of fileGroups) {
+          const fName = allFiles.find((f: any) => f.id === fId)?.name || "Document";
+          idx++;
+          context += `### [${idx}] ${fName}\n${contents.join("\n\n")}\n\n`;
+          citations.push({ index: idx, source: fName, excerpt: contents[0]?.substring(0, 200) || "" });
+        }
+        return { context, citations, domains: [], fileRefs: candidateFileRefs, summary: `Read ${fileGroups.size} documents from chunks` };
+      }
+    }
+
+    const summaryMsg = reason === "processing" ? "Documents are still processing. Please wait a moment and try again."
+      : reason === "error" ? "Document processing failed. Try re-uploading the file."
+      : reason === "ready_but_empty" ? "Documents have no extractable text content."
+      : "No documents found";
+    return { context: "", citations: [], domains: [], fileRefs: candidateFileRefs, summary: summaryMsg };
   }
 
   let context = "\n\n## Document Contents\n";
