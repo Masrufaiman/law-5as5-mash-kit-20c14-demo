@@ -1665,10 +1665,26 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
             trackStep(stepLabel, "done", toolResult.summary);
 
             // ══ FORCE FINISH when attached files have been read ══
-            // If the user explicitly attached files and we just read them, skip monologue entirely.
-            // The monologue tends to suggest vault_search or ask "which document?" — bypass it completely.
-            if (attachedFileIds?.length && nextTool === "read_files" && toolResult.context) {
-              emitThinking("Documents loaded. Preparing analysis...");
+            if (attachedFileIds?.length && nextTool === "read_files") {
+              if (toolResult.context) {
+                emitThinking("Documents loaded. Preparing analysis...");
+              } else {
+                // RED-FLAG HALLUCINATION GUARD: If read_files returned no content, do NOT proceed with red-flag analysis
+                if (effectiveMode === "red_flags") {
+                  emitThinking("Document is still processing or could not be read. Cannot perform red flag analysis without document content.");
+                  // Emit a clear message instead of fabricating
+                  emit(controller, encoder, { type: "token", content: "The document is still being processed and its content is not yet available. Please wait a moment and try again once processing completes." });
+                  emit(controller, encoder, { type: "done", citations: [], model: modelId, followUps: ["Try the red flag analysis again", "Check document processing status"] });
+                  // Save messages
+                  if (conversationId && conversationId !== "column-fill") {
+                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "user", content: message });
+                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "assistant", content: "The document is still being processed and its content is not yet available. Please wait a moment and try again once processing completes.", model_used: modelId });
+                  }
+                  controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                  controller.close();
+                  return;
+                }
+              }
               // But if there are queued legal tools, run those first
               if (toolQueue.length > 0) {
                 nextTool = toolQueue.shift()!;
