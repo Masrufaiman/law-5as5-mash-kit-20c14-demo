@@ -925,14 +925,17 @@ export default function Chat() {
       title={editorDoc.title}
       content={editorDoc.content}
       redFlagData={redFlagData}
+      activeFlagIndex={activeFlagIndex}
       onClose={() => {
         setEditorDoc(null);
         setRedFlagData(null);
         setHighlightExcerpt(undefined);
+        setActiveFlagIndex(null);
       }}
       onContentUpdate={(newContent) => {
         setEditorDoc({ ...editorDoc, content: newContent });
-        setRedFlagData(null); // Clear redline after applying
+        setRedFlagData(null);
+        setActiveFlagIndex(null);
       }}
     />
   ) : editorDoc ? (
