@@ -158,6 +158,107 @@ function prefixSearchQuery(query: string, jurisdictions: string[]): string {
   return prefix ? `${prefix} ${query}` : query;
 }
 
+// ──────────────────────────────────────────────
+// Query Decomposition — Multi-Query Search
+// ──────────────────────────────────────────────
+function decomposeSearchQueries(
+  message: string,
+  tool: string,
+  jurisdictions: string[],
+  requestType: number
+): string[] {
+  // Strip meta-instructions that pollute search queries
+  let cleaned = message
+    .replace(/\b(search|find|look up|research|cite|analyze|explain|summarize|compare|deep research|give me)\b:?\s*/gi, "")
+    .replace(/\b(using|via|from|through|in)\s+(courtlistener|edgar|eur-lex|sec|european)\s*/gi, "")
+    .replace(/\b(please|can you|could you|I need|I want)\b\s*/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned || cleaned.length < 5) cleaned = message;
+
+  const queries: string[] = [];
+
+  switch (tool) {
+    case "courtlistener": {
+      // Extract case names (Party v Party patterns)
+      const caseNames = message.match(/[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\s+v\.?\s+[A-Z][a-z]+(?:\s[A-Z][a-z]+)*/g);
+      if (caseNames) {
+        caseNames.forEach(cn => queries.push(cn));
+      }
+      // Extract legal doctrines/concepts
+      const doctrines = cleaned.replace(/[A-Z][a-z]+\s+v\.?\s+[A-Z][a-z]+(?:\s[A-Z][a-z]+)*/g, "").trim();
+      if (doctrines.length > 10) {
+        queries.push(doctrines);
+      }
+      // Add jurisdiction-focused variant
+      if (jurisdictions.length > 0 && queries.length > 0) {
+        queries.push(`${jurisdictions[0]} ${queries[0]}`);
+      }
+      break;
+    }
+    case "edgar": {
+      // Extract company names
+      const companies = cleaned.match(/\b(Apple|Microsoft|Tesla|Google|Alphabet|Amazon|Meta|Facebook|Nvidia|JPMorgan|Goldman\s*Sachs)\b/gi);
+      const formTypes = cleaned.match(/\b(10-K|10-Q|8-K|S-1|DEF\s*14A|20-F|6-K|proxy\s*statement|annual\s*report)\b/gi);
+      if (companies) {
+        companies.forEach(co => {
+          const form = formTypes?.[0] || "";
+          queries.push(`${co} ${form}`.trim());
+        });
+      }
+      // Date-specific variant
+      const yearMatch = cleaned.match(/\b(20\d{2})\b/);
+      if (yearMatch && queries.length > 0) {
+        queries.push(`${queries[0]} ${yearMatch[1]}`);
+      }
+      if (queries.length === 0) queries.push(cleaned);
+      break;
+    }
+    case "eurlex": {
+      // CELEX-first: check for known regulation references
+      const knownTerms = ["gdpr", "ai act", "mifid", "dora", "dsa", "dma", "nis2", "digital services", "digital markets", "trade secrets", "ecommerce"];
+      const foundTerms = knownTerms.filter(t => cleaned.toLowerCase().includes(t));
+      foundTerms.forEach(t => queries.push(t));
+      // Legal concept fallback
+      const conceptQuery = cleaned.replace(/\b(EU|european|regulation|directive|article)\b/gi, "").trim();
+      if (conceptQuery.length > 8 && !foundTerms.length) {
+        queries.push(`EU ${conceptQuery}`);
+      }
+      // Article-specific query
+      const articleMatch = cleaned.match(/article\s+(\d+)/i);
+      if (articleMatch && foundTerms.length > 0) {
+        queries.push(`${foundTerms[0]} article ${articleMatch[1]}`);
+      }
+      if (queries.length === 0) queries.push(cleaned);
+      break;
+    }
+    case "web_search": {
+      // Generate 2-3 angle queries
+      queries.push(cleaned);
+      // Jurisdiction-specific angle
+      if (jurisdictions.length > 0) {
+        queries.push(`${jurisdictions[0]} law ${cleaned}`);
+      }
+      // If complex query, add a focused sub-query
+      if (cleaned.split(/\s+/).length > 8) {
+        // Extract the core legal question (first sentence or clause)
+        const firstSentence = cleaned.split(/[.?!]/)[0]?.trim();
+        if (firstSentence && firstSentence !== cleaned) {
+          queries.push(firstSentence);
+        }
+      }
+      break;
+    }
+    default:
+      queries.push(cleaned);
+  }
+
+  // Deduplicate and limit to 4 queries
+  const unique = [...new Set(queries.map(q => q.trim()).filter(q => q.length > 3))];
+  return unique.slice(0, 4);
+}
+
 const SOURCE_DOMAIN_MAP: Record<string, string[]> = {
   "EDGAR (SEC)": ["sec.gov", "edgar.sec.gov"],
   "CourtListener": ["courtlistener.com"],
@@ -1089,6 +1190,127 @@ serve(async (req) => {
 
     const encoder = new TextEncoder();
 
+    // ──────── FAST-PATH: Simple conversational messages ────────
+    const wordCount = message.trim().split(/\s+/).length;
+    const isSimpleChat = wordCount <= 5
+      && !attachedFileIds?.length
+      && !deepResearch
+      && (!sources || sources.length === 0)
+      && !effectiveMode
+      && !workflowSystemPrompt
+      && !currentDocumentContent
+      && !vaultId
+      && !/\b(law|legal|case|statute|regulation|contract|clause|court|file|document|draft|review|analyze|red.?flag)\b/i.test(message);
+
+    if (isSimpleChat) {
+      // Direct quick response — no planner, no ReAct loop
+      const fastStream = new ReadableStream({
+        async start(controller) {
+          try {
+            // Load minimal context
+            const { data: orgData } = await adminClient.from("organizations").select("name").eq("id", orgId).single();
+
+            emit(controller, encoder, { type: "step", step: { name: "Processing", status: "working" } });
+
+            const systemPrompt = `You are LawKit, a professional legal AI assistant for ${orgData?.name || "the organization"}. 
+User: ${profile.full_name || profile.email}. 
+Respond naturally and concisely. For simple greetings or conversational messages, be friendly and brief.
+If the user asks a follow-up that needs context from previous messages, use the conversation history provided.
+At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`;
+
+            const aiMessages = [
+              { role: "system", content: systemPrompt },
+              ...conversationHistory.map((m: any) => ({ role: m.role, content: m.content })),
+              { role: "user", content: message },
+            ];
+
+            // Save user message
+            if (conversationId && conversationId !== "column-fill") {
+              await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "user", content: message });
+            }
+
+            const aiResponse = await fetch(aiUrl, {
+              method: "POST",
+              headers: aiHeaders,
+              body: JSON.stringify({ model: modelId, messages: aiMessages, stream: true, max_tokens: 1024, temperature: 0.5 }),
+            });
+
+            emit(controller, encoder, { type: "step", step: { name: "Processing", status: "done", duration: "0s" } });
+
+            if (!aiResponse.ok) {
+              emit(controller, encoder, { type: "error", error: "AI service temporarily unavailable." });
+              controller.close();
+              return;
+            }
+
+            emit(controller, encoder, { type: "final_answer_start" });
+
+            const reader = aiResponse.body!.getReader();
+            const decoder = new TextDecoder();
+            let fullContent = "";
+            let buffer = "";
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              let newlineIndex: number;
+              while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+                let line = buffer.slice(0, newlineIndex);
+                buffer = buffer.slice(newlineIndex + 1);
+                if (line.endsWith("\r")) line = line.slice(0, -1);
+                if (!line.startsWith("data: ")) continue;
+                const jsonStr = line.slice(6).trim();
+                if (jsonStr === "[DONE]") continue;
+                try {
+                  const parsed = JSON.parse(jsonStr);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content) {
+                    fullContent += content;
+                    emit(controller, encoder, { type: "token", content });
+                  }
+                } catch {}
+              }
+            }
+
+            // Extract follow-ups
+            const followUps: string[] = [];
+            fullContent.split("\n").filter(l => l.startsWith(">>FOLLOWUP: ")).forEach(l => {
+              const q = l.replace(">>FOLLOWUP: ", "").trim();
+              if (q) followUps.push(q);
+            });
+            const cleanedContent = fullContent.split("\n").filter(l => !l.startsWith(">>FOLLOWUP: ")).join("\n").trim();
+
+            emit(controller, encoder, { type: "done", citations: [], model: modelId, followUps });
+
+            // Save assistant message
+            if (conversationId && conversationId !== "column-fill") {
+              await adminClient.from("messages").insert({
+                conversation_id: conversationId, organization_id: orgId, role: "assistant",
+                content: cleanedContent, model_used: modelId,
+              });
+              const { count } = await adminClient.from("messages").select("*", { count: "exact", head: true }).eq("conversation_id", conversationId);
+              if (count && count <= 2) {
+                const title = cleanedContent.substring(0, 60).replace(/[#*\n]/g, "").trim();
+                await adminClient.from("conversations").update({ title }).eq("id", conversationId);
+              }
+            }
+
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          } catch (err) {
+            console.error("Fast-path error:", err);
+            emit(controller, encoder, { type: "error", error: "Stream interrupted" });
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(fastStream, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
+      });
+    }
+
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -1289,6 +1511,12 @@ serve(async (req) => {
 
             let toolResult: ToolResult;
             try {
+              // Decompose queries for multi-search (except vault/read_files)
+              const useDecomposition = ["courtlistener", "edgar", "eurlex", "web_search"].includes(nextTool);
+              const subQueries = useDecomposition
+                ? decomposeSearchQueries(nextInput.query || message, nextTool, intent.jurisdictions, requestType)
+                : [nextInput.query || message];
+
               switch (nextTool) {
                 case "vault_search":
                   emitThinking("Embedding query and searching document vectors for relevant passages...");
@@ -1297,18 +1525,45 @@ serve(async (req) => {
                   if (toolResult.fileRefs.length > 0) emit(controller, encoder, { type: "file_refs", files: toolResult.fileRefs });
                   break;
 
-                case "web_search":
+                case "web_search": {
                   if (!perplexityKey) {
                     toolResult = { context: "", citations: [], domains: [], fileRefs: [], summary: "No search API configured" };
                   } else {
-                    emitThinking(`Searching across legal databases...`);
-                    toolResult = await toolWebSearch(nextInput.query || message, perplexityKey, currentSearchModel, sources, intent.jurisdictions, currentRE);
+                    // Select per-query Perplexity model based on complexity
+                    const { model: queryModel, reasoningEffort: queryRE } = selectPerplexityModel(complexity, !!deepResearch);
+
+                    if (subQueries.length > 1) {
+                      emitThinking(`Executing ${subQueries.length} targeted searches...`);
+                    } else {
+                      emitThinking(`Searching across legal databases...`);
+                    }
+
+                    // Execute sub-queries and merge results
+                    const mergedResult: ToolResult = { context: "", citations: [], domains: [], fileRefs: [], summary: "" };
+                    const seenUrls = new Set<string>();
+
+                    for (const sq of subQueries) {
+                      const partial = await toolWebSearch(sq, perplexityKey, queryModel, sources, intent.jurisdictions, queryRE);
+                      if (partial.context) mergedResult.context += partial.context + "\n\n";
+                      // Deduplicate citations by URL
+                      for (const c of partial.citations) {
+                        if (c.url && seenUrls.has(c.url)) continue;
+                        if (c.url) seenUrls.add(c.url);
+                        mergedResult.citations.push({ ...c, index: mergedResult.citations.length + 1 });
+                      }
+                      mergedResult.domains.push(...partial.domains);
+                    }
+                    mergedResult.domains = [...new Set(mergedResult.domains)];
+                    mergedResult.summary = `Found ${mergedResult.citations.length} sources from ${subQueries.length} searches`;
+
+                    toolResult = mergedResult;
                     webSearchDone = true;
                     if (toolResult.domains.length > 0) {
                       emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
                     }
                   }
                   break;
+                }
 
                 case "read_files":
                   emitThinking("Reading document contents directly...");
@@ -1316,29 +1571,74 @@ serve(async (req) => {
                   if (toolResult.fileRefs.length > 0) emit(controller, encoder, { type: "file_refs", files: toolResult.fileRefs });
                   break;
 
-                case "courtlistener":
-                  emitThinking("Searching CourtListener for case law...");
-                  toolResult = await toolCourtListener(nextInput.query || message, courtListenerKey);
-                  if (toolResult.domains.length > 0) {
-                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
-                  }
-                  break;
+                case "courtlistener": {
+                  emitThinking(`Searching CourtListener with ${subQueries.length} targeted queries...`);
+                  const mergedResult: ToolResult = { context: "", citations: [], domains: ["courtlistener.com"], fileRefs: [], summary: "" };
+                  const seenUrls = new Set<string>();
 
-                case "edgar":
-                  emitThinking("Searching SEC EDGAR for filings...");
-                  toolResult = await toolEdgar(nextInput.query || message, edgarUserAgent);
-                  if (toolResult.domains.length > 0) {
-                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
+                  for (const sq of subQueries) {
+                    const partial = await toolCourtListener(sq, courtListenerKey);
+                    if (partial.context) mergedResult.context += partial.context + "\n\n";
+                    for (const c of partial.citations) {
+                      if (c.url && seenUrls.has(c.url)) continue;
+                      if (c.url) seenUrls.add(c.url);
+                      mergedResult.citations.push({ ...c, index: mergedResult.citations.length + 1 });
+                    }
                   }
-                  break;
+                  mergedResult.summary = `${mergedResult.citations.length} cases found from ${subQueries.length} queries`;
+                  toolResult = mergedResult;
 
-                case "eurlex":
-                  emitThinking("Searching EUR-Lex for EU legislation...");
-                  toolResult = await toolEurLex(nextInput.query || message);
                   if (toolResult.domains.length > 0) {
                     emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
                   }
                   break;
+                }
+
+                case "edgar": {
+                  emitThinking(`Searching SEC EDGAR with ${subQueries.length} targeted queries...`);
+                  const mergedResult: ToolResult = { context: "", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "" };
+                  const seenUrls = new Set<string>();
+
+                  for (const sq of subQueries) {
+                    const partial = await toolEdgar(sq, edgarUserAgent);
+                    if (partial.context) mergedResult.context += partial.context + "\n\n";
+                    for (const c of partial.citations) {
+                      if (c.url && seenUrls.has(c.url)) continue;
+                      if (c.url) seenUrls.add(c.url);
+                      mergedResult.citations.push({ ...c, index: mergedResult.citations.length + 1 });
+                    }
+                  }
+                  mergedResult.summary = `${mergedResult.citations.length} filings found from ${subQueries.length} queries`;
+                  toolResult = mergedResult;
+
+                  if (toolResult.domains.length > 0) {
+                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
+                  }
+                  break;
+                }
+
+                case "eurlex": {
+                  emitThinking(`Searching EUR-Lex with ${subQueries.length} targeted queries...`);
+                  const mergedResult: ToolResult = { context: "", citations: [], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "" };
+                  const seenUrls = new Set<string>();
+
+                  for (const sq of subQueries) {
+                    const partial = await toolEurLex(sq);
+                    if (partial.context) mergedResult.context += partial.context + "\n\n";
+                    for (const c of partial.citations) {
+                      if (c.url && seenUrls.has(c.url)) continue;
+                      if (c.url) seenUrls.add(c.url);
+                      mergedResult.citations.push({ ...c, index: mergedResult.citations.length + 1 });
+                    }
+                  }
+                  mergedResult.summary = `${mergedResult.citations.length} EU law results from ${subQueries.length} queries`;
+                  toolResult = mergedResult;
+
+                  if (toolResult.domains.length > 0) {
+                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
+                  }
+                  break;
+                }
 
                 default:
                   toolResult = { context: "", citations: [], domains: [], fileRefs: [], summary: "Unknown tool" };
@@ -1365,10 +1665,26 @@ serve(async (req) => {
             trackStep(stepLabel, "done", toolResult.summary);
 
             // ══ FORCE FINISH when attached files have been read ══
-            // If the user explicitly attached files and we just read them, skip monologue entirely.
-            // The monologue tends to suggest vault_search or ask "which document?" — bypass it completely.
-            if (attachedFileIds?.length && nextTool === "read_files" && toolResult.context) {
-              emitThinking("Documents loaded. Preparing analysis...");
+            if (attachedFileIds?.length && nextTool === "read_files") {
+              if (toolResult.context) {
+                emitThinking("Documents loaded. Preparing analysis...");
+              } else {
+                // RED-FLAG HALLUCINATION GUARD: If read_files returned no content, do NOT proceed with red-flag analysis
+                if (effectiveMode === "red_flags") {
+                  emitThinking("Document is still processing or could not be read. Cannot perform red flag analysis without document content.");
+                  // Emit a clear message instead of fabricating
+                  emit(controller, encoder, { type: "token", content: "The document is still being processed and its content is not yet available. Please wait a moment and try again once processing completes." });
+                  emit(controller, encoder, { type: "done", citations: [], model: modelId, followUps: ["Try the red flag analysis again", "Check document processing status"] });
+                  // Save messages
+                  if (conversationId && conversationId !== "column-fill") {
+                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "user", content: message });
+                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "assistant", content: "The document is still being processed and its content is not yet available. Please wait a moment and try again once processing completes.", model_used: modelId });
+                  }
+                  controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                  controller.close();
+                  return;
+                }
+              }
               // But if there are queued legal tools, run those first
               if (toolQueue.length > 0) {
                 nextTool = toolQueue.shift()!;
@@ -1953,21 +2269,40 @@ function extractCitations(content: string, vaultContext: string): { index: numbe
   const citations: { index: number; source: string; excerpt: string }[] = [];
   const seen = new Set<number>();
 
+  // Count how many actual document sections exist in vault context to know valid index range
+  const maxDocIndex = (vaultContext.match(/### \[\d+\]/g) || []).length;
+
   for (const match of content.matchAll(/\[(\d+)\]/g)) {
     const idx = parseInt(match[1]);
     if (seen.has(idx)) continue;
+
+    // YEAR BRACKET GUARD: Skip numbers that look like years (1900-2099) unless they're within valid citation range
+    if (idx >= 1900 && idx <= 2099 && idx > maxDocIndex && idx > 50) continue;
+
     seen.add(idx);
     const docMatch = vaultContext.match(new RegExp(`### \\[${idx}\\] (.+?)\\n([\\s\\S]*?)(?=### \\[|$)`));
-    citations.push({ index: idx, source: docMatch?.[1] || `Source ${idx}`, excerpt: docMatch?.[2]?.substring(0, 200)?.trim() || "" });
+    // Only create citation if we have a matching document section OR the index is within known range
+    if (docMatch) {
+      citations.push({ index: idx, source: docMatch[1], excerpt: docMatch[2]?.substring(0, 200)?.trim() || "" });
+    } else if (idx <= maxDocIndex || idx <= 30) {
+      // Reasonable citation index — keep as fallback
+      citations.push({ index: idx, source: `Source ${idx}`, excerpt: "" });
+    }
+    // Skip large numbers with no matching doc (likely year brackets like [2015], [2022])
   }
 
   for (const match of content.matchAll(/[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+/g)) {
     const digits = match[0].split("").map(c => SUPERSCRIPT_DIGITS[c] || c).join("");
     const idx = parseInt(digits);
     if (isNaN(idx) || seen.has(idx)) continue;
+    if (idx >= 1900 && idx <= 2099 && idx > maxDocIndex && idx > 50) continue;
     seen.add(idx);
     const docMatch = vaultContext.match(new RegExp(`### \\[${idx}\\] (.+?)\\n([\\s\\S]*?)(?=### \\[|$)`));
-    citations.push({ index: idx, source: docMatch?.[1] || `Source ${idx}`, excerpt: docMatch?.[2]?.substring(0, 200)?.trim() || "" });
+    if (docMatch) {
+      citations.push({ index: idx, source: docMatch[1], excerpt: docMatch[2]?.substring(0, 200)?.trim() || "" });
+    } else if (idx <= maxDocIndex || idx <= 30) {
+      citations.push({ index: idx, source: `Source ${idx}`, excerpt: "" });
+    }
   }
 
   return citations;

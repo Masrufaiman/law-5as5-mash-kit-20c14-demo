@@ -114,9 +114,11 @@ export default function Chat() {
 
   // Persist prompt state to localStorage (survives reload)
   const storageKey = conversationId ? `chat_state_${conversationId}` : "chat_state_new";
+  const saveEnabledRef = useRef(false);
 
-  // Save prompt state on changes
+  // Save prompt state on changes — but only after initial hydration
   useEffect(() => {
+    if (!saveEnabledRef.current) return;
     const state = {
       input,
       deepResearch,
@@ -125,18 +127,24 @@ export default function Chat() {
       selectedVault,
       workflowTag,
       replyContext,
+      conversationAttachedFileIds,
+      conversationAttachedFileNames,
     };
     try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch {}
-  }, [input, deepResearch, activeSources, promptMode, selectedVault, workflowTag, replyContext, storageKey]);
+  }, [input, deepResearch, activeSources, promptMode, selectedVault, workflowTag, replyContext, storageKey, conversationAttachedFileIds, conversationAttachedFileNames]);
 
-  // Restore prompt state on mount / conversation change
+  // Restore prompt state on mount / conversation change — hydrate first, THEN enable saves
   const hasRestoredRef = useRef<string | null>(null);
   useEffect(() => {
     if (hasRestoredRef.current === storageKey) return;
     hasRestoredRef.current = storageKey;
+    saveEnabledRef.current = false; // Prevent save from overwriting during hydration
     try {
       const saved = localStorage.getItem(storageKey);
-      if (!saved) return;
+      if (!saved) {
+        saveEnabledRef.current = true;
+        return;
+      }
       const state = JSON.parse(saved);
       if (state.input) setInput(state.input);
       if (state.deepResearch !== undefined) setDeepResearch(state.deepResearch);
@@ -149,7 +157,12 @@ export default function Chat() {
       }
       if (state.workflowTag) setWorkflowTag(state.workflowTag);
       if (state.replyContext) setReplyContext(state.replyContext);
+      // Restore attached file context
+      if (state.conversationAttachedFileIds?.length) setConversationAttachedFileIds(state.conversationAttachedFileIds);
+      if (state.conversationAttachedFileNames?.length) setConversationAttachedFileNames(state.conversationAttachedFileNames);
     } catch {}
+    // Enable saves after hydration completes
+    requestAnimationFrame(() => { saveEnabledRef.current = true; });
   }, [storageKey]);
 
   // Load vaults for sources dropdown
