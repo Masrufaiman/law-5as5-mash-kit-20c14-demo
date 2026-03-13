@@ -2253,21 +2253,40 @@ function extractCitations(content: string, vaultContext: string): { index: numbe
   const citations: { index: number; source: string; excerpt: string }[] = [];
   const seen = new Set<number>();
 
+  // Count how many actual document sections exist in vault context to know valid index range
+  const maxDocIndex = (vaultContext.match(/### \[\d+\]/g) || []).length;
+
   for (const match of content.matchAll(/\[(\d+)\]/g)) {
     const idx = parseInt(match[1]);
     if (seen.has(idx)) continue;
+
+    // YEAR BRACKET GUARD: Skip numbers that look like years (1900-2099) unless they're within valid citation range
+    if (idx >= 1900 && idx <= 2099 && idx > maxDocIndex && idx > 50) continue;
+
     seen.add(idx);
     const docMatch = vaultContext.match(new RegExp(`### \\[${idx}\\] (.+?)\\n([\\s\\S]*?)(?=### \\[|$)`));
-    citations.push({ index: idx, source: docMatch?.[1] || `Source ${idx}`, excerpt: docMatch?.[2]?.substring(0, 200)?.trim() || "" });
+    // Only create citation if we have a matching document section OR the index is within known range
+    if (docMatch) {
+      citations.push({ index: idx, source: docMatch[1], excerpt: docMatch[2]?.substring(0, 200)?.trim() || "" });
+    } else if (idx <= maxDocIndex || idx <= 30) {
+      // Reasonable citation index — keep as fallback
+      citations.push({ index: idx, source: `Source ${idx}`, excerpt: "" });
+    }
+    // Skip large numbers with no matching doc (likely year brackets like [2015], [2022])
   }
 
   for (const match of content.matchAll(/[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+/g)) {
     const digits = match[0].split("").map(c => SUPERSCRIPT_DIGITS[c] || c).join("");
     const idx = parseInt(digits);
     if (isNaN(idx) || seen.has(idx)) continue;
+    if (idx >= 1900 && idx <= 2099 && idx > maxDocIndex && idx > 50) continue;
     seen.add(idx);
     const docMatch = vaultContext.match(new RegExp(`### \\[${idx}\\] (.+?)\\n([\\s\\S]*?)(?=### \\[|$)`));
-    citations.push({ index: idx, source: docMatch?.[1] || `Source ${idx}`, excerpt: docMatch?.[2]?.substring(0, 200)?.trim() || "" });
+    if (docMatch) {
+      citations.push({ index: idx, source: docMatch[1], excerpt: docMatch[2]?.substring(0, 200)?.trim() || "" });
+    } else if (idx <= maxDocIndex || idx <= 30) {
+      citations.push({ index: idx, source: `Source ${idx}`, excerpt: "" });
+    }
   }
 
   return citations;

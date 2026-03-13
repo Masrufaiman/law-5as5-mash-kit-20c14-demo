@@ -73,6 +73,11 @@ export function CitationPopover({ citation, onFileClick }: CitationPopoverProps 
                 Open source
               </a>
             )}
+            {!citation.url && !onFileClick && (
+              <p className="text-[10px] text-muted-foreground/70 mt-1 italic">
+                Reference only — no link available
+              </p>
+            )}
           </div>
         </div>
       </HoverCardContent>
