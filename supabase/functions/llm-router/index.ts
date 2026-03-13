@@ -1261,9 +1261,15 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
               { role: "user", content: message },
             ];
 
-            // Save user message
+            // Save user message with metadata
             if (conversationId && conversationId !== "column-fill") {
-              await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "user", content: message });
+              const userMsgMeta: any = {};
+              if (promptMode) userMsgMeta.promptMode = promptMode;
+              if (sources?.length) userMsgMeta.sources = sources;
+              await adminClient.from("messages").insert({
+                conversation_id: conversationId, organization_id: orgId, role: "user", content: message,
+                metadata: Object.keys(userMsgMeta).length > 0 ? userMsgMeta : null,
+              });
             }
 
             const aiResponse = await fetch(aiUrl, {

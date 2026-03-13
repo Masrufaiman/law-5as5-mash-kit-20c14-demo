@@ -603,15 +603,27 @@ export function MessageBubble({
           <RedFlagCard
             data={redFlagData}
             onOpenInEditor={() => {
-              const refs = (message as any).frozenFileRefs || fileRefs;
-              if (refs?.[0] && onRedFlagOpen) {
-                onRedFlagOpen(redFlagData, refs[0].name, refs[0].id);
+              if (onRedFlagOpen) {
+                const refs = (message as any).frozenFileRefs || fileRefs;
+                // Try to match by title first, then fall back to first ref, then attachments
+                const titleMatch = refs?.find((r: any) => redFlagData.title?.toLowerCase().includes(r.name?.toLowerCase()?.replace(/\.[^.]+$/, "")));
+                const bestRef = titleMatch || refs?.[0];
+                // Also check user message attachments for file context
+                const userAttachments = (message as any).attachments;
+                const fallbackName = bestRef?.name || userAttachments?.fileNames?.[0] || redFlagData.title || "document";
+                const fallbackId = bestRef?.id || userAttachments?.fileIds?.[0];
+                onRedFlagOpen(redFlagData, fallbackName, fallbackId);
               }
             }}
             onFlagClick={(index) => {
-              const refs = (message as any).frozenFileRefs || fileRefs;
-              if (refs?.[0] && onRedFlagOpen) {
-                onRedFlagOpen(redFlagData, refs[0].name, refs[0].id);
+              if (onRedFlagOpen) {
+                const refs = (message as any).frozenFileRefs || fileRefs;
+                const titleMatch = refs?.find((r: any) => redFlagData.title?.toLowerCase().includes(r.name?.toLowerCase()?.replace(/\.[^.]+$/, "")));
+                const bestRef = titleMatch || refs?.[0];
+                const userAttachments = (message as any).attachments;
+                const fallbackName = bestRef?.name || userAttachments?.fileNames?.[0] || redFlagData.title || "document";
+                const fallbackId = bestRef?.id || userAttachments?.fileIds?.[0];
+                onRedFlagOpen(redFlagData, fallbackName, fallbackId);
               }
               onFlagClick?.(index);
             }}

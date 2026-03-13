@@ -550,11 +550,14 @@ export default function Chat() {
       // Streaming just finished — check if last assistant message has red flags
       const lastAssistant = [...messages].reverse().find(m => m.role === "assistant");
       if (lastAssistant) {
-        const rfData = parseRedFlags(lastAssistant.content);
+      const rfData = parseRedFlags(lastAssistant.content);
         if (rfData && rfData.flags.length > 0) {
           const refs = (lastAssistant as any).frozenFileRefs || fileRefs;
-          if (refs?.[0]) {
-            openRedFlagPanel(rfData, refs[0].name, refs[0].id);
+          // Try title-based matching first
+          const titleMatch = refs?.find((r: any) => rfData.title?.toLowerCase().includes(r.name?.toLowerCase()?.replace(/\.[^.]+$/, "")));
+          const bestRef = titleMatch || refs?.[0];
+          if (bestRef) {
+            openRedFlagPanel(rfData, bestRef.name, bestRef.id);
           } else if (conversationAttachedFileIds.length > 0) {
             openRedFlagPanel(rfData, conversationAttachedFileNames[0] || "document", conversationAttachedFileIds[0]);
           } else {

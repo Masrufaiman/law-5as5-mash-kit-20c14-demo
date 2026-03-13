@@ -299,17 +299,32 @@ Deno.serve(async (req) => {
     }
 
     // --- STEP 8: Update file record ---
-    await supabase
-      .from("files")
-      .update({
-        status: "ready",
-        extracted_text: extractedText.slice(0, 50000),
-        page_count: pageCount,
-        ocr_used: ocrUsed,
-        chunk_count: chunks.length,
-        extracted_text_r2_key: extractedTextR2Key,
-      })
-      .eq("id", fileId);
+    // If extraction produced no text and no chunks, mark as error (not ready)
+    if (!extractedText || extractedText.trim().length === 0 || chunks.length === 0) {
+      await supabase
+        .from("files")
+        .update({
+          status: "error",
+          error_message: "Text extraction produced no content. Try re-uploading or using a different format.",
+          extracted_text: extractedText.slice(0, 50000),
+          page_count: pageCount,
+          ocr_used: ocrUsed,
+          chunk_count: 0,
+        })
+        .eq("id", fileId);
+    } else {
+      await supabase
+        .from("files")
+        .update({
+          status: "ready",
+          extracted_text: extractedText.slice(0, 50000),
+          page_count: pageCount,
+          ocr_used: ocrUsed,
+          chunk_count: chunks.length,
+          extracted_text_r2_key: extractedTextR2Key,
+        })
+        .eq("id", fileId);
+    }
 
     console.log(`[document-processor] ✅ Complete: ${chunks.length} chunks, ${embeddings.length} embeddings, OCR: ${ocrUsed}`);
 
