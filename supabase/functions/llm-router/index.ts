@@ -1715,13 +1715,13 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
                 // RED-FLAG HALLUCINATION GUARD: If read_files returned no content, do NOT proceed with red-flag analysis
                 if (effectiveMode === "red_flags") {
                   emitThinking("Document is still processing or could not be read. Cannot perform red flag analysis without document content.");
-                  // Emit a clear message instead of fabricating
-                  emit(controller, encoder, { type: "token", content: "The document is still being processed and its content is not yet available. Please wait a moment and try again once processing completes." });
+                  emit(controller, encoder, { type: "final_answer_start" });
+                  const noContentMsg = "⚠️ **Document Not Ready**\n\nThe document is still being processed or its content could not be extracted. Red flag analysis requires readable document content.\n\n**What to do:**\n1. Wait a moment for processing to complete, then try again\n2. If the issue persists, try re-uploading the document in PDF format\n3. Check that the file is not corrupted or password-protected";
+                  emit(controller, encoder, { type: "token", content: noContentMsg });
                   emit(controller, encoder, { type: "done", citations: [], model: modelId, followUps: ["Try the red flag analysis again", "Check document processing status"] });
-                  // Save messages
+                  // User message already saved above (Phase 5 user insert)
                   if (conversationId && conversationId !== "column-fill") {
-                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "user", content: message });
-                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "assistant", content: "The document is still being processed and its content is not yet available. Please wait a moment and try again once processing completes.", model_used: modelId });
+                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "assistant", content: noContentMsg, model_used: modelId, metadata: { frozenFileRefs: allFileRefs } });
                   }
                   controller.enqueue(encoder.encode("data: [DONE]\n\n"));
                   controller.close();
