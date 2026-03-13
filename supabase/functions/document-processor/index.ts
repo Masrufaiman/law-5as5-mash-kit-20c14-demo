@@ -299,17 +299,32 @@ Deno.serve(async (req) => {
     }
 
     // --- STEP 8: Update file record ---
-    await supabase
-      .from("files")
-      .update({
-        status: "ready",
-        extracted_text: extractedText.slice(0, 50000),
-        page_count: pageCount,
-        ocr_used: ocrUsed,
-        chunk_count: chunks.length,
-        extracted_text_r2_key: extractedTextR2Key,
-      })
-      .eq("id", fileId);
+    // If extraction produced no text and no chunks, mark as error (not ready)
+    if (!extractedText || extractedText.trim().length === 0 || chunks.length === 0) {
+      await supabase
+        .from("files")
+        .update({
+          status: "error",
+          error_message: "Text extraction produced no content. Try re-uploading or using a different format.",
+          extracted_text: extractedText.slice(0, 50000),
+          page_count: pageCount,
+          ocr_used: ocrUsed,
+          chunk_count: 0,
+        })
+        .eq("id", fileId);
+    } else {
+      await supabase
+        .from("files")
+        .update({
+          status: "ready",
+          extracted_text: extractedText.slice(0, 50000),
+          page_count: pageCount,
+          ocr_used: ocrUsed,
+          chunk_count: chunks.length,
+          extracted_text_r2_key: extractedTextR2Key,
+        })
+        .eq("id", fileId);
+    }
 
     console.log(`[document-processor] ✅ Complete: ${chunks.length} chunks, ${embeddings.length} embeddings, OCR: ${ocrUsed}`);
 
@@ -430,15 +445,108 @@ async function ensureQdrantCollection(url: string, apiKey: string, name: string,
   }
 }
 
-// --- DOCX extraction (basic XML parsing) ---
+// --- DOCX extraction (proper ZIP/XML parsing) ---
 async function extractDocxText(buffer: Uint8Array): Promise<string> {
-  const text = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
-  const matches = text.match(/<w:t[^>]*>([^<]*)<\/w:t>/g);
-  if (!matches) return "";
-  return matches.map(m => {
-    const inner = m.match(/>([^<]*)</);
-    return inner ? inner[1] : "";
-  }).join(" ");
+  try {
+    // DOCX is a ZIP archive — find the "word/document.xml" entry
+    // ZIP files end with an End of Central Directory record
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+
+    // Find End of Central Directory signature (0x06054b50) scanning from end
+    let eocdOffset = -1;
+    for (let i = buffer.length - 22; i >= Math.max(0, buffer.length - 65557); i--) {
+      if (view.getUint32(i, true) === 0x06054b50) { eocdOffset = i; break; }
+    }
+    if (eocdOffset === -1) throw new Error("Not a valid ZIP/DOCX file");
+
+    const cdOffset = view.getUint32(eocdOffset + 16, true);
+    const cdEntries = view.getUint16(eocdOffset + 10, true);
+
+    let documentXml = "";
+    let offset = cdOffset;
+
+    for (let i = 0; i < cdEntries; i++) {
+      if (offset + 46 > buffer.length) break;
+      const sig = view.getUint32(offset, true);
+      if (sig !== 0x02014b50) break;
+
+      const compMethod = view.getUint16(offset + 10, true);
+      const compSize = view.getUint32(offset + 20, true);
+      const uncompSize = view.getUint32(offset + 24, true);
+      const nameLen = view.getUint16(offset + 28, true);
+      const extraLen = view.getUint16(offset + 30, true);
+      const commentLen = view.getUint16(offset + 32, true);
+      const localHeaderOffset = view.getUint32(offset + 42, true);
+      const nameBytes = buffer.slice(offset + 46, offset + 46 + nameLen);
+      const fileName = new TextDecoder().decode(nameBytes);
+
+      if (fileName === "word/document.xml") {
+        // Read from local file header
+        const localOffset = localHeaderOffset;
+        if (localOffset + 30 > buffer.length) break;
+        const localNameLen = view.getUint16(localOffset + 26, true);
+        const localExtraLen = view.getUint16(localOffset + 28, true);
+        const dataStart = localOffset + 30 + localNameLen + localExtraLen;
+
+        if (compMethod === 0) {
+          // Stored (no compression)
+          documentXml = new TextDecoder().decode(buffer.slice(dataStart, dataStart + uncompSize));
+        } else if (compMethod === 8) {
+          // Deflate — use DecompressionStream
+          const compressed = buffer.slice(dataStart, dataStart + compSize);
+          const ds = new DecompressionStream("raw");
+          const writer = ds.writable.getWriter();
+          writer.write(compressed);
+          writer.close();
+          const reader = ds.readable.getReader();
+          const chunks: Uint8Array[] = [];
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+          }
+          const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+          const merged = new Uint8Array(totalLen);
+          let pos = 0;
+          for (const c of chunks) { merged.set(c, pos); pos += c.length; }
+          documentXml = new TextDecoder().decode(merged);
+        }
+        break;
+      }
+
+      offset += 46 + nameLen + extraLen + commentLen;
+    }
+
+    if (!documentXml) throw new Error("word/document.xml not found in DOCX");
+
+    // Parse XML: extract text from <w:t> elements
+    const matches = documentXml.match(/<w:t[^>]*>([^<]*)<\/w:t>/g);
+    if (!matches || matches.length === 0) return "";
+
+    // Group by paragraphs: detect <w:p> boundaries
+    const paragraphs: string[] = [];
+    let currentParagraph = "";
+    const allContent = documentXml;
+
+    // Split by paragraph markers
+    const pParts = allContent.split(/<w:p[\s>]/);
+    for (const part of pParts) {
+      const textMatches = part.match(/<w:t[^>]*>([^<]*)<\/w:t>/g);
+      if (textMatches) {
+        const pText = textMatches.map(m => {
+          const inner = m.match(/>([^<]*)</);
+          return inner ? inner[1] : "";
+        }).join("");
+        if (pText.trim()) paragraphs.push(pText);
+      }
+    }
+
+    return paragraphs.join("\n");
+  } catch (err) {
+    console.error("[document-processor] DOCX ZIP parsing failed:", err);
+    // Return empty — caller will handle fallback
+    return "";
+  }
 }
 
 // --- AWS Signature V4 helpers ---

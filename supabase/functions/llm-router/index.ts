@@ -660,8 +660,45 @@ async function toolReadFiles(orgId: string, vaultId: string | undefined, attache
   }
 
   const readyFiles = (files || []).filter((f: any) => f.extracted_text);
+
+  // Build fileRefs even if text is unavailable (needed for editor linking)
+  const candidateFileRefs: { name: string; id?: string }[] = (files || []).map((f: any) => ({ name: f.name, id: f.id }));
+
   if (!readyFiles.length) {
-    return { context: "", citations: [], domains: [], fileRefs: [], summary: "No documents found" };
+    // Classify why no text
+    const allFiles = files || [];
+    const hasProcessing = allFiles.some((f: any) => f.status === "processing" || f.status === "uploading");
+    const hasError = allFiles.some((f: any) => f.status === "error");
+    const reason = hasProcessing ? "processing" : hasError ? "error" : allFiles.length > 0 ? "ready_but_empty" : "no_files";
+
+    // Fallback: try file_chunks for any file that has chunks but empty extracted_text
+    if (allFiles.length > 0) {
+      const fileIds = allFiles.map((f: any) => f.id);
+      const { data: chunks } = await adminClient.from("file_chunks").select("content, file_id, chunk_index").in("file_id", fileIds).order("chunk_index", { ascending: true }).limit(200);
+      if (chunks && chunks.length > 0) {
+        let context = "\n\n## Document Contents\n";
+        const citations: ToolResult["citations"] = [];
+        const fileGroups = new Map<string, string[]>();
+        for (const c of chunks) {
+          if (!fileGroups.has(c.file_id)) fileGroups.set(c.file_id, []);
+          fileGroups.get(c.file_id)!.push(c.content);
+        }
+        let idx = 0;
+        for (const [fId, contents] of fileGroups) {
+          const fName = allFiles.find((f: any) => f.id === fId)?.name || "Document";
+          idx++;
+          context += `### [${idx}] ${fName}\n${contents.join("\n\n")}\n\n`;
+          citations.push({ index: idx, source: fName, excerpt: contents[0]?.substring(0, 200) || "" });
+        }
+        return { context, citations, domains: [], fileRefs: candidateFileRefs, summary: `Read ${fileGroups.size} documents from chunks` };
+      }
+    }
+
+    const summaryMsg = reason === "processing" ? "Documents are still processing. Please wait a moment and try again."
+      : reason === "error" ? "Document processing failed. Try re-uploading the file."
+      : reason === "ready_but_empty" ? "Documents have no extractable text content."
+      : "No documents found";
+    return { context: "", citations: [], domains: [], fileRefs: candidateFileRefs, summary: summaryMsg };
   }
 
   let context = "\n\n## Document Contents\n";
@@ -1224,9 +1261,15 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
               { role: "user", content: message },
             ];
 
-            // Save user message
+            // Save user message with metadata
             if (conversationId && conversationId !== "column-fill") {
-              await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "user", content: message });
+              const userMsgMeta: any = {};
+              if (promptMode) userMsgMeta.promptMode = promptMode;
+              if (sources?.length) userMsgMeta.sources = sources;
+              await adminClient.from("messages").insert({
+                conversation_id: conversationId, organization_id: orgId, role: "user", content: message,
+                metadata: Object.keys(userMsgMeta).length > 0 ? userMsgMeta : null,
+              });
             }
 
             const aiResponse = await fetch(aiUrl, {
@@ -1672,13 +1715,13 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
                 // RED-FLAG HALLUCINATION GUARD: If read_files returned no content, do NOT proceed with red-flag analysis
                 if (effectiveMode === "red_flags") {
                   emitThinking("Document is still processing or could not be read. Cannot perform red flag analysis without document content.");
-                  // Emit a clear message instead of fabricating
-                  emit(controller, encoder, { type: "token", content: "The document is still being processed and its content is not yet available. Please wait a moment and try again once processing completes." });
+                  emit(controller, encoder, { type: "final_answer_start" });
+                  const noContentMsg = "⚠️ **Document Not Ready**\n\nThe document is still being processed or its content could not be extracted. Red flag analysis requires readable document content.\n\n**What to do:**\n1. Wait a moment for processing to complete, then try again\n2. If the issue persists, try re-uploading the document in PDF format\n3. Check that the file is not corrupted or password-protected";
+                  emit(controller, encoder, { type: "token", content: noContentMsg });
                   emit(controller, encoder, { type: "done", citations: [], model: modelId, followUps: ["Try the red flag analysis again", "Check document processing status"] });
-                  // Save messages
+                  // User message already saved above (Phase 5 user insert)
                   if (conversationId && conversationId !== "column-fill") {
-                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "user", content: message });
-                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "assistant", content: "The document is still being processed and its content is not yet available. Please wait a moment and try again once processing completes.", model_used: modelId });
+                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "assistant", content: noContentMsg, model_used: modelId, metadata: { frozenFileRefs: allFileRefs } });
                   }
                   controller.enqueue(encoder.encode("data: [DONE]\n\n"));
                   controller.close();
@@ -1991,9 +2034,21 @@ ${followUpInstruction}
             { role: "user", content: message },
           ];
 
-          // Save user message
+          // Save user message with attachment metadata for reload persistence
           if (conversationId && conversationId !== "column-fill") {
-            await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "user", content: message });
+            const userMsgMeta: any = {};
+            if (vaultId) userMsgMeta.vaultId = vaultId;
+            if (clientVaultName) userMsgMeta.vaultName = clientVaultName;
+            if (promptMode) userMsgMeta.promptMode = promptMode;
+            if (sources?.length) userMsgMeta.sources = sources;
+            if (deepResearch) userMsgMeta.deepResearch = true;
+            if (attachedFileIds?.length) userMsgMeta.attachedFileIds = attachedFileIds;
+            if (attachedFileNames?.length) userMsgMeta.attachedFileNames = attachedFileNames;
+            if (body.workflowTitle) userMsgMeta.workflowTitle = body.workflowTitle;
+            await adminClient.from("messages").insert({
+              conversation_id: conversationId, organization_id: orgId, role: "user", content: message,
+              metadata: Object.keys(userMsgMeta).length > 0 ? userMsgMeta : null,
+            });
           }
 
           // Stream final synthesis

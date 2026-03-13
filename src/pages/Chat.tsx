@@ -297,9 +297,30 @@ export default function Chat() {
         .order("created_at", { ascending: true });
 
       if (msgs?.length) {
+        // Track latest user message metadata for UI state restoration
+        let latestUserMeta: any = null;
+
         loadHistory(
           msgs.map((m) => {
             const meta = (m as any).metadata || {};
+
+            // For user messages, reconstruct attachments from persisted metadata
+            if (m.role === "user" && Object.keys(meta).length > 0) {
+              latestUserMeta = meta;
+            }
+
+            const attachments: any = {};
+            if (m.role === "user") {
+              if (meta.vaultName) attachments.vaultName = meta.vaultName;
+              if (meta.vaultId) attachments.vaultId = meta.vaultId;
+              if (meta.attachedFileNames?.length) attachments.fileNames = meta.attachedFileNames;
+              if (meta.attachedFileIds?.length) attachments.fileIds = meta.attachedFileIds;
+              if (meta.promptMode) attachments.promptMode = meta.promptMode;
+              if (meta.sources?.length) attachments.sources = meta.sources;
+              if (meta.deepResearch) attachments.deepResearch = true;
+              if (meta.workflowTitle) attachments.workflowTitle = meta.workflowTitle;
+            }
+
             return {
               id: m.id,
               role: m.role as "user" | "assistant",
@@ -308,6 +329,7 @@ export default function Chat() {
               citations: (m.citations as any) || undefined,
               model: m.model_used || undefined,
               followUps: meta.followUps || undefined,
+              attachments: Object.keys(attachments).length > 0 ? attachments : undefined,
               frozenSteps: meta.frozenSteps || undefined,
               frozenPlan: meta.frozenPlan || undefined,
               frozenThinkingText: meta.frozenThinkingText || undefined,
@@ -317,6 +339,27 @@ export default function Chat() {
             };
           })
         );
+
+        // Restore prompt UI state from latest user message metadata (if localStorage is stale/missing)
+        if (latestUserMeta) {
+          const savedState = (() => { try { return JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { return {}; } })();
+          // Only restore from DB if localStorage doesn't have values
+          if (!savedState.promptMode && latestUserMeta.promptMode) setPromptMode(latestUserMeta.promptMode);
+          if (!savedState.activeSources?.length && latestUserMeta.sources?.length) setActiveSources(latestUserMeta.sources);
+          if (!savedState.deepResearch && latestUserMeta.deepResearch) setDeepResearch(true);
+          if (!savedState.selectedVault && latestUserMeta.vaultId && latestUserMeta.vaultName) {
+            const v = { id: latestUserMeta.vaultId, name: latestUserMeta.vaultName };
+            setSelectedVault(v);
+            setVaultId(v.id);
+            setVaultName(v.name);
+          }
+          if (!savedState.conversationAttachedFileIds?.length && latestUserMeta.attachedFileIds?.length) {
+            setConversationAttachedFileIds(latestUserMeta.attachedFileIds);
+          }
+          if (!savedState.conversationAttachedFileNames?.length && latestUserMeta.attachedFileNames?.length) {
+            setConversationAttachedFileNames(latestUserMeta.attachedFileNames);
+          }
+        }
       }
     } finally {
       setIsLoadingConversation(false);
@@ -507,11 +550,14 @@ export default function Chat() {
       // Streaming just finished — check if last assistant message has red flags
       const lastAssistant = [...messages].reverse().find(m => m.role === "assistant");
       if (lastAssistant) {
-        const rfData = parseRedFlags(lastAssistant.content);
+      const rfData = parseRedFlags(lastAssistant.content);
         if (rfData && rfData.flags.length > 0) {
           const refs = (lastAssistant as any).frozenFileRefs || fileRefs;
-          if (refs?.[0]) {
-            openRedFlagPanel(rfData, refs[0].name, refs[0].id);
+          // Try title-based matching first
+          const titleMatch = refs?.find((r: any) => rfData.title?.toLowerCase().includes(r.name?.toLowerCase()?.replace(/\.[^.]+$/, "")));
+          const bestRef = titleMatch || refs?.[0];
+          if (bestRef) {
+            openRedFlagPanel(rfData, bestRef.name, bestRef.id);
           } else if (conversationAttachedFileIds.length > 0) {
             openRedFlagPanel(rfData, conversationAttachedFileNames[0] || "document", conversationAttachedFileIds[0]);
           } else {
