@@ -167,9 +167,18 @@ export function RedFlagCard({ data, onOpenInEditor, onFlagClick }: { data: RedFl
                   {category.replace(/_/g, " ")}
                 </p>
                 <div className="space-y-2">
-                  {catFlags.map((flag, i) => (
-                    <FlagItem key={`${category}-${i}`} flag={flag} />
-                  ))}
+                  {catFlags.map((flag, i) => {
+                    const globalIndex = data.flags.indexOf(flag);
+                    return (
+                      <div
+                        key={`${category}-${i}`}
+                        onClick={() => onFlagClick?.(globalIndex)}
+                        className={onFlagClick ? "cursor-pointer" : ""}
+                      >
+                        <FlagItem flag={flag} />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
