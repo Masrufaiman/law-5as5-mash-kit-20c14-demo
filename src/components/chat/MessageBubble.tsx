@@ -598,7 +598,21 @@ export function MessageBubble({
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{remainingContent.replace(/<!--\s*REDFLAGS:[\s\S]*?```/, "").trim()}</ReactMarkdown>
             </div>
           )}
-          <RedFlagCard data={redFlagData} />
+          <RedFlagCard
+            data={redFlagData}
+            onOpenInEditor={() => {
+              const refs = (message as any).frozenFileRefs || fileRefs;
+              if (refs?.[0] && onRedFlagOpen) {
+                onRedFlagOpen(redFlagData, refs[0].name, refs[0].id);
+              }
+            }}
+            onFlagClick={(index) => {
+              const refs = (message as any).frozenFileRefs || fileRefs;
+              if (refs?.[0] && onRedFlagOpen) {
+                onRedFlagOpen(redFlagData, refs[0].name, refs[0].id);
+              }
+            }}
+          />
           {!isUser && !isStreaming && citations.length > 0 && (
             <CollapsibleReferences citations={citations} onFileClick={onFileClick} />
           )}
