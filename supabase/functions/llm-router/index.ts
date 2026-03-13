@@ -158,6 +158,107 @@ function prefixSearchQuery(query: string, jurisdictions: string[]): string {
   return prefix ? `${prefix} ${query}` : query;
 }
 
+// ──────────────────────────────────────────────
+// Query Decomposition — Multi-Query Search
+// ──────────────────────────────────────────────
+function decomposeSearchQueries(
+  message: string,
+  tool: string,
+  jurisdictions: string[],
+  requestType: number
+): string[] {
+  // Strip meta-instructions that pollute search queries
+  let cleaned = message
+    .replace(/\b(search|find|look up|research|cite|analyze|explain|summarize|compare|deep research|give me)\b:?\s*/gi, "")
+    .replace(/\b(using|via|from|through|in)\s+(courtlistener|edgar|eur-lex|sec|european)\s*/gi, "")
+    .replace(/\b(please|can you|could you|I need|I want)\b\s*/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned || cleaned.length < 5) cleaned = message;
+
+  const queries: string[] = [];
+
+  switch (tool) {
+    case "courtlistener": {
+      // Extract case names (Party v Party patterns)
+      const caseNames = message.match(/[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\s+v\.?\s+[A-Z][a-z]+(?:\s[A-Z][a-z]+)*/g);
+      if (caseNames) {
+        caseNames.forEach(cn => queries.push(cn));
+      }
+      // Extract legal doctrines/concepts
+      const doctrines = cleaned.replace(/[A-Z][a-z]+\s+v\.?\s+[A-Z][a-z]+(?:\s[A-Z][a-z]+)*/g, "").trim();
+      if (doctrines.length > 10) {
+        queries.push(doctrines);
+      }
+      // Add jurisdiction-focused variant
+      if (jurisdictions.length > 0 && queries.length > 0) {
+        queries.push(`${jurisdictions[0]} ${queries[0]}`);
+      }
+      break;
+    }
+    case "edgar": {
+      // Extract company names
+      const companies = cleaned.match(/\b(Apple|Microsoft|Tesla|Google|Alphabet|Amazon|Meta|Facebook|Nvidia|JPMorgan|Goldman\s*Sachs)\b/gi);
+      const formTypes = cleaned.match(/\b(10-K|10-Q|8-K|S-1|DEF\s*14A|20-F|6-K|proxy\s*statement|annual\s*report)\b/gi);
+      if (companies) {
+        companies.forEach(co => {
+          const form = formTypes?.[0] || "";
+          queries.push(`${co} ${form}`.trim());
+        });
+      }
+      // Date-specific variant
+      const yearMatch = cleaned.match(/\b(20\d{2})\b/);
+      if (yearMatch && queries.length > 0) {
+        queries.push(`${queries[0]} ${yearMatch[1]}`);
+      }
+      if (queries.length === 0) queries.push(cleaned);
+      break;
+    }
+    case "eurlex": {
+      // CELEX-first: check for known regulation references
+      const knownTerms = ["gdpr", "ai act", "mifid", "dora", "dsa", "dma", "nis2", "digital services", "digital markets", "trade secrets", "ecommerce"];
+      const foundTerms = knownTerms.filter(t => cleaned.toLowerCase().includes(t));
+      foundTerms.forEach(t => queries.push(t));
+      // Legal concept fallback
+      const conceptQuery = cleaned.replace(/\b(EU|european|regulation|directive|article)\b/gi, "").trim();
+      if (conceptQuery.length > 8 && !foundTerms.length) {
+        queries.push(`EU ${conceptQuery}`);
+      }
+      // Article-specific query
+      const articleMatch = cleaned.match(/article\s+(\d+)/i);
+      if (articleMatch && foundTerms.length > 0) {
+        queries.push(`${foundTerms[0]} article ${articleMatch[1]}`);
+      }
+      if (queries.length === 0) queries.push(cleaned);
+      break;
+    }
+    case "web_search": {
+      // Generate 2-3 angle queries
+      queries.push(cleaned);
+      // Jurisdiction-specific angle
+      if (jurisdictions.length > 0) {
+        queries.push(`${jurisdictions[0]} law ${cleaned}`);
+      }
+      // If complex query, add a focused sub-query
+      if (cleaned.split(/\s+/).length > 8) {
+        // Extract the core legal question (first sentence or clause)
+        const firstSentence = cleaned.split(/[.?!]/)[0]?.trim();
+        if (firstSentence && firstSentence !== cleaned) {
+          queries.push(firstSentence);
+        }
+      }
+      break;
+    }
+    default:
+      queries.push(cleaned);
+  }
+
+  // Deduplicate and limit to 4 queries
+  const unique = [...new Set(queries.map(q => q.trim()).filter(q => q.length > 3))];
+  return unique.slice(0, 4);
+}
+
 const SOURCE_DOMAIN_MAP: Record<string, string[]> = {
   "EDGAR (SEC)": ["sec.gov", "edgar.sec.gov"],
   "CourtListener": ["courtlistener.com"],
