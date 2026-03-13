@@ -613,6 +613,7 @@ export function MessageBubble({
               if (refs?.[0] && onRedFlagOpen) {
                 onRedFlagOpen(redFlagData, refs[0].name, refs[0].id);
               }
+              onFlagClick?.(index);
             }}
           />
           {!isUser && !isStreaming && citations.length > 0 && (
