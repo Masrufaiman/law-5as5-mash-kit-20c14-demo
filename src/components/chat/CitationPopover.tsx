@@ -16,6 +16,7 @@ function getDomain(url: string): string {
 
 export function CitationPopover({ citation, onFileClick }: CitationPopoverProps & { onFileClick?: (fileName: string, fileId?: string, excerpt?: string) => void }) {
   const domain = citation.url ? getDomain(citation.url) : null;
+  const hasNoLink = !citation.url && !onFileClick;
 
   return (
     <HoverCard openDelay={200} closeDelay={100}>
@@ -25,10 +26,11 @@ export function CitationPopover({ citation, onFileClick }: CitationPopoverProps 
           onClick={() => {
             if (citation.url) {
               window.open(citation.url, "_blank", "noopener,noreferrer");
-            } else {
+            } else if (onFileClick) {
               const displayName = citation.source.replace(/\s*[·\-–—]\s*(chunk|part|section|page)\s*\d+.*/i, "").trim();
-              onFileClick?.(displayName, undefined, citation.excerpt);
+              onFileClick(displayName, undefined, citation.excerpt);
             }
+            // If no URL and no file click handler, do nothing (no dead click)
           }}
         >
           {citation.index}
