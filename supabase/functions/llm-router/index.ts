@@ -1190,6 +1190,127 @@ serve(async (req) => {
 
     const encoder = new TextEncoder();
 
+    // ──────── FAST-PATH: Simple conversational messages ────────
+    const wordCount = message.trim().split(/\s+/).length;
+    const isSimpleChat = wordCount <= 5
+      && !attachedFileIds?.length
+      && !deepResearch
+      && (!sources || sources.length === 0)
+      && !effectiveMode
+      && !workflowSystemPrompt
+      && !currentDocumentContent
+      && !vaultId
+      && !/\b(law|legal|case|statute|regulation|contract|clause|court|file|document|draft|review|analyze|red.?flag)\b/i.test(message);
+
+    if (isSimpleChat) {
+      // Direct quick response — no planner, no ReAct loop
+      const fastStream = new ReadableStream({
+        async start(controller) {
+          try {
+            // Load minimal context
+            const { data: orgData } = await adminClient.from("organizations").select("name").eq("id", orgId).single();
+
+            emit(controller, encoder, { type: "step", step: { name: "Processing", status: "working" } });
+
+            const systemPrompt = `You are LawKit, a professional legal AI assistant for ${orgData?.name || "the organization"}. 
+User: ${profile.full_name || profile.email}. 
+Respond naturally and concisely. For simple greetings or conversational messages, be friendly and brief.
+If the user asks a follow-up that needs context from previous messages, use the conversation history provided.
+At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`;
+
+            const aiMessages = [
+              { role: "system", content: systemPrompt },
+              ...conversationHistory.map((m: any) => ({ role: m.role, content: m.content })),
+              { role: "user", content: message },
+            ];
+
+            // Save user message
+            if (conversationId && conversationId !== "column-fill") {
+              await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "user", content: message });
+            }
+
+            const aiResponse = await fetch(aiUrl, {
+              method: "POST",
+              headers: aiHeaders,
+              body: JSON.stringify({ model: modelId, messages: aiMessages, stream: true, max_tokens: 1024, temperature: 0.5 }),
+            });
+
+            emit(controller, encoder, { type: "step", step: { name: "Processing", status: "done", duration: "0s" } });
+
+            if (!aiResponse.ok) {
+              emit(controller, encoder, { type: "error", error: "AI service temporarily unavailable." });
+              controller.close();
+              return;
+            }
+
+            emit(controller, encoder, { type: "final_answer_start" });
+
+            const reader = aiResponse.body!.getReader();
+            const decoder = new TextDecoder();
+            let fullContent = "";
+            let buffer = "";
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              let newlineIndex: number;
+              while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+                let line = buffer.slice(0, newlineIndex);
+                buffer = buffer.slice(newlineIndex + 1);
+                if (line.endsWith("\r")) line = line.slice(0, -1);
+                if (!line.startsWith("data: ")) continue;
+                const jsonStr = line.slice(6).trim();
+                if (jsonStr === "[DONE]") continue;
+                try {
+                  const parsed = JSON.parse(jsonStr);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content) {
+                    fullContent += content;
+                    emit(controller, encoder, { type: "token", content });
+                  }
+                } catch {}
+              }
+            }
+
+            // Extract follow-ups
+            const followUps: string[] = [];
+            fullContent.split("\n").filter(l => l.startsWith(">>FOLLOWUP: ")).forEach(l => {
+              const q = l.replace(">>FOLLOWUP: ", "").trim();
+              if (q) followUps.push(q);
+            });
+            const cleanedContent = fullContent.split("\n").filter(l => !l.startsWith(">>FOLLOWUP: ")).join("\n").trim();
+
+            emit(controller, encoder, { type: "done", citations: [], model: modelId, followUps });
+
+            // Save assistant message
+            if (conversationId && conversationId !== "column-fill") {
+              await adminClient.from("messages").insert({
+                conversation_id: conversationId, organization_id: orgId, role: "assistant",
+                content: cleanedContent, model_used: modelId,
+              });
+              const { count } = await adminClient.from("messages").select("*", { count: "exact", head: true }).eq("conversation_id", conversationId);
+              if (count && count <= 2) {
+                const title = cleanedContent.substring(0, 60).replace(/[#*\n]/g, "").trim();
+                await adminClient.from("conversations").update({ title }).eq("id", conversationId);
+              }
+            }
+
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          } catch (err) {
+            console.error("Fast-path error:", err);
+            emit(controller, encoder, { type: "error", error: "Stream interrupted" });
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(fastStream, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
+      });
+    }
+
     const stream = new ReadableStream({
       async start(controller) {
         try {
