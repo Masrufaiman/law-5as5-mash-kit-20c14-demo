@@ -1511,6 +1511,12 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
 
             let toolResult: ToolResult;
             try {
+              // Decompose queries for multi-search (except vault/read_files)
+              const useDecomposition = ["courtlistener", "edgar", "eurlex", "web_search"].includes(nextTool);
+              const subQueries = useDecomposition
+                ? decomposeSearchQueries(nextInput.query || message, nextTool, intent.jurisdictions, requestType)
+                : [nextInput.query || message];
+
               switch (nextTool) {
                 case "vault_search":
                   emitThinking("Embedding query and searching document vectors for relevant passages...");
@@ -1519,18 +1525,45 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
                   if (toolResult.fileRefs.length > 0) emit(controller, encoder, { type: "file_refs", files: toolResult.fileRefs });
                   break;
 
-                case "web_search":
+                case "web_search": {
                   if (!perplexityKey) {
                     toolResult = { context: "", citations: [], domains: [], fileRefs: [], summary: "No search API configured" };
                   } else {
-                    emitThinking(`Searching across legal databases...`);
-                    toolResult = await toolWebSearch(nextInput.query || message, perplexityKey, currentSearchModel, sources, intent.jurisdictions, currentRE);
+                    // Select per-query Perplexity model based on complexity
+                    const { model: queryModel, reasoningEffort: queryRE } = selectPerplexityModel(complexity, !!deepResearch);
+
+                    if (subQueries.length > 1) {
+                      emitThinking(`Executing ${subQueries.length} targeted searches...`);
+                    } else {
+                      emitThinking(`Searching across legal databases...`);
+                    }
+
+                    // Execute sub-queries and merge results
+                    const mergedResult: ToolResult = { context: "", citations: [], domains: [], fileRefs: [], summary: "" };
+                    const seenUrls = new Set<string>();
+
+                    for (const sq of subQueries) {
+                      const partial = await toolWebSearch(sq, perplexityKey, queryModel, sources, intent.jurisdictions, queryRE);
+                      if (partial.context) mergedResult.context += partial.context + "\n\n";
+                      // Deduplicate citations by URL
+                      for (const c of partial.citations) {
+                        if (c.url && seenUrls.has(c.url)) continue;
+                        if (c.url) seenUrls.add(c.url);
+                        mergedResult.citations.push({ ...c, index: mergedResult.citations.length + 1 });
+                      }
+                      mergedResult.domains.push(...partial.domains);
+                    }
+                    mergedResult.domains = [...new Set(mergedResult.domains)];
+                    mergedResult.summary = `Found ${mergedResult.citations.length} sources from ${subQueries.length} searches`;
+
+                    toolResult = mergedResult;
                     webSearchDone = true;
                     if (toolResult.domains.length > 0) {
                       emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
                     }
                   }
                   break;
+                }
 
                 case "read_files":
                   emitThinking("Reading document contents directly...");
@@ -1538,29 +1571,74 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
                   if (toolResult.fileRefs.length > 0) emit(controller, encoder, { type: "file_refs", files: toolResult.fileRefs });
                   break;
 
-                case "courtlistener":
-                  emitThinking("Searching CourtListener for case law...");
-                  toolResult = await toolCourtListener(nextInput.query || message, courtListenerKey);
-                  if (toolResult.domains.length > 0) {
-                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
-                  }
-                  break;
+                case "courtlistener": {
+                  emitThinking(`Searching CourtListener with ${subQueries.length} targeted queries...`);
+                  const mergedResult: ToolResult = { context: "", citations: [], domains: ["courtlistener.com"], fileRefs: [], summary: "" };
+                  const seenUrls = new Set<string>();
 
-                case "edgar":
-                  emitThinking("Searching SEC EDGAR for filings...");
-                  toolResult = await toolEdgar(nextInput.query || message, edgarUserAgent);
-                  if (toolResult.domains.length > 0) {
-                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
+                  for (const sq of subQueries) {
+                    const partial = await toolCourtListener(sq, courtListenerKey);
+                    if (partial.context) mergedResult.context += partial.context + "\n\n";
+                    for (const c of partial.citations) {
+                      if (c.url && seenUrls.has(c.url)) continue;
+                      if (c.url) seenUrls.add(c.url);
+                      mergedResult.citations.push({ ...c, index: mergedResult.citations.length + 1 });
+                    }
                   }
-                  break;
+                  mergedResult.summary = `${mergedResult.citations.length} cases found from ${subQueries.length} queries`;
+                  toolResult = mergedResult;
 
-                case "eurlex":
-                  emitThinking("Searching EUR-Lex for EU legislation...");
-                  toolResult = await toolEurLex(nextInput.query || message);
                   if (toolResult.domains.length > 0) {
                     emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
                   }
                   break;
+                }
+
+                case "edgar": {
+                  emitThinking(`Searching SEC EDGAR with ${subQueries.length} targeted queries...`);
+                  const mergedResult: ToolResult = { context: "", citations: [], domains: ["sec.gov"], fileRefs: [], summary: "" };
+                  const seenUrls = new Set<string>();
+
+                  for (const sq of subQueries) {
+                    const partial = await toolEdgar(sq, edgarUserAgent);
+                    if (partial.context) mergedResult.context += partial.context + "\n\n";
+                    for (const c of partial.citations) {
+                      if (c.url && seenUrls.has(c.url)) continue;
+                      if (c.url) seenUrls.add(c.url);
+                      mergedResult.citations.push({ ...c, index: mergedResult.citations.length + 1 });
+                    }
+                  }
+                  mergedResult.summary = `${mergedResult.citations.length} filings found from ${subQueries.length} queries`;
+                  toolResult = mergedResult;
+
+                  if (toolResult.domains.length > 0) {
+                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
+                  }
+                  break;
+                }
+
+                case "eurlex": {
+                  emitThinking(`Searching EUR-Lex with ${subQueries.length} targeted queries...`);
+                  const mergedResult: ToolResult = { context: "", citations: [], domains: ["eur-lex.europa.eu"], fileRefs: [], summary: "" };
+                  const seenUrls = new Set<string>();
+
+                  for (const sq of subQueries) {
+                    const partial = await toolEurLex(sq);
+                    if (partial.context) mergedResult.context += partial.context + "\n\n";
+                    for (const c of partial.citations) {
+                      if (c.url && seenUrls.has(c.url)) continue;
+                      if (c.url) seenUrls.add(c.url);
+                      mergedResult.citations.push({ ...c, index: mergedResult.citations.length + 1 });
+                    }
+                  }
+                  mergedResult.summary = `${mergedResult.citations.length} EU law results from ${subQueries.length} queries`;
+                  toolResult = mergedResult;
+
+                  if (toolResult.domains.length > 0) {
+                    emit(controller, encoder, { type: "sources", urls: toolResult.citations.map(c => c.url).filter(Boolean), domains: toolResult.domains });
+                  }
+                  break;
+                }
 
                 default:
                   toolResult = { context: "", citations: [], domains: [], fileRefs: [], summary: "Unknown tool" };
