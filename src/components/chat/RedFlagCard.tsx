@@ -94,7 +94,7 @@ function FlagItem({ flag }: { flag: RedFlag }) {
   );
 }
 
-export function RedFlagCard({ data, onOpenInEditor }: { data: RedFlagData; onOpenInEditor?: () => void }) {
+export function RedFlagCard({ data, onOpenInEditor, onFlagClick }: { data: RedFlagData; onOpenInEditor?: () => void; onFlagClick?: (index: number) => void }) {
   const [expanded, setExpanded] = useState(true);
   const { summary, flags } = data;
 
