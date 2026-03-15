@@ -2207,6 +2207,10 @@ ${followUpInstruction}
             messageMetadata.frozenSearchSources = { urls: allCitations.filter(c => c.url).map(c => c.url), domains: [...new Set(allDomains)] };
           }
           if (allFileRefs.length > 0) messageMetadata.frozenFileRefs = allFileRefs;
+          // Persist deterministic red-flag target for reload-safe "Open in Editor"
+          if (effectiveMode === "red_flags" && allFileRefs.length > 0) {
+            messageMetadata.redFlagTarget = { id: allFileRefs[0].id, name: allFileRefs[0].name };
+          }
           messageMetadata.agentMeta = {
             iterations: iteration,
             complexity,
