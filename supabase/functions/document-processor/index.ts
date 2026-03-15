@@ -494,7 +494,7 @@ async function extractDocxText(buffer: Uint8Array): Promise<string> {
         } else if (compMethod === 8) {
           // Deflate — use DecompressionStream
           const compressed = buffer.slice(dataStart, dataStart + compSize);
-          const ds = new DecompressionStream("raw");
+          const ds = new DecompressionStream("deflate-raw" as any);
           const writer = ds.writable.getWriter();
           writer.write(compressed);
           writer.close();

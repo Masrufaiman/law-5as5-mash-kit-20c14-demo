@@ -342,7 +342,9 @@ export default function Chat() {
 
         // Restore prompt UI state from latest user message metadata (if localStorage is stale/missing)
         if (latestUserMeta) {
-          const savedState = (() => { try { return JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { return {}; } })();
+          // Use conversation-specific key directly (storageKey may still point to old conv)
+          const convStorageKey = `chat_state_${convId}`;
+          const savedState = (() => { try { return JSON.parse(localStorage.getItem(convStorageKey) || "{}"); } catch { return {}; } })();
           // Only restore from DB if localStorage doesn't have values
           if (!savedState.promptMode && latestUserMeta.promptMode) setPromptMode(latestUserMeta.promptMode);
           if (!savedState.activeSources?.length && latestUserMeta.sources?.length) setActiveSources(latestUserMeta.sources);

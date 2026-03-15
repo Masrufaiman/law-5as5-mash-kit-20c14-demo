@@ -622,13 +622,19 @@ export function MessageBubble({
             }}
             onFlagClick={(index) => {
               if (onRedFlagOpen) {
-                const refs = (message as any).frozenFileRefs || fileRefs;
-                const titleMatch = refs?.find((r: any) => redFlagData.title?.toLowerCase().includes(r.name?.toLowerCase()?.replace(/\.[^.]+$/, "")));
-                const bestRef = titleMatch || refs?.[0];
-                const userAttachments = (message as any).attachments;
-                const fallbackName = bestRef?.name || userAttachments?.fileNames?.[0] || redFlagData.title || "document";
-                const fallbackId = bestRef?.id || userAttachments?.fileIds?.[0];
-                onRedFlagOpen(redFlagData, fallbackName, fallbackId);
+                const meta = (message as any).metadata || {};
+                const redFlagTarget = meta.redFlagTarget;
+                if (redFlagTarget?.id) {
+                  onRedFlagOpen(redFlagData, redFlagTarget.name || redFlagData.title || "document", redFlagTarget.id);
+                } else {
+                  const refs = (message as any).frozenFileRefs || fileRefs;
+                  const titleMatch = refs?.find((r: any) => redFlagData.title?.toLowerCase().includes(r.name?.toLowerCase()?.replace(/\.[^.]+$/, "")));
+                  const bestRef = titleMatch || refs?.[0];
+                  const userAttachments = (message as any).attachments;
+                  const fallbackName = bestRef?.name || userAttachments?.fileNames?.[0] || redFlagData.title || "document";
+                  const fallbackId = bestRef?.id || userAttachments?.fileIds?.[0];
+                  onRedFlagOpen(redFlagData, fallbackName, fallbackId);
+                }
               }
               onFlagClick?.(index);
             }}
