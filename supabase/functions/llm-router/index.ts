@@ -1462,6 +1462,27 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
           emit(controller, encoder, { type: "plan", steps: currentPlan });
 
           // ════════════════════════════════════
+          // PHASE 2.5: PERSIST USER MESSAGE EARLY (before tool loop / early exits)
+          // ════════════════════════════════════
+          let userMessageInserted = false;
+          if (conversationId && conversationId !== "column-fill") {
+            const userMsgMeta: any = {};
+            if (vaultId) userMsgMeta.vaultId = vaultId;
+            if (clientVaultName) userMsgMeta.vaultName = clientVaultName;
+            if (promptMode) userMsgMeta.promptMode = promptMode;
+            if (sources?.length) userMsgMeta.sources = sources;
+            if (deepResearch) userMsgMeta.deepResearch = true;
+            if (attachedFileIds?.length) userMsgMeta.attachedFileIds = attachedFileIds;
+            if (attachedFileNames?.length) userMsgMeta.attachedFileNames = attachedFileNames;
+            if (body.workflowTitle) userMsgMeta.workflowTitle = body.workflowTitle;
+            await adminClient.from("messages").insert({
+              conversation_id: conversationId, organization_id: orgId, role: "user", content: message,
+              metadata: Object.keys(userMsgMeta).length > 0 ? userMsgMeta : null,
+            });
+            userMessageInserted = true;
+          }
+
+          // ════════════════════════════════════
           // PHASE 3: ReAct EXECUTION LOOP
           // ════════════════════════════════════
           const accumulatedContext: string[] = [];
@@ -1719,9 +1740,11 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
                   const noContentMsg = "⚠️ **Document Not Ready**\n\nThe document is still being processed or its content could not be extracted. Red flag analysis requires readable document content.\n\n**What to do:**\n1. Wait a moment for processing to complete, then try again\n2. If the issue persists, try re-uploading the document in PDF format\n3. Check that the file is not corrupted or password-protected";
                   emit(controller, encoder, { type: "token", content: noContentMsg });
                   emit(controller, encoder, { type: "done", citations: [], model: modelId, followUps: ["Try the red flag analysis again", "Check document processing status"] });
-                  // User message already saved above (Phase 5 user insert)
+                  // User message already saved in Phase 2.5
                   if (conversationId && conversationId !== "column-fill") {
-                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "assistant", content: noContentMsg, model_used: modelId, metadata: { frozenFileRefs: allFileRefs } });
+                    const earlyMeta: any = { frozenFileRefs: allFileRefs };
+                    if (allFileRefs.length > 0) earlyMeta.redFlagTarget = { id: allFileRefs[0].id, name: allFileRefs[0].name };
+                    await adminClient.from("messages").insert({ conversation_id: conversationId, organization_id: orgId, role: "assistant", content: noContentMsg, model_used: modelId, metadata: earlyMeta });
                   }
                   controller.enqueue(encoder.encode("data: [DONE]\n\n"));
                   controller.close();
@@ -2034,22 +2057,7 @@ ${followUpInstruction}
             { role: "user", content: message },
           ];
 
-          // Save user message with attachment metadata for reload persistence
-          if (conversationId && conversationId !== "column-fill") {
-            const userMsgMeta: any = {};
-            if (vaultId) userMsgMeta.vaultId = vaultId;
-            if (clientVaultName) userMsgMeta.vaultName = clientVaultName;
-            if (promptMode) userMsgMeta.promptMode = promptMode;
-            if (sources?.length) userMsgMeta.sources = sources;
-            if (deepResearch) userMsgMeta.deepResearch = true;
-            if (attachedFileIds?.length) userMsgMeta.attachedFileIds = attachedFileIds;
-            if (attachedFileNames?.length) userMsgMeta.attachedFileNames = attachedFileNames;
-            if (body.workflowTitle) userMsgMeta.workflowTitle = body.workflowTitle;
-            await adminClient.from("messages").insert({
-              conversation_id: conversationId, organization_id: orgId, role: "user", content: message,
-              metadata: Object.keys(userMsgMeta).length > 0 ? userMsgMeta : null,
-            });
-          }
+          // User message already saved in Phase 2.5 (early insert)
 
           // Stream final synthesis
           const aiResponse = await fetch(aiUrl, {
@@ -2201,6 +2209,10 @@ ${followUpInstruction}
             messageMetadata.frozenSearchSources = { urls: allCitations.filter(c => c.url).map(c => c.url), domains: [...new Set(allDomains)] };
           }
           if (allFileRefs.length > 0) messageMetadata.frozenFileRefs = allFileRefs;
+          // Persist deterministic red-flag target for reload-safe "Open in Editor"
+          if (effectiveMode === "red_flags" && allFileRefs.length > 0) {
+            messageMetadata.redFlagTarget = { id: allFileRefs[0].id, name: allFileRefs[0].name };
+          }
           messageMetadata.agentMeta = {
             iterations: iteration,
             complexity,
