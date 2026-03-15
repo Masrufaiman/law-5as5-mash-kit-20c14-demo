@@ -1462,6 +1462,27 @@ At the end, suggest 3 relevant follow-up questions starting with ">>FOLLOWUP: "`
           emit(controller, encoder, { type: "plan", steps: currentPlan });
 
           // ════════════════════════════════════
+          // PHASE 2.5: PERSIST USER MESSAGE EARLY (before tool loop / early exits)
+          // ════════════════════════════════════
+          let userMessageInserted = false;
+          if (conversationId && conversationId !== "column-fill") {
+            const userMsgMeta: any = {};
+            if (vaultId) userMsgMeta.vaultId = vaultId;
+            if (clientVaultName) userMsgMeta.vaultName = clientVaultName;
+            if (promptMode) userMsgMeta.promptMode = promptMode;
+            if (sources?.length) userMsgMeta.sources = sources;
+            if (deepResearch) userMsgMeta.deepResearch = true;
+            if (attachedFileIds?.length) userMsgMeta.attachedFileIds = attachedFileIds;
+            if (attachedFileNames?.length) userMsgMeta.attachedFileNames = attachedFileNames;
+            if (body.workflowTitle) userMsgMeta.workflowTitle = body.workflowTitle;
+            await adminClient.from("messages").insert({
+              conversation_id: conversationId, organization_id: orgId, role: "user", content: message,
+              metadata: Object.keys(userMsgMeta).length > 0 ? userMsgMeta : null,
+            });
+            userMessageInserted = true;
+          }
+
+          // ════════════════════════════════════
           // PHASE 3: ReAct EXECUTION LOOP
           // ════════════════════════════════════
           const accumulatedContext: string[] = [];
