@@ -2055,22 +2055,7 @@ ${followUpInstruction}
             { role: "user", content: message },
           ];
 
-          // Save user message with attachment metadata for reload persistence
-          if (conversationId && conversationId !== "column-fill") {
-            const userMsgMeta: any = {};
-            if (vaultId) userMsgMeta.vaultId = vaultId;
-            if (clientVaultName) userMsgMeta.vaultName = clientVaultName;
-            if (promptMode) userMsgMeta.promptMode = promptMode;
-            if (sources?.length) userMsgMeta.sources = sources;
-            if (deepResearch) userMsgMeta.deepResearch = true;
-            if (attachedFileIds?.length) userMsgMeta.attachedFileIds = attachedFileIds;
-            if (attachedFileNames?.length) userMsgMeta.attachedFileNames = attachedFileNames;
-            if (body.workflowTitle) userMsgMeta.workflowTitle = body.workflowTitle;
-            await adminClient.from("messages").insert({
-              conversation_id: conversationId, organization_id: orgId, role: "user", content: message,
-              metadata: Object.keys(userMsgMeta).length > 0 ? userMsgMeta : null,
-            });
-          }
+          // User message already saved in Phase 2.5 (early insert)
 
           // Stream final synthesis
           const aiResponse = await fetch(aiUrl, {
