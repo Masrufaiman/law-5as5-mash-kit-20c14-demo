@@ -7,15 +7,16 @@ import { StorageTab } from "@/components/admin/StorageTab";
 import { KnowledgeTab } from "@/components/admin/KnowledgeTab";
 import { AgentTab } from "@/components/admin/AgentTab";
 import { FeedbackTab } from "@/components/admin/FeedbackTab";
-import { Shield, Brain, Search, HardDrive, BookOpen, Bot, ThumbsUp, Scale } from "lucide-react";
+import { UsersTab } from "@/components/admin/UsersTab";
+import { Shield, Brain, Search, HardDrive, BookOpen, Bot, ThumbsUp, Scale, Users } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { LegalApisTab } from "@/components/admin/LegalApisTab";
 
 export default function Admin() {
   const { profile } = useAuth();
-  const isAdmin = profile?.role === "admin" || profile?.role === "superadmin";
+  const isSuperAdmin = profile?.role === "superadmin";
 
-  if (!isAdmin) return <Navigate to="/" replace />;
+  if (!isSuperAdmin) return <Navigate to="/" replace />;
 
   const orgId = profile?.organization_id;
   if (!orgId) return <Navigate to="/" replace />;
@@ -55,6 +56,9 @@ export default function Admin() {
               <TabsTrigger value="feedback" className="text-xs gap-1.5 data-[state=active]:bg-background">
                 <ThumbsUp className="h-3.5 w-3.5" /> Feedback
               </TabsTrigger>
+              <TabsTrigger value="users" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <Users className="h-3.5 w-3.5" /> Users
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="llm"><LlmTab orgId={orgId} /></TabsContent>
@@ -64,6 +68,7 @@ export default function Admin() {
             <TabsContent value="knowledge"><KnowledgeTab orgId={orgId} /></TabsContent>
             <TabsContent value="agent"><AgentTab orgId={orgId} /></TabsContent>
             <TabsContent value="feedback"><FeedbackTab orgId={orgId} /></TabsContent>
+            <TabsContent value="users"><UsersTab orgId={orgId} /></TabsContent>
           </Tabs>
         </div>
       </div>

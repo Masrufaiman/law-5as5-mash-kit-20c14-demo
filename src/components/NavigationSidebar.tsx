@@ -62,7 +62,7 @@ export function NavigationSidebar() {
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
   const { toast } = useToast();
-  const isAdmin = profile?.role === "admin" || profile?.role === "superadmin";
+  const isAdmin = profile?.role === "superadmin";
 
   const [collapsed, setCollapsed] = useState(false);
   const [vaultsOpen, setVaultsOpen] = useState(true);
