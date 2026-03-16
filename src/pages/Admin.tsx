@@ -56,6 +56,9 @@ export default function Admin() {
               <TabsTrigger value="feedback" className="text-xs gap-1.5 data-[state=active]:bg-background">
                 <ThumbsUp className="h-3.5 w-3.5" /> Feedback
               </TabsTrigger>
+              <TabsTrigger value="users" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <Users className="h-3.5 w-3.5" /> Users
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="llm"><LlmTab orgId={orgId} /></TabsContent>
