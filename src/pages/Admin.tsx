@@ -68,6 +68,7 @@ export default function Admin() {
             <TabsContent value="knowledge"><KnowledgeTab orgId={orgId} /></TabsContent>
             <TabsContent value="agent"><AgentTab orgId={orgId} /></TabsContent>
             <TabsContent value="feedback"><FeedbackTab orgId={orgId} /></TabsContent>
+            <TabsContent value="users"><UsersTab orgId={orgId} /></TabsContent>
           </Tabs>
         </div>
       </div>
